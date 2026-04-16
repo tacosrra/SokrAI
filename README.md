@@ -1,1 +1,1 @@
-# SocrAI
+# SokrAI
