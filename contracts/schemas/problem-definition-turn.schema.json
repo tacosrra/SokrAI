@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sokrai.local/contracts/schemas/problem-definition-turn.schema.json",
+  "title": "ProblemDefinitionTurn",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "agent_status": {
+      "type": "string",
+      "enum": [
+        "continue",
+        "done",
+        "blocked"
+      ]
+    },
+    "diagnosis": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "string"
+      }
+    },
+    "updated_problem_definition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "problem_owner": {
+          "type": "string"
+        },
+        "problem_statement": {
+          "type": "string"
+        },
+        "evidence_of_problem": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "current_alternatives": {
+          "type": "string"
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ambiguities_remaining": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "problem_owner",
+        "problem_statement",
+        "evidence_of_problem",
+        "scope",
+        "current_alternatives",
+        "assumptions",
+        "ambiguities_remaining"
+      ]
+    },
+    "next_question": {
+      "type": "string"
+    },
+    "completion_reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "agent_status",
+    "diagnosis",
+    "updated_problem_definition",
+    "next_question",
+    "completion_reason"
+  ]
+}

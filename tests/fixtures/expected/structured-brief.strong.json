@@ -1,0 +1,24 @@
+{
+  "project_title": "Triage IA en Urgencias",
+  "goal": "Madurar la definicion del problema antes de evaluar una posible solucion de IA",
+  "target_user": "Enfermeria de admision y coordinacion de urgencias",
+  "problem_owner": "",
+  "problem_statement": "El triaje inicial se retrasa en horas punta en urgencias",
+  "evidence_of_problem": "Esperas de 20 a 35 minutos, quejas y priorizacion inconsistente",
+  "current_alternatives": "Protocolo manual y hojas de apoyo",
+  "scope": "Urgencias hospitalarias en la fase inicial de admision y clasificacion",
+  "constraints_known": [
+    "Datos sensibles de salud",
+    "Entorno hospitalario"
+  ],
+  "assumptions": [
+    "El cuello de botella principal puede estar en la recogida de datos o en la priorizacion"
+  ],
+  "ambiguities": [
+    "No esta claro quien es el responsable operativo del problema",
+    "No esta claro si el cuello de botella es de datos o de priorizacion"
+  ],
+  "missing_information": [
+    "problem_owner"
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "project_title": "Copiloto clinico",
+  "goal": "Construir una aplicacion con IA generativa",
+  "proposal_text": "Queremos desarrollar un copiloto clinico con modelos locales, RAG y agentes para asistir a profesionales. La propuesta describe microservicios, embeddings, vectores y dashboards, pero apenas explica el problema concreto que resuelve ni quien sufre hoy el dolor principal."
+}

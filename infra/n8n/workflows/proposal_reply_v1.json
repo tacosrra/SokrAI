@@ -1,0 +1,166 @@
+{
+  "name": "proposal_reply_v1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "proposal-reply-v1",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "fb20f321-8fb5-4e76-b7c9-242d6c2dfde6",
+      "name": "Webhook_ProposalReply",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        260,
+        300
+      ],
+      "webhookId": "proposal-reply-v1"
+    },
+    {
+      "parameters": {
+        "keepOnlySet": false,
+        "values": {
+          "string": [
+            {
+              "name": "request_id",
+              "value": "={{ $json.body.request_id || $execution.id }}"
+            },
+            {
+              "name": "workflow_version",
+              "value": "proposal_reply_v1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "75d18aaf-ca9f-448f-b00a-04e4b07e3b18",
+      "name": "Set_ReplyPayload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:3001/internal/sessions/append-reply",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-shared-secret",
+              "value": "={{ $env.INTERNAL_SHARED_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { request_id: $json.request_id, workflow_version: $json.workflow_version, workflow_execution_id: $execution.id, payload: $node[\"Webhook_ProposalReply\"].json.body } }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "64a61734-4e7f-402a-8c5e-f590b6314ff8",
+      "name": "HTTP_AppendReply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://n8n:5678/webhook/agent-problem-definition-v1",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { request_id: $json.request_id, workflow_version: \"agent_problem_definition_v1\", workflow_execution_id: $execution.id, session_id: $node[\"HTTP_AppendReply\"].json.session_id, trigger: \"reply\" } }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "d436b621-a30c-4b0c-9260-ddf1b9f80564",
+      "name": "Invoke_AgentProblemDefinition",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1080,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "8dfb2d36-6fa0-4fb0-bd4f-4a152770fe35",
+      "name": "Respond_Reply",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1340,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook_ProposalReply": {
+      "main": [
+        [
+          {
+            "node": "Set_ReplyPayload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set_ReplyPayload": {
+      "main": [
+        [
+          {
+            "node": "HTTP_AppendReply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP_AppendReply": {
+      "main": [
+        [
+          {
+            "node": "Invoke_AgentProblemDefinition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoke_AgentProblemDefinition": {
+      "main": [
+        [
+          {
+            "node": "Respond_Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "proposal_reply_v1"
+}

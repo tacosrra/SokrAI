@@ -1,0 +1,21 @@
+{
+  "agent_status": "continue",
+  "diagnosis": [
+    "Falta evidencia concreta del problema"
+  ],
+  "updated_problem_definition": {
+    "problem_owner": "Enfermeria de admision",
+    "problem_statement": "El triaje inicial se retrasa en horas punta",
+    "evidence_of_problem": "Hay esperas de 27 minutos en los picos de entrada",
+    "scope": "Urgencias de adultos en el proceso de admision y clasificacion inicial",
+    "current_alternatives": "Protocolo manual y hojas de cribado",
+    "assumptions": [
+      "El principal cuello de botella esta en la clasificacion inicial"
+    ],
+    "ambiguities_remaining": [
+      "No esta claro si pesa mas la falta de datos o la priorizacion"
+    ]
+  },
+  "next_question": "¿Que evidencia interna teneis hoy de ese retraso y su impacto?",
+  "completion_reason": ""
+}

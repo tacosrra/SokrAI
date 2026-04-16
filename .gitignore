@@ -1,0 +1,11 @@
+node_modules
+dist
+.env
+.env.local
+.pnpm-store
+coverage
+tmp
+.DS_Store
+n8n_data
+ollama_data
+postgres_data

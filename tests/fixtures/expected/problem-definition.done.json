@@ -1,0 +1,19 @@
+{
+  "agent_status": "done",
+  "diagnosis": [
+    "El problema ya tiene propietario, evidencia, alcance y alternativas actuales descritas"
+  ],
+  "updated_problem_definition": {
+    "problem_owner": "Enfermeria de admision y coordinacion de urgencias",
+    "problem_statement": "El triaje inicial se retrasa en horas punta y genera clasificacion inconsistente",
+    "evidence_of_problem": "Hay esperas medias de 27 minutos y reclamaciones asociadas en los picos de entrada",
+    "scope": "Urgencias de adultos en admision y clasificacion inicial, sin incluir diagnostico automatico",
+    "current_alternatives": "Protocolo manual, hojas de cribado y consulta telefonica a un medico",
+    "assumptions": [
+      "La mayor parte del cuello de botella esta en la clasificacion inicial"
+    ],
+    "ambiguities_remaining": []
+  },
+  "next_question": "",
+  "completion_reason": "problem sufficiently defined"
+}

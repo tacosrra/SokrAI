@@ -1,0 +1,17 @@
+{
+  "name": "sokrai",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "build": "pnpm --filter @sokrai/api build",
+    "dev": "pnpm --filter @sokrai/api dev",
+    "migrate": "pnpm --filter @sokrai/api migrate",
+    "start": "pnpm --filter @sokrai/api start",
+    "test": "pnpm --filter @sokrai/api test",
+    "test:contracts": "pnpm --filter @sokrai/api test:contracts",
+    "test:unit": "pnpm --filter @sokrai/api test:unit",
+    "test:integration": "pnpm --filter @sokrai/api test:integration",
+    "test:smoke": "pnpm --filter @sokrai/api test:smoke",
+    "verify": "pnpm test:contracts && pnpm test:unit && pnpm test:integration && pnpm test:smoke"
+  }
+}

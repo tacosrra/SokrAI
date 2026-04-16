@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sokrai.local/contracts/schemas/proposal-start.response.schema.json",
+  "title": "ProposalStartResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "problem_definition"
+      ]
+    },
+    "structured_brief": {
+      "$ref": "https://sokrai.local/contracts/schemas/structured-brief.schema.json"
+    },
+    "detected_gaps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "next_question": {
+      "type": "string"
+    },
+    "agent_status": {
+      "type": "string",
+      "enum": [
+        "continue",
+        "done",
+        "blocked"
+      ]
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "session_id",
+    "stage",
+    "structured_brief",
+    "detected_gaps",
+    "next_question",
+    "agent_status",
+    "warnings"
+  ]
+}

@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sokrai.local/contracts/schemas/proposal-reply.response.schema.json",
+  "title": "ProposalReplyResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "problem_definition"
+      ]
+    },
+    "agent_status": {
+      "type": "string",
+      "enum": [
+        "continue",
+        "done",
+        "blocked"
+      ]
+    },
+    "updated_problem_definition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "problem_owner": {
+          "type": "string"
+        },
+        "problem_statement": {
+          "type": "string"
+        },
+        "evidence_of_problem": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "current_alternatives": {
+          "type": "string"
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ambiguities_remaining": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "problem_owner",
+        "problem_statement",
+        "evidence_of_problem",
+        "scope",
+        "current_alternatives",
+        "assumptions",
+        "ambiguities_remaining"
+      ]
+    },
+    "diagnosis": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 3
+    },
+    "next_question": {
+      "type": "string"
+    },
+    "completion_reason": {
+      "type": "string"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "session_id",
+    "stage",
+    "agent_status",
+    "updated_problem_definition",
+    "diagnosis",
+    "next_question",
+    "completion_reason",
+    "warnings"
+  ]
+}

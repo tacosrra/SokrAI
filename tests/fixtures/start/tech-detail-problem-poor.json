@@ -1,0 +1,5 @@
+{
+  "project_title": "Arquitectura de soporte asistencial",
+  "goal": "Definir una plataforma escalable para un asistente hospitalario",
+  "proposal_text": "La propuesta entra en detalle sobre Kubernetes, colas, observabilidad, GPU y despliegue on-prem, pero no aporta evidencia del problema actual ni describe con precision el impacto operativo ni las alternativas actuales."
+}

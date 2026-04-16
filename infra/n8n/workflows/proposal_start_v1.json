@@ -1,0 +1,166 @@
+{
+  "name": "proposal_start_v1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "proposal-start-v1",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "3a0c14fa-55a2-4db1-a7cc-2b43797f0b37",
+      "name": "Webhook_StartProposal",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        260,
+        300
+      ],
+      "webhookId": "proposal-start-v1"
+    },
+    {
+      "parameters": {
+        "keepOnlySet": false,
+        "values": {
+          "string": [
+            {
+              "name": "request_id",
+              "value": "={{ $json.body.request_id || $execution.id }}"
+            },
+            {
+              "name": "workflow_version",
+              "value": "proposal_start_v1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "859c8b05-b00d-4950-8983-e9ae4f5433d7",
+      "name": "Set_StartPayload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:3001/internal/sessions/start-context",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-shared-secret",
+              "value": "={{ $env.INTERNAL_SHARED_SECRET }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { request_id: $json.request_id, workflow_version: $json.workflow_version, workflow_execution_id: $execution.id, payload: $node[\"Webhook_StartProposal\"].json.body } }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "7b8669ca-a537-49ca-954c-c4cddd31b7bb",
+      "name": "HTTP_StartSession",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://n8n:5678/webhook/agent-problem-definition-v1",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { request_id: $json.request_id, workflow_version: \"agent_problem_definition_v1\", workflow_execution_id: $execution.id, session_id: $node[\"HTTP_StartSession\"].json.session_id, trigger: \"start\" } }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "50e103b7-f3d0-4f0b-b4ec-d416338f3521",
+      "name": "Invoke_AgentProblemDefinition",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1080,
+        300
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "3da1ac8a-a0ef-4516-aae9-265216b3d9e9",
+      "name": "Respond_Start",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1340,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook_StartProposal": {
+      "main": [
+        [
+          {
+            "node": "Set_StartPayload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set_StartPayload": {
+      "main": [
+        [
+          {
+            "node": "HTTP_StartSession",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP_StartSession": {
+      "main": [
+        [
+          {
+            "node": "Invoke_AgentProblemDefinition",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoke_AgentProblemDefinition": {
+      "main": [
+        [
+          {
+            "node": "Respond_Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "proposal_start_v1"
+}
