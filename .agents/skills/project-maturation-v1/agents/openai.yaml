@@ -1,0 +1,6 @@
+interface:
+  display_name: "Project Maturation MVP Builder"
+  short_description: "Build or harden the first functional n8n + Ollama + PostgreSQL MVP for proposal intake and problem-definition guidance."
+  default_prompt: "Implement the first functional version of this repository following the project-maturation-v1 skill."
+policy:
+  allow_implicit_invocation: true
