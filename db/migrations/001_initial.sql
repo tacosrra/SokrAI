@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS agent_runs (
     session_id UUID NOT NULL REFERENCES proposal_sessions(id) ON DELETE CASCADE,
     turn_seq INTEGER CHECK (turn_seq >= 1),
     parent_run_id UUID REFERENCES agent_runs(id) ON DELETE SET NULL,
-    request_id TEXT UNIQUE,
+    request_id TEXT,
     run_purpose TEXT NOT NULL
         CHECK (run_purpose IN ('brief_extraction', 'problem_definition', 'json_repair')),
     agent_name TEXT NOT NULL,
@@ -171,17 +171,37 @@ CREATE TABLE IF NOT EXISTS session_events (
     UNIQUE (session_id, event_seq)
 );
 
-ALTER TABLE proposal_sessions
-    ADD CONSTRAINT fk_proposal_sessions_latest_snapshot
-    FOREIGN KEY (latest_snapshot_id)
-    REFERENCES session_snapshots(id)
-    DEFERRABLE INITIALLY DEFERRED;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'fk_proposal_sessions_latest_snapshot'
+    ) THEN
+        ALTER TABLE proposal_sessions
+            ADD CONSTRAINT fk_proposal_sessions_latest_snapshot
+            FOREIGN KEY (latest_snapshot_id)
+            REFERENCES session_snapshots(id)
+            DEFERRABLE INITIALLY DEFERRED;
+    END IF;
+END;
+$$;
 
-ALTER TABLE proposal_sessions
-    ADD CONSTRAINT fk_proposal_sessions_latest_successful_run
-    FOREIGN KEY (latest_successful_run_id)
-    REFERENCES agent_runs(id)
-    DEFERRABLE INITIALLY DEFERRED;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'fk_proposal_sessions_latest_successful_run'
+    ) THEN
+        ALTER TABLE proposal_sessions
+            ADD CONSTRAINT fk_proposal_sessions_latest_successful_run
+            FOREIGN KEY (latest_successful_run_id)
+            REFERENCES agent_runs(id)
+            DEFERRABLE INITIALLY DEFERRED;
+    END IF;
+END;
+$$;
 
 CREATE INDEX IF NOT EXISTS idx_proposal_sessions_resume
     ON proposal_sessions(status, updated_at DESC);
@@ -202,6 +222,11 @@ CREATE INDEX IF NOT EXISTS idx_conversation_turns_session_turn_seq
 
 CREATE INDEX IF NOT EXISTS idx_agent_runs_session_started
     ON agent_runs(session_id, started_at DESC);
+
+DROP INDEX IF EXISTS uq_agent_runs_request_purpose;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_agent_runs_request_purpose
+    ON agent_runs(request_id, run_purpose)
+    WHERE request_id IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_agent_runs_session_turn_attempt
     ON agent_runs(session_id, turn_seq, attempt_no DESC);

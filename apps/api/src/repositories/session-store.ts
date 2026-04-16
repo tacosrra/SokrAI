@@ -98,10 +98,15 @@ export class SessionStore {
     return result.rows[0] ?? null;
   }
 
-  async findAgentRunByRequestId(requestId: string): Promise<AgentRunRecord | null> {
+  async findAgentRunByRequestId(
+    requestId: string,
+    runPurpose?: AgentRunRecord['run_purpose'],
+  ): Promise<AgentRunRecord | null> {
     const result = await this.database.query<AgentRunRecord>(
-      'SELECT * FROM agent_runs WHERE request_id = $1 LIMIT 1',
-      [requestId],
+      runPurpose
+        ? 'SELECT * FROM agent_runs WHERE request_id = $1 AND run_purpose = $2 LIMIT 1'
+        : 'SELECT * FROM agent_runs WHERE request_id = $1 LIMIT 1',
+      runPurpose ? [requestId, runPurpose] : [requestId],
     );
 
     return result.rows[0] ?? null;
@@ -211,10 +216,10 @@ export class SessionStore {
         params.rawInputFileName ?? null,
         params.rawInputFileSha256 ?? null,
         params.normalizedText,
-        params.metadata,
+        toJson(params.metadata),
         'active',
-        params.structuredBrief,
-        params.initialProblemDefinition,
+        toJson(params.structuredBrief),
+        toJson(params.initialProblemDefinition),
       ],
     );
 
@@ -281,14 +286,14 @@ export class SessionStore {
         params.inputContractVersion,
         params.outputContractName,
         params.outputContractVersion,
-        params.inputPayloadJson,
+        toJson(params.inputPayloadJson),
         params.rawModelOutput ?? null,
-        params.validatedOutputJson ?? null,
+        params.validatedOutputJson ? toJson(params.validatedOutputJson) : null,
         params.status,
         params.errorCode ?? null,
         params.errorMessage ?? null,
         params.repairAttempted ?? false,
-        params.metricsJson ?? {},
+        toJson(params.metricsJson ?? {}),
       ],
     );
 
@@ -334,13 +339,13 @@ export class SessionStore {
         params.sourceRunId ?? null,
         params.snapshotKind,
         params.sessionStatus,
-        params.structuredBrief,
-        params.currentProblemDefinition,
-        params.detectedGaps,
+        toJson(params.structuredBrief),
+        toJson(params.currentProblemDefinition),
+        toJson(params.detectedGaps),
         params.nextQuestionText ?? null,
         params.agentStatus,
         params.completionReason ?? null,
-        params.warnings,
+        toJson(params.warnings),
         params.snapshotHash,
       ],
     );
@@ -424,8 +429,8 @@ export class SessionStore {
       [
         params.sessionId,
         params.turnSeq,
-        params.diagnosis,
-        params.updatedProblemDefinition,
+        toJson(params.diagnosis),
+        toJson(params.updatedProblemDefinition),
         params.agentStatus,
         params.completionReason,
         params.failed ? 'failed' : 'resolved',
@@ -469,8 +474,8 @@ export class SessionStore {
         params.status,
         params.currentTurnSeq,
         params.stateVersion,
-        params.latestStructuredBrief,
-        params.latestProblemDefinition,
+        toJson(params.latestStructuredBrief),
+        toJson(params.latestProblemDefinition),
         params.latestSnapshotId ?? null,
         params.latestSuccessfulRunId ?? null,
         params.completionReason ?? null,
@@ -517,7 +522,7 @@ export class SessionStore {
         params.eventType,
         params.actorType,
         params.requestId ?? null,
-        params.payloadJson ?? {},
+        toJson(params.payloadJson ?? {}),
       ],
     );
   }
@@ -583,4 +588,8 @@ async function runQuery<T extends QueryResultRow>(
   values: unknown[] = [],
 ): Promise<QueryResult<T>> {
   return (executor as PoolClient).query<T>(text, values);
+}
+
+function toJson(value: unknown): string {
+  return JSON.stringify(value);
 }

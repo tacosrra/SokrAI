@@ -1,0 +1,5 @@
+{
+  "project_title": "Triage IA en Urgencias",
+  "goal": "Madurar la definicion del problema antes de evaluar una posible solucion de IA",
+  "proposal_text": "En urgencias hospitalarias el triaje inicial se retrasa en horas punta. Enfermeria de admision dedica mucho tiempo a clasificar manualmente pacientes con informacion incompleta. Esto genera esperas de 20 a 35 minutos, quejas y riesgo de priorizacion inconsistente. Hoy se usa un protocolo manual y hojas de apoyo, pero el equipo no tiene claro si el principal cuello de botella es la recogida de datos o la priorizacion."
+}

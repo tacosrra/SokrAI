@@ -76,7 +76,7 @@ describe('proposal flow integration', () => {
     expect(sessions.rows[0]?.count).toBe('1');
     expect(turns.rows).toHaveLength(1);
     expect(turns.rows[0]?.status).toBe('resolved');
-    expect(turns.rows[0]?.answer_text).toContain('Enfermeria');
+    expect(turns.rows[0]?.answer_text?.toLowerCase()).toContain('enfermeria');
     expect(runs.rows).toHaveLength(3);
     expect(runs.rows.every((run) => run.prompt_version === 'v1')).toBe(true);
     expect(snapshots.rows[0]?.count).toBe('3');
@@ -223,14 +223,11 @@ describe('proposal flow integration', () => {
 
     const strongProposal = await readFixture('start', 'strong-proposal.json');
     const startResult = await startFlow(app, 'req-start-resume', strongProposal);
-    const database = app.services.database;
-
     await app.close();
     app = undefined;
 
     const resumedApp = await buildTestApp(new QueueLanguageModelClient([JSON.stringify(doneTurn)]), {
       resetDatabase: false,
-      database,
     });
     app = resumedApp.app;
 

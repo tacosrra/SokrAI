@@ -205,6 +205,7 @@ Regla:
 ### Tabla auxiliar imprescindible
 
 - `session_snapshots`
+- `session_events`
 
 ### Uso de cada tabla
 
@@ -222,6 +223,8 @@ Regla:
 - `session_snapshots`
   - fotografia historica del estado tras extraccion inicial y tras cada turno valido
   - base para replay/resume y trazabilidad
+- `session_events`
+  - ledger operacional append-only para auditoria de workflow, retries y cambios de estado
 
 ### Reglas de persistencia
 
@@ -259,6 +262,7 @@ Regla:
 - n8n orquesta pasos y expone entrypoints.
 - La API concentra reglas de negocio, validacion, estado, prompts y llamadas al modelo.
 - No se enterraran reglas criticas en texto libre de nodos n8n.
+- La idempotencia se gestionara por `request_id` y frontera transaccional, no como unicidad global de workflow.
 
 ## Modulos a implementar
 

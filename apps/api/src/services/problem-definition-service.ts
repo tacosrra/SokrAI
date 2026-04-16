@@ -35,7 +35,7 @@ export class ProblemDefinitionService {
     const requestId = command.context.requestId;
 
     if (requestId) {
-      const existingRun = await this.sessionStore.findAgentRunByRequestId(requestId);
+      const existingRun = await this.sessionStore.findAgentRunByRequestId(requestId, 'problem_definition');
 
       if (existingRun?.validated_output_json) {
         const session = await this.sessionStore.getSession(command.sessionId);
