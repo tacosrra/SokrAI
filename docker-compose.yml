@@ -25,6 +25,7 @@ services:
       DATABASE_URL: postgresql://sokrai_app:localpass@postgres:5432/sokrai_app
       OLLAMA_BASE_URL: http://ollama:11434
       APP_PORT: 3001
+      INTERNAL_SHARED_SECRET: ${INTERNAL_SHARED_SECRET}
     ports:
       - "127.0.0.1:3001:3001"
     depends_on:
@@ -50,8 +51,7 @@ services:
       N8N_EDITOR_BASE_URL: http://localhost:5678
       WEBHOOK_URL: http://localhost:5678/
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-replace-with-a-random-32-char-secret}
-      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
-      INTERNAL_SHARED_SECRET: ${INTERNAL_SHARED_SECRET:-replace-with-a-random-32-char-secret}
+      INTERNAL_SHARED_SECRET: ${INTERNAL_SHARED_SECRET}
     ports:
       - "127.0.0.1:5678:5678"
     volumes:
