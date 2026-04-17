@@ -1,4 +1,9 @@
-import { assertProblemDefinitionTurn, assertStructuredBrief, schemaIds } from '../contracts/schema-registry';
+import {
+  assertProblemDefinitionTurn,
+  assertStructuredBrief,
+  getSchemaDefinition,
+  schemaIds,
+} from '../contracts/schema-registry';
 import type { ProblemDefinitionTurn, StructuredBrief } from '../contracts/types';
 import type { AppConfig } from '../config/env';
 import { ModelOutputError } from '../utils/errors';
@@ -6,7 +11,66 @@ import type { LanguageModelClient, ModelCompletionResult } from './ollama-client
 import { loadPrompt, type PromptAsset } from './prompt-service';
 
 function safeJsonParse(input: string): unknown {
+  const direct = tryJsonParse(input);
+
+  if (direct !== undefined) {
+    return direct;
+  }
+
+  const fenced = unwrapMarkdownCodeFence(input);
+  if (fenced) {
+    const parsedFenced = tryJsonParse(fenced);
+
+    if (parsedFenced !== undefined) {
+      return parsedFenced;
+    }
+  }
+
+  const extracted = extractLikelyJsonBlock(input);
+  if (extracted) {
+    const parsedExtracted = tryJsonParse(extracted);
+
+    if (parsedExtracted !== undefined) {
+      return parsedExtracted;
+    }
+  }
+
   return JSON.parse(input);
+}
+
+function tryJsonParse(input: string): unknown | undefined {
+  try {
+    return JSON.parse(input);
+  } catch {
+    return undefined;
+  }
+}
+
+function unwrapMarkdownCodeFence(input: string): string | undefined {
+  const trimmed = input.trim();
+  const match = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return match?.[1]?.trim();
+}
+
+function extractLikelyJsonBlock(input: string): string | undefined {
+  const trimmed = input.trim();
+  const objectStart = trimmed.indexOf('{');
+  const arrayStart = trimmed.indexOf('[');
+
+  if (objectStart === -1 && arrayStart === -1) {
+    return undefined;
+  }
+
+  const startsWithArray = arrayStart !== -1 && (objectStart === -1 || arrayStart < objectStart);
+  const start = startsWithArray ? arrayStart : objectStart;
+  const endChar = startsWithArray ? ']' : '}';
+  const end = trimmed.lastIndexOf(endChar);
+
+  if (start === -1 || end === -1 || end <= start) {
+    return undefined;
+  }
+
+  return trimmed.slice(start, end + 1);
 }
 
 interface GenerationResult<T> {
@@ -34,6 +98,9 @@ export class LlmOrchestrator {
       'Return a structured brief for the following proposal material.',
       '',
       `Output schema id: ${schemaIds.structuredBrief}`,
+      '',
+      'Output JSON Schema:',
+      JSON.stringify(getSchemaDefinition(schemaIds.structuredBrief), null, 2),
       '',
       'Input JSON:',
       JSON.stringify(
@@ -64,6 +131,9 @@ export class LlmOrchestrator {
       'Return a single bounded problem-definition turn.',
       '',
       `Output schema id: ${schemaIds.problemDefinitionTurn}`,
+      '',
+      'Output JSON Schema:',
+      JSON.stringify(getSchemaDefinition(schemaIds.problemDefinitionTurn), null, 2),
       '',
       'Input JSON:',
       JSON.stringify(

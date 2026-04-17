@@ -61,7 +61,7 @@
         "specifyBody": "json",
         "jsonBody": "={{ { request_id: $json.request_id, workflow_version: $json.workflow_version, workflow_execution_id: $execution.id, payload: $node[\"Webhook_StartProposal\"].json.body } }}",
         "options": {
-          "timeout": 60000
+          "timeout": 240000
         }
       },
       "id": "7b8669ca-a537-49ca-954c-c4cddd31b7bb",
@@ -84,7 +84,7 @@
         "specifyBody": "json",
         "jsonBody": "={{ { request_id: $json.request_id, workflow_version: \"agent_problem_definition_v1\", workflow_execution_id: $execution.id, session_id: $node[\"HTTP_StartSession\"].json.session_id, trigger: \"start\" } }}",
         "options": {
-          "timeout": 90000
+          "timeout": 240000
         }
       },
       "id": "50e103b7-f3d0-4f0b-b4ec-d416338f3521",

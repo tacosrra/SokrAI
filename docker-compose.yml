@@ -50,6 +50,7 @@ services:
       N8N_EDITOR_BASE_URL: http://localhost:5678
       WEBHOOK_URL: http://localhost:5678/
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-replace-with-a-random-32-char-secret}
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       INTERNAL_SHARED_SECRET: ${INTERNAL_SHARED_SECRET:-replace-with-a-random-32-char-secret}
     ports:
       - "127.0.0.1:5678:5678"

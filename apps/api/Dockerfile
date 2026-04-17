@@ -7,7 +7,7 @@ RUN corepack enable
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY apps/api/package.json apps/api/package.json
 
-RUN pnpm install --frozen-lockfile --store-dir /pnpm-store
+RUN pnpm install --frozen-lockfile --store-dir /pnpm-store --prod=false
 
 COPY . .
 

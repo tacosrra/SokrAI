@@ -33,8 +33,9 @@ export class OllamaClient implements LanguageModelClient {
       body: JSON.stringify({
         model: params.model,
         stream: false,
+        format: 'json',
         options: {
-          temperature: 0.2,
+          temperature: 0,
           num_ctx: this.config.ollamaNumCtx,
         },
         messages: [

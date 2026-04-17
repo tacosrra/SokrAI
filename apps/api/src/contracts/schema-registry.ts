@@ -1,13 +1,8 @@
 import Ajv2020, { type ValidateFunction } from 'ajv/dist/2020';
 import addFormats from 'ajv-formats';
+import fs from 'node:fs';
+import path from 'node:path';
 
-import errorResponseSchema from '../../../../contracts/schemas/error-response.schema.json';
-import problemDefinitionTurnSchema from '../../../../contracts/schemas/problem-definition-turn.schema.json';
-import proposalReplyRequestSchema from '../../../../contracts/schemas/proposal-reply.request.schema.json';
-import proposalReplyResponseSchema from '../../../../contracts/schemas/proposal-reply.response.schema.json';
-import proposalStartRequestSchema from '../../../../contracts/schemas/proposal-start.request.schema.json';
-import proposalStartResponseSchema from '../../../../contracts/schemas/proposal-start.response.schema.json';
-import structuredBriefSchema from '../../../../contracts/schemas/structured-brief.schema.json';
 import type {
   ErrorResponse,
   ProblemDefinitionTurn,
@@ -18,6 +13,35 @@ import type {
   StructuredBrief,
 } from './types';
 import { AppError } from '../utils/errors';
+
+interface JsonSchema {
+  $id: string;
+  [key: string]: unknown;
+}
+
+function loadSchemaFile(fileName: string): JsonSchema {
+  const searchPaths = [
+    path.resolve(process.cwd(), 'contracts', 'schemas', fileName),
+    path.resolve(__dirname, '../../../../contracts/schemas', fileName),
+    path.resolve(__dirname, '../../../../../contracts/schemas', fileName),
+  ];
+
+  for (const filePath of searchPaths) {
+    if (fs.existsSync(filePath)) {
+      return JSON.parse(fs.readFileSync(filePath, 'utf8')) as JsonSchema;
+    }
+  }
+
+  throw new Error(`Schema file not found: ${fileName}`);
+}
+
+const errorResponseSchema = loadSchemaFile('error-response.schema.json');
+const problemDefinitionTurnSchema = loadSchemaFile('problem-definition-turn.schema.json');
+const proposalReplyRequestSchema = loadSchemaFile('proposal-reply.request.schema.json');
+const proposalReplyResponseSchema = loadSchemaFile('proposal-reply.response.schema.json');
+const proposalStartRequestSchema = loadSchemaFile('proposal-start.request.schema.json');
+const proposalStartResponseSchema = loadSchemaFile('proposal-start.response.schema.json');
+const structuredBriefSchema = loadSchemaFile('structured-brief.schema.json');
 
 const ajv = new Ajv2020({
   allErrors: true,
@@ -68,6 +92,26 @@ export const schemaIds = {
   proposalStartResponse: proposalStartResponseSchema.$id,
   structuredBrief: structuredBriefSchema.$id,
 } as const;
+
+const schemaById: Record<string, JsonSchema> = {
+  [schemaIds.errorResponse]: errorResponseSchema,
+  [schemaIds.problemDefinitionTurn]: problemDefinitionTurnSchema,
+  [schemaIds.proposalReplyRequest]: proposalReplyRequestSchema,
+  [schemaIds.proposalReplyResponse]: proposalReplyResponseSchema,
+  [schemaIds.proposalStartRequest]: proposalStartRequestSchema,
+  [schemaIds.proposalStartResponse]: proposalStartResponseSchema,
+  [schemaIds.structuredBrief]: structuredBriefSchema,
+};
+
+export function getSchemaDefinition(schemaId: string): JsonSchema {
+  const schema = schemaById[schemaId];
+
+  if (!schema) {
+    throw new Error(`Schema not registered: ${schemaId}`);
+  }
+
+  return schema;
+}
 
 export function assertProposalStartRequest(payload: unknown): ProposalStartRequest {
   return assertSchema<ProposalStartRequest>(schemaIds.proposalStartRequest, payload, 'invalid_start_request');

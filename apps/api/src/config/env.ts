@@ -68,7 +68,7 @@ export function loadConfig(): AppConfig {
     databaseStatementTimeoutMs: getNumber('DATABASE_STATEMENT_TIMEOUT_MS', 5000),
     ollamaBaseUrl: getString('OLLAMA_BASE_URL', 'http://localhost:11434'),
     ollamaModel: getString('OLLAMA_MODEL', 'qwen2.5:7b-instruct'),
-    ollamaTimeoutMs: getNumber('OLLAMA_TIMEOUT_MS', 90000),
+    ollamaTimeoutMs: getNumber('OLLAMA_TIMEOUT_MS', 240000),
     ollamaNumCtx: getNumber('OLLAMA_NUM_CTX', 8192),
     jsonRepairMaxAttempts: getNumber('JSON_REPAIR_MAX_ATTEMPTS', 1),
     maxProposalChars: getNumber('MAX_PROPOSAL_CHARS', 30000),

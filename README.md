@@ -103,7 +103,7 @@ pnpm install --store-dir ./.pnpm-store
 ### 2. Levantar dependencias
 
 ```bash
-docker compose up -d postgres n8n ollama
+docker compose up -d postgres n8n api ollama
 ```
 
 ### 3. Cargar un modelo en Ollama
@@ -118,13 +118,19 @@ docker exec -it $(docker ps -qf "ancestor=ollama/ollama:latest") ollama pull qwe
 pnpm migrate
 ```
 
-### 5. Levantar la API
+### 5. Levantar la API (opcional fuera de Docker)
+
+Si ejecutaste el paso 2 con `api`, no necesitas este paso: n8n accede internamente a `http://api:3001`.
+
+Solo si quieres correr la API fuera de Docker para desarrollo local:
 
 ```bash
 pnpm dev
 ```
 
-La API queda en `http://localhost:3001`.
+En ese caso, cambia en n8n las URLs `http://api:3001` por `http://host.docker.internal:3001`.
+
+La API queda disponible en `http://localhost:3001`.
 
 ### 6. Importar workflows n8n
 
@@ -135,6 +141,17 @@ Archivos:
 - `infra/n8n/workflows/agent_problem_definition_v1.json`
 
 Abre `http://localhost:5678`, importa los tres workflows y asegúrate de que `INTERNAL_SHARED_SECRET` coincide entre `.env`, la API y `n8n`.
+
+Si corres en CPU o una maquina lenta, aumenta en n8n los timeouts de los nodos HTTP a `240000` ms para evitar abortos por timeout:
+
+- `proposal_start_v1` -> `HTTP_StartSession`
+- `proposal_start_v1` -> `Invoke_AgentProblemDefinition`
+- `proposal_reply_v1` -> `Invoke_AgentProblemDefinition`
+- `agent_problem_definition_v1` -> `HTTP_RunProblemDefinitionTurn`
+
+Si en el error de ejecucion de n8n sigue apareciendo `"timeout": 60000` o `"timeout": 90000`, el workflow activo aun no tiene aplicados esos cambios. Edita el nodo en la UI, guarda y reactiva el workflow.
+
+Tambien ajusta `OLLAMA_TIMEOUT_MS` en `.env` (por ejemplo `300000`) y recrea la API para que el backend no corte antes que n8n.
 
 ## Endpoints y workflows
 
