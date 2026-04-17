@@ -9,10 +9,13 @@ COPY apps/api/package.json apps/api/package.json
 
 RUN pnpm install --frozen-lockfile --store-dir /pnpm-store
 
-COPY . .
+COPY apps/api ./apps/api
+COPY contracts ./contracts
+COPY prompts ./prompts
+COPY db ./db
 
-RUN pnpm build
+RUN pnpm --filter @sokrai/api build && test -f /app/apps/api/dist/index.js
 
 EXPOSE 3001
 
-CMD ["pnpm", "start"]
+CMD ["node", "apps/api/dist/index.js"]

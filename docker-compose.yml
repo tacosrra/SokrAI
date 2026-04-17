@@ -5,7 +5,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - ./postgres_data:/var/lib/postgresql/data
       - ./infra/docker/postgres/init:/docker-entrypoint-initdb.d
@@ -33,6 +33,26 @@ services:
       ollama:
         condition: service_started
 
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    env_file:
+      - .env
+    environment:
+      FRONTEND_PORT: 3000
+      API_PROXY_TARGET: http://api:3001
+      WEBHOOK_PROXY_TARGET: http://n8n:5678
+      VITE_API_BASE_URL: ""
+      VITE_WEBHOOK_BASE_URL: ""
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      api:
+        condition: service_started
+      n8n:
+        condition: service_started
+
   n8n:
     image: n8nio/n8n:latest
     environment:
@@ -47,6 +67,7 @@ services:
       N8N_BASIC_AUTH_PASSWORD: ${N8N_BASIC_AUTH_PASSWORD:-admin}
       N8N_HOST: n8n
       N8N_PORT: 5678
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
       N8N_EDITOR_BASE_URL: http://localhost:5678
       WEBHOOK_URL: http://localhost:5678/
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:-replace-with-a-random-32-char-secret}
@@ -54,7 +75,7 @@ services:
     ports:
       - "127.0.0.1:5678:5678"
     volumes:
-      - ./n8n_data:/home/node/.n8n
+      - n8n_data:/home/node/.n8n
       - ./infra/n8n/workflows:/workflows
     depends_on:
       postgres:
@@ -62,7 +83,8 @@ services:
 
   ollama:
     image: ollama/ollama:latest
-    ports:
-      - "127.0.0.1:11434:11434"
     volumes:
       - ./ollama_data:/root/.ollama
+
+volumes:
+  n8n_data:

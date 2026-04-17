@@ -1,4 +1,4 @@
 {
-  "session_id": "replace-with-session-id",
-  "answer": "El problema lo vive sobre todo enfermeria de admision y el coordinador de urgencias. Tenemos registros internos de esperas medias de 27 minutos y reclamaciones por demoras en picos de entrada. La alternativa actual es un protocolo manual con apoyo en hojas de cribado. El alcance de esta fase es solo urgencias de adultos y no incluye diagnostico automatico."
+  "session_id": "85cf3299-4fc3-4770-9944-6049d97e7b59",
+  "answer": "El problem owner principal es el coordinador de urgencias, porque es quien responde por los tiempos de espera, la priorización clínica y la organización del flujo en horas punta. La owner operativa del proceso es la supervisora de enfermería de admisión, que gestiona el cribado y la recogida inicial de información. Para esta fase queremos considerar como owner principal al coordinador de urgencias y como responsable operativa a enfermería de admisión."
 }

@@ -79,7 +79,16 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://n8n:5678/webhook/agent-problem-definition-v1",
+        "url": "http://api:3001/internal/agents/problem-definition/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-shared-secret",
+              "value": "={{ $env.INTERNAL_SHARED_SECRET }}"
+            }
+          ]
+        },
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ { request_id: $json.request_id, workflow_version: \"agent_problem_definition_v1\", workflow_execution_id: $execution.id, session_id: $node[\"HTTP_AppendReply\"].json.session_id, trigger: \"reply\" } }}",

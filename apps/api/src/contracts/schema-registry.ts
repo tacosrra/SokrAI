@@ -69,6 +69,16 @@ export const schemaIds = {
   structuredBrief: structuredBriefSchema.$id,
 } as const;
 
+export const schemaDocuments = {
+  errorResponse: errorResponseSchema,
+  problemDefinitionTurn: problemDefinitionTurnSchema,
+  proposalReplyRequest: proposalReplyRequestSchema,
+  proposalReplyResponse: proposalReplyResponseSchema,
+  proposalStartRequest: proposalStartRequestSchema,
+  proposalStartResponse: proposalStartResponseSchema,
+  structuredBrief: structuredBriefSchema,
+} as const;
+
 export function assertProposalStartRequest(payload: unknown): ProposalStartRequest {
   return assertSchema<ProposalStartRequest>(schemaIds.proposalStartRequest, payload, 'invalid_start_request');
 }

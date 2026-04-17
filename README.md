@@ -4,11 +4,16 @@ Middleware de maduracion de propuestas antes de comite, orientado a demostrar un
 
 > digerir una propuesta inicial, construir un `structured_brief` y conducir una conversacion socratica resumible para clarificar el problema.
 
+Guia detallada de arranque y prueba:
+
+- [docs/INICIALIZACION_V1.md](/home/tacosrra/PAE/docs/INICIALIZACION_V1.md)
+
 ## Alcance de esta v1
 
 - Orquestacion principal con `n8n`
 - Inferencia local con `Ollama`
 - Persistencia en `PostgreSQL`
+- Interfaz operativa en `apps/web` para demo local y uso humano
 - Un unico lane operativo: `problem_definition_agent`
 - Una pregunta principal por turno
 - Persistencia de sesiones, turnos, snapshots, agent runs y eventos
@@ -21,13 +26,14 @@ Middleware de maduracion de propuestas antes de comite, orientado a demostrar un
 - Lane de costes
 - Scoring o priorizacion de comite
 - RAG complejo
-- UI rica
 - OCR para PDFs escaneados
+- BI/dashboard amplio o superficies multi-lane fuera del carril `problem_definition`
 
 ## Estructura
 
 ```text
 apps/api                 Servicio Fastify con dominio, persistencia y adaptadores
+apps/web                 Frontend React + Vite para crear, responder y reanudar sesiones
 contracts/schemas        Source of truth de request/response y artefactos internos
 db/migrations            SQL versionado
 infra/n8n/workflows      Exportes versionados de n8n
@@ -106,11 +112,19 @@ pnpm install --store-dir ./.pnpm-store
 docker compose up -d postgres n8n ollama
 ```
 
+`Ollama` no se expone al host por defecto en esta v1. La API le habla por la red interna de Docker Compose, lo que evita conflictos habituales con instalaciones locales de Ollama en `11434`.
+
+`n8n` guarda su estado en un volumen gestionado por Docker, no en una carpeta bind-mounted del repo. Con eso evitamos errores de permisos frecuentes en WSL al escribir `/home/node/.n8n`.
+
+Esta v1 usa `{{$env.INTERNAL_SHARED_SECRET}}` dentro de nodos `HTTP Request` de n8n. Por eso el `docker-compose.yml` fija `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`; si ese valor falta, los workflows fallan con `access to env vars denied`.
+
 ### 3. Cargar un modelo en Ollama
 
 ```bash
 docker exec -it $(docker ps -qf "ancestor=ollama/ollama:latest") ollama pull qwen2.5:7b-instruct
 ```
+
+Si tu maquina tiene poca RAM libre o estas en WSL con memoria ajustada, reduce `OLLAMA_NUM_CTX` a `4096` y considera usar un modelo mas pequeno. El error tipico en ese caso es `ollama_request_failed` porque el runner termina al cargar el modelo.
 
 ### 4. Aplicar migraciones
 
@@ -125,6 +139,23 @@ pnpm dev
 ```
 
 La API queda en `http://localhost:3001`.
+
+### 5.b Levantar el frontend
+
+Modo recomendado fuera de Docker:
+
+```bash
+pnpm dev:web
+```
+
+La UI queda en `http://localhost:3000`.
+
+Usa el proxy de Vite para hablar con:
+
+- `http://localhost:5678/webhook/*`
+- `http://localhost:3001/api/*`
+
+Si prefieres levantar toda la superficie de demo en Docker, añade `web` al `docker compose up`.
 
 ### 6. Importar workflows n8n
 
@@ -158,6 +189,15 @@ Abre `http://localhost:5678`, importa los tres workflows y asegúrate de que `IN
 - `GET /api/v1/sessions/:sessionId`
 - `GET /healthz`
 
+### UI operativa
+
+- `http://localhost:3000`
+- Crear nueva propuesta
+- Pegar `document_text`
+- Subir PDF en base64
+- Reanudar por `session_id`
+- Inspeccionar `brief`, `gaps`, `warnings`, timeline y trazabilidad
+
 ## Ejemplos
 
 Payloads listos para prueba:
@@ -177,8 +217,9 @@ El flujo normal es:
 ```bash
 pnpm test:contracts
 pnpm test:unit
-pnpm test:integration
-pnpm test:smoke
+pnpm test:web
+TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pnpm test:integration
+TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pnpm test:smoke
 ```
 
 ## Decisiones importantes de v1

@@ -8,22 +8,21 @@ export interface ModelCompletionResult {
   metrics: Record<string, unknown>;
 }
 
+export interface ModelGenerationParams {
+  model: string;
+  systemPrompt: string;
+  userPrompt: string;
+  responseSchema?: Record<string, unknown>;
+}
+
 export interface LanguageModelClient {
-  generate(params: {
-    model: string;
-    systemPrompt: string;
-    userPrompt: string;
-  }): Promise<ModelCompletionResult>;
+  generate(params: ModelGenerationParams): Promise<ModelCompletionResult>;
 }
 
 export class OllamaClient implements LanguageModelClient {
   constructor(private readonly config: AppConfig) {}
 
-  async generate(params: {
-    model: string;
-    systemPrompt: string;
-    userPrompt: string;
-  }): Promise<ModelCompletionResult> {
+  async generate(params: ModelGenerationParams): Promise<ModelCompletionResult> {
     const start = Date.now();
     const response = await fetch(`${this.config.ollamaBaseUrl}/api/chat`, {
       method: 'POST',
@@ -33,6 +32,7 @@ export class OllamaClient implements LanguageModelClient {
       body: JSON.stringify({
         model: params.model,
         stream: false,
+        format: params.responseSchema,
         options: {
           temperature: 0.2,
           num_ctx: this.config.ollamaNumCtx,

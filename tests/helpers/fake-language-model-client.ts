@@ -1,5 +1,6 @@
 import type {
   LanguageModelClient,
+  ModelGenerationParams,
   ModelCompletionResult,
 } from '../../apps/api/src/services/ollama-client.ts';
 
@@ -13,17 +14,13 @@ type QueueItem =
 
 export class QueueLanguageModelClient implements LanguageModelClient {
   private readonly items: QueueItem[];
-  public readonly calls: Array<{ model: string; systemPrompt: string; userPrompt: string }> = [];
+  public readonly calls: ModelGenerationParams[] = [];
 
   constructor(items: QueueItem[]) {
     this.items = [...items];
   }
 
-  async generate(params: {
-    model: string;
-    systemPrompt: string;
-    userPrompt: string;
-  }): Promise<ModelCompletionResult> {
+  async generate(params: ModelGenerationParams): Promise<ModelCompletionResult> {
     this.calls.push(params);
 
     const next = this.items.shift();

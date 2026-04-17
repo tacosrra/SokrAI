@@ -1,4 +1,9 @@
-import { assertProblemDefinitionTurn, assertStructuredBrief, schemaIds } from '../contracts/schema-registry';
+import {
+  assertProblemDefinitionTurn,
+  assertStructuredBrief,
+  schemaDocuments,
+  schemaIds,
+} from '../contracts/schema-registry';
 import type { ProblemDefinitionTurn, StructuredBrief } from '../contracts/types';
 import type { AppConfig } from '../config/env';
 import { ModelOutputError } from '../utils/errors';
@@ -51,6 +56,7 @@ export class LlmOrchestrator {
       prompt,
       userPrompt,
       validate: assertStructuredBrief,
+      responseSchema: schemaDocuments.structuredBrief,
     });
   }
 
@@ -81,6 +87,7 @@ export class LlmOrchestrator {
       prompt,
       userPrompt,
       validate: assertProblemDefinitionTurn,
+      responseSchema: schemaDocuments.problemDefinitionTurn,
     });
   }
 
@@ -88,11 +95,13 @@ export class LlmOrchestrator {
     prompt: PromptAsset;
     userPrompt: string;
     validate: (payload: unknown) => T;
+    responseSchema: Record<string, unknown>;
   }): Promise<GenerationResult<T>> {
     const firstAttempt = await this.client.generate({
       model: this.config.ollamaModel,
       systemPrompt: params.prompt.content,
       userPrompt: params.userPrompt,
+      responseSchema: params.responseSchema,
     });
 
     try {
@@ -132,6 +141,7 @@ export class LlmOrchestrator {
         'Invalid JSON text:',
         firstAttempt.content,
       ].join('\n'),
+      responseSchema: params.responseSchema,
     });
 
     try {

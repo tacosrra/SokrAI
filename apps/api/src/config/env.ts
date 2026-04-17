@@ -69,7 +69,7 @@ export function loadConfig(): AppConfig {
     ollamaBaseUrl: getString('OLLAMA_BASE_URL', 'http://localhost:11434'),
     ollamaModel: getString('OLLAMA_MODEL', 'qwen2.5:7b-instruct'),
     ollamaTimeoutMs: getNumber('OLLAMA_TIMEOUT_MS', 90000),
-    ollamaNumCtx: getNumber('OLLAMA_NUM_CTX', 8192),
+    ollamaNumCtx: getNumber('OLLAMA_NUM_CTX', 4096),
     jsonRepairMaxAttempts: getNumber('JSON_REPAIR_MAX_ATTEMPTS', 1),
     maxProposalChars: getNumber('MAX_PROPOSAL_CHARS', 30000),
     maxReplyChars: getNumber('MAX_REPLY_CHARS', 4000),
