@@ -1,0 +1,13 @@
+services:
+  postgres:
+    volumes:
+      - sokrai_beta_postgres_data:/var/lib/postgresql/data
+      - ./infra/docker/postgres/init:/docker-entrypoint-initdb.d:ro
+
+  ollama:
+    volumes:
+      - sokrai_beta_ollama_data:/root/.ollama
+
+volumes:
+  sokrai_beta_postgres_data:
+  sokrai_beta_ollama_data:

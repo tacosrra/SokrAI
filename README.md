@@ -99,6 +99,57 @@ Patron:
 
 ## Arranque local
 
+### Ruta rapida para beta testers
+
+Para reducir el setup manual sin tocar el flujo de desarrollo existente, esta v1 incluye un bootstrap aislado para beta:
+
+```bash
+./scripts/bootstrap-beta.sh
+```
+
+En Windows nativo:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-beta.ps1
+```
+
+Que hace:
+
+- crea `.env.beta` a partir de `.env.example`
+- genera secretos locales si siguen en placeholder
+- arranca `Docker Desktop` si ya esta instalado pero no esta corriendo
+- levanta un proyecto Docker aislado llamado `sokrai-beta`
+- usa volumenes Docker dedicados para `postgres`, `ollama` y `n8n`
+- espera a que `PostgreSQL`, `Ollama`, `API`, `n8n` y `web` esten listos
+- descarga el modelo configurado en `OLLAMA_MODEL`
+- ejecuta migraciones
+- importa y activa los workflows de `n8n`
+- abre la UI principal en el navegador al terminar
+
+Requisitos de esta ruta:
+
+- `Docker Desktop` o un daemon Docker accesible
+- `curl` y shell tipo `bash` en macOS, Linux o WSL
+- `PowerShell` en Windows nativo
+
+Para esta ruta beta no hace falta instalar `Node.js` ni `pnpm` en host.
+
+Comandos posteriores:
+
+```bash
+./scripts/start-beta.sh
+./scripts/stop-beta.sh
+```
+
+En Windows nativo:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-beta.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\stop-beta.ps1
+```
+
+La ruta beta usa `.env.beta` y un proyecto Docker separado, asi que no pisa el flujo manual existente.
+
 ### 1. Preparar entorno
 
 ```bash

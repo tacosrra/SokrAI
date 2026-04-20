@@ -1,6 +1,7 @@
 node_modules
 dist
 .env
+.env.beta
 .env.local
 .pnpm-store
 coverage
@@ -10,3 +11,7 @@ tmp
 n8n_data
 ollama_data
 postgres_data
+
+.agents
+.claude
+.codex

@@ -41,6 +41,57 @@ Necesitas instalado localmente:
 - `Node.js 24+`
 - `pnpm`
 
+## 2.b Ruta rapida para beta testers
+
+Si quieres evitar casi todo el setup manual y mantener el flujo de desarrollo intacto, usa la ruta beta:
+
+```bash
+./scripts/bootstrap-beta.sh
+```
+
+En Windows nativo:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-beta.ps1
+```
+
+Este bootstrap:
+
+- crea `.env.beta` si no existe
+- genera secretos locales si siguen en placeholder
+- arranca `Docker Desktop` si ya esta instalado pero no esta corriendo
+- levanta un proyecto Docker aislado `sokrai-beta`
+- usa volumenes Docker nombrados para evitar problemas de permisos en `postgres` y `ollama`
+- espera a que `postgres`, `ollama`, `api`, `n8n` y `web` esten listos
+- hace `ollama pull` del modelo configurado
+- ejecuta migraciones
+- importa y activa los workflows versionados de `n8n`
+- abre la UI principal en el navegador al terminar
+
+Despues del primer setup:
+
+```bash
+./scripts/start-beta.sh
+./scripts/stop-beta.sh
+```
+
+En Windows nativo:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-beta.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\stop-beta.ps1
+```
+
+Notas de esta ruta:
+
+- usa `.env.beta`, no `.env`
+- no modifica el flujo manual/documentado de desarrollo
+- esta pensada para macOS, Linux y WSL con `bash`
+- en Windows nativo usa `PowerShell`
+- no requiere `Node.js` ni `pnpm` en host
+
+Si necesitas el flujo manual o quieres inspeccionar cada paso, continua con la guia normal de abajo.
+
 Comprobaciones rapidas:
 
 ```bash
