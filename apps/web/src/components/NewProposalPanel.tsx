@@ -126,16 +126,16 @@ export function NewProposalPanel({
     <section className="panel proposal-panel">
       <div className="panel__eyebrow">Nueva propuesta</div>
       <div className="panel__heading">
-        <h2>Arranque operativo del carril de maduración</h2>
+        <h2>Prepara el contexto antes del primer turno</h2>
         <p>
-          Envía la propuesta inicial y deja que la v1 construya el
-          <span> structured brief</span> y abra el siguiente turno socrático.
+          Resume el objetivo, el contexto y la evidencia disponible. La v1 convertirá esta entrada en un
+          <span> structured brief</span> y abrirá la siguiente pregunta del agente.
         </p>
       </div>
 
       <form className="proposal-form" onSubmit={handleSubmit}>
         <label className="field">
-          <span className="field__label">Project title</span>
+          <span className="field__label">Título del proyecto</span>
           <input
             className="field__control"
             type="text"
@@ -143,11 +143,12 @@ export function NewProposalPanel({
             onChange={(event) => updateField('projectTitle', event.target.value)}
             placeholder="Ej. Triage IA en Urgencias"
             disabled={isSubmitting}
+            autoFocus
           />
         </label>
 
         <label className="field">
-          <span className="field__label">Goal</span>
+          <span className="field__label">Objetivo</span>
           <textarea
             className="field__control field__control--medium"
             value={form.goal}
@@ -158,7 +159,7 @@ export function NewProposalPanel({
         </label>
 
         <label className="field">
-          <span className="field__label">Proposal text</span>
+          <span className="field__label">Contexto de la propuesta</span>
           <textarea
             className="field__control field__control--large"
             value={form.proposalText}
@@ -167,13 +168,13 @@ export function NewProposalPanel({
             disabled={isSubmitting}
           />
           <span className="field__hint">
-            Ruta principal para la v1. El backend truncará por contrato si supera el máximo permitido.
+            Ruta principal para la v1. Prioriza hechos, señales observables y quién sufre el problema.
           </span>
         </label>
 
         <div className="field-grid">
           <label className="field">
-            <span className="field__label">Document text</span>
+            <span className="field__label">Texto de apoyo</span>
             <textarea
               className="field__control field__control--medium"
               value={form.documentText}
@@ -196,7 +197,7 @@ export function NewProposalPanel({
                 {fileBusy ? 'Convirtiendo PDF…' : form.fileName || 'Selecciona un PDF con texto extraíble'}
               </span>
               <span className="file-dropzone__meta">
-                Se convierte a base64 en el navegador y se envía con el contrato oficial.
+                Se convierte a base64 en el navegador y se envía sin romper el contrato oficial.
               </span>
             </label>
           </div>
@@ -234,7 +235,7 @@ export function NewProposalPanel({
             {isSubmitting ? 'Lanzando sesión…' : 'Crear sesión de maduración'}
           </button>
           <p className="form-actions__hint">
-            El siguiente paso real ocurre en los workflows existentes de `n8n`, no en el navegador.
+            El navegador solo captura la entrada. La ejecución real ocurre en los workflows existentes de `n8n`.
           </p>
         </div>
       </form>
