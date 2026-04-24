@@ -135,5 +135,65 @@ describe('deriveSessionPresentation', () => {
     expect(presentation.agentStatus).toBe('continue');
     expect(presentation.detectedGaps).toContain('problem_owner');
     expect(presentation.runCount).toBe(2);
+    expect(presentation.checklist.find((item) => item.id === 'problem_owner')).toMatchObject({
+      isComplete: false,
+      source: 'missing',
+    });
+    expect(presentation.checklist.find((item) => item.id === 'target_user')).toMatchObject({
+      isComplete: true,
+      source: 'structured_brief',
+    });
+    expect(presentation.progress.percent).toBe(83);
+    expect(presentation.progress.steps.map((step) => step.state)).toEqual([
+      'complete',
+      'complete',
+      'current',
+      'upcoming',
+    ]);
+  });
+
+  it('marks the flow as complete when the session is closed and fields are defined', () => {
+    const completedAudit: SessionAuditView = {
+      ...auditFixture,
+      session: {
+        ...auditFixture.session,
+        status: 'completed',
+        completion_reason: 'La definición del problema quedó lista para revisión.',
+        latest_problem_definition_json: {
+          ...auditFixture.session.latest_problem_definition_json!,
+          problem_owner: 'Dirección de Urgencias',
+        },
+      },
+      turns: [
+        {
+          ...auditFixture.turns[0],
+          answer_text: 'El problema lo lidera Dirección de Urgencias.',
+          status: 'resolved',
+          completion_reason: 'La definición del problema quedó lista para revisión.',
+        },
+      ],
+      snapshots: [
+        {
+          ...auditFixture.snapshots[0],
+          current_problem_definition_json: {
+            ...auditFixture.snapshots[0].current_problem_definition_json!,
+            problem_owner: 'Dirección de Urgencias',
+          },
+          detected_gaps_json: [],
+          agent_status: 'done',
+          completion_reason: 'La definición del problema quedó lista para revisión.',
+        },
+      ],
+    };
+
+    const presentation = deriveSessionPresentation(completedAudit);
+
+    expect(presentation.progress.percent).toBe(100);
+    expect(presentation.progress.title).toBe('Definición del problema completada');
+    expect(presentation.progress.steps.every((step) => step.state === 'complete')).toBe(true);
+    expect(presentation.checklist.find((item) => item.id === 'problem_owner')).toMatchObject({
+      isComplete: true,
+      source: 'problem_definition',
+    });
   });
 });

@@ -41,9 +41,9 @@ export function ContinueSessionPanel({
     <section className="panel continue-panel">
       <div className="panel__eyebrow">Continuar sesión</div>
       <div className="panel__heading">
-        <h2>Reabrir una sesión persistida</h2>
+        <h2>Reabre una conversación existente</h2>
         <p>
-          Consulta el estado real en PostgreSQL y recupera los turnos, snapshots y runs auditables.
+          Consulta el estado real en PostgreSQL y recupera los turnos, snapshots y runs auditables sin salir del flujo.
         </p>
       </div>
 
@@ -57,12 +57,13 @@ export function ContinueSessionPanel({
             onChange={(event) => setSessionId(event.target.value)}
             placeholder="85cf3299-4fc3-4770-9944-6049d97e7b59"
             disabled={isLoading}
+            autoFocus
           />
         </label>
 
         {error ? <div className="feedback feedback--error">{error}</div> : null}
 
-        <button className="button button--secondary" type="submit" disabled={isLoading}>
+        <button className="button button--primary" type="submit" disabled={isLoading}>
           {isLoading ? 'Consultando sesión…' : 'Abrir sesión'}
         </button>
       </form>
@@ -70,7 +71,7 @@ export function ContinueSessionPanel({
       <div className="recent-sessions">
         <div className="recent-sessions__header">
           <h3>Sesiones recientes</h3>
-          <p>Persistidas en `localStorage` para retomar una demo sin volver a usar curl.</p>
+          <p>Persistidas en `localStorage` para volver al punto exacto del demo o de la revisión.</p>
         </div>
 
         {recentSessions.length === 0 ? (
