@@ -104,6 +104,7 @@ function Write-Utf8NoBomFile {
     [Parameter(Mandatory = $true)]
     [string] $Path,
     [Parameter(Mandatory = $true)]
+    [AllowEmptyString()]
     [string[]] $Lines
   )
 
