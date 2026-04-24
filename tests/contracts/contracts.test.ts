@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readdir, readFile } from 'node:fs/promises';
+import path from 'node:path';
 
 import {
   assertProblemDefinitionTurn,
@@ -61,5 +63,34 @@ describe('contract schemas', () => {
   it('accepts a valid proposal reply request fixture', async () => {
     const fixture = await readFixture('reply', 'unknown-session.json');
     expect(assertProposalReplyRequest(fixture)).toBeTruthy();
+  });
+
+  it('keeps n8n workflow assets importable by requiring top-level workflow ids', async () => {
+    const workflowsDir = path.resolve(process.cwd(), '../../infra/n8n/workflows');
+    const files = (await readdir(workflowsDir)).filter((file) => file.endsWith('.json')).sort();
+
+    expect(files.length).toBeGreaterThan(0);
+
+    const workflowIds = await Promise.all(
+      files.map(async (file) => {
+        const raw = await readFile(path.join(workflowsDir, file), 'utf8');
+        const workflow = JSON.parse(raw) as { id?: unknown };
+
+        expect(workflow.id, `${file} is missing a top-level workflow id`).toEqual(expect.any(String));
+        expect((workflow.id as string).trim(), `${file} has an empty top-level workflow id`).not.toBe('');
+
+        return workflow.id as string;
+      }),
+    );
+
+    expect(new Set(workflowIds).size).toBe(workflowIds.length);
+  });
+
+  it('bootstraps n8n workflows with supported per-workflow publish commands', async () => {
+    const scriptPath = path.resolve(process.cwd(), '../../scripts/common-beta.sh');
+    const script = await readFile(scriptPath, 'utf8');
+
+    expect(script).toContain('n8n publish:workflow --id="$workflow_id"');
+    expect(script).not.toContain('n8n update:workflow --all --active=true');
   });
 });

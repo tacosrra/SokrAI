@@ -212,6 +212,22 @@ web_ready() {
   curl -fsS http://localhost:3000 >/dev/null 2>&1
 }
 
+read_workflow_id() {
+  local workflow_file="$1"
+
+  awk -F'"' '/^[[:space:]]*"id":[[:space:]]*"/ { print $4; exit }' "$workflow_file"
+}
+
+publish_workflow() {
+  local workflow_file="$1"
+  local workflow_id
+
+  workflow_id="$(read_workflow_id "$workflow_file")"
+  [[ -n "$workflow_id" ]] || fail "Workflow file $(basename "$workflow_file") is missing a top-level id"
+
+  docker_compose exec -T -u node n8n n8n publish:workflow --id="$workflow_id"
+}
+
 pull_ollama_model() {
   local model
 
@@ -228,18 +244,28 @@ run_database_migrations() {
 }
 
 bootstrap_workflows() {
+  local workflow_files=(
+    proposal_start_v1.json
+    proposal_reply_v1.json
+    agent_problem_definition_v1.json
+  )
+  local workflow_file
+
   if docker_compose exec -T -u node n8n test -f "$WORKFLOW_MARKER_FILE" >/dev/null 2>&1; then
     log_step "Skipping workflow import: already bootstrapped in this beta environment"
     return
   fi
 
   log_step "Importing n8n workflows"
-  docker_compose exec -T -u node n8n n8n import:workflow --input=/workflows/proposal_start_v1.json
-  docker_compose exec -T -u node n8n n8n import:workflow --input=/workflows/proposal_reply_v1.json
-  docker_compose exec -T -u node n8n n8n import:workflow --input=/workflows/agent_problem_definition_v1.json
+  for workflow_file in "${workflow_files[@]}"; do
+    docker_compose exec -T -u node n8n n8n import:workflow --input="/workflows/${workflow_file}"
+  done
 
-  log_step "Activating imported workflows"
-  docker_compose exec -T -u node n8n n8n update:workflow --all --active=true
+  log_step "Publishing imported workflows"
+  for workflow_file in "${workflow_files[@]}"; do
+    publish_workflow "$REPO_ROOT/infra/n8n/workflows/$workflow_file"
+  done
+
   docker_compose exec -T -u node n8n touch "$WORKFLOW_MARKER_FILE"
 
   log_step "Restarting n8n so active workflow state is applied"
