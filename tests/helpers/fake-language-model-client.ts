@@ -6,6 +6,7 @@ import type {
 
 type QueueItem =
   | string
+  | Error
   | {
       content: string;
       modelName?: string;
@@ -27,6 +28,10 @@ export class QueueLanguageModelClient implements LanguageModelClient {
 
     if (!next) {
       throw new Error('QueueLanguageModelClient ran out of queued responses');
+    }
+
+    if (next instanceof Error) {
+      throw next;
     }
 
     if (typeof next === 'string') {

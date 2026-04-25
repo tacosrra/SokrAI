@@ -206,6 +206,14 @@ Usa el proxy de Vite para hablar con:
 - `http://localhost:5678/webhook/*`
 - `http://localhost:3001/api/*`
 
+La UI tiene budgets de espera mas altos para el flujo real:
+
+- `VITE_START_SESSION_TIMEOUT_MS=420000`
+- `VITE_REPLY_SESSION_TIMEOUT_MS=225000`
+- `VITE_SESSION_AUDIT_TIMEOUT_MS=10000`
+
+No se recomienda quitar el timeout por completo. El primer diagnostico puede tardar mas porque encadena la extraccion del brief y la primera ejecucion del agente, pero si Ollama queda colgado la UI debe terminar mostrando un error controlado.
+
 Si prefieres levantar toda la superficie de demo en Docker, añade `web` al `docker compose up`.
 
 ### 6. Importar workflows n8n
@@ -217,6 +225,8 @@ Archivos:
 - `infra/n8n/workflows/agent_problem_definition_v1.json`
 
 Abre `http://localhost:5678`, importa los tres workflows y asegúrate de que `INTERNAL_SHARED_SECRET` coincide entre `.env`, la API y `n8n`.
+
+Los exports de workflow de esta version eliminan reintentos sincronos en nodos `HTTP Request` para que los errores de la API lleguen al usuario sin esperas duplicadas. Si reimportas los workflows, activa la nueva version exportada del repo.
 
 ## Endpoints y workflows
 

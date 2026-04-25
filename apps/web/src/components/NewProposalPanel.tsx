@@ -232,10 +232,12 @@ export function NewProposalPanel({
 
         <div className="form-actions">
           <button className="button button--primary" type="submit" disabled={isSubmitting || fileBusy}>
-            {isSubmitting ? 'Lanzando sesión…' : 'Crear sesión de maduración'}
+            {isSubmitting ? 'Cargando primer diagnóstico…' : 'Crear sesión de maduración'}
           </button>
           <p className="form-actions__hint">
-            El navegador solo captura la entrada. La ejecución real ocurre en los workflows existentes de `n8n`.
+            {isSubmitting
+              ? 'La UI esperará a que n8n, la API y Ollama devuelvan el primer diagnóstico del lane.'
+              : 'El navegador solo captura la entrada. La ejecución real ocurre en los workflows existentes de `n8n`.'}
           </p>
         </div>
       </form>
