@@ -62,7 +62,7 @@
         "specifyBody": "json",
         "jsonBody": "={{ { request_id: $json.request_id, workflow_version: $json.workflow_version, workflow_execution_id: $execution.id, session_id: $node[\"Webhook_AgentProblemDefinition\"].json.body.session_id, trigger: $node[\"Webhook_AgentProblemDefinition\"].json.body.trigger } }}",
         "options": {
-          "timeout": 90000
+          "timeout": 195000
         }
       },
       "id": "4ebdd524-9f7d-4e27-afc6-e33d2fcaad34",
@@ -72,10 +72,7 @@
       "position": [
         820,
         300
-      ],
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 3000
+      ]
     },
     {
       "parameters": {

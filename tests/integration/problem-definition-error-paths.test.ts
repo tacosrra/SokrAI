@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import type { FastifyInstance } from 'fastify';
 
+import { AppError } from '../../apps/api/src/utils/errors.ts';
 import { QueueLanguageModelClient } from '../helpers/fake-language-model-client';
 import { buildTestApp, readFixture, readTextFixture } from '../helpers/test-environment';
 
@@ -133,5 +134,68 @@ describe('problem-definition invalid JSON handling', () => {
     expect(turns.rows[0]?.count).toBe('0');
     expect(failedRun.rows[0]?.status).toBe('repair_failed');
     expect(failedRun.rows[0]?.raw_model_output).toContain('not json');
+  });
+
+  it('returns a controlled ollama timeout error and blocks the session for inspection', async () => {
+    const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
+
+    ({ app } = await buildTestApp(
+      new QueueLanguageModelClient([
+        JSON.stringify(structuredBrief),
+        new AppError(
+          504,
+          'ollama_timeout',
+          'The local model exceeded the configured timeout',
+          true,
+        ),
+      ]),
+    ));
+
+    const strongProposal = await readFixture('start', 'strong-proposal.json');
+
+    const startContextResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/sessions/start-context',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        request_id: 'req-timeout-start',
+        workflow_version: 'proposal_start_v1',
+        payload: strongProposal,
+      },
+    });
+
+    const sessionId = startContextResponse.json().session_id;
+
+    const agentResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/agents/problem-definition/run',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        request_id: 'req-timeout-agent',
+        workflow_version: 'agent_problem_definition_v1',
+        session_id: sessionId,
+        trigger: 'start',
+      },
+    });
+
+    expect(agentResponse.statusCode).toBe(504);
+    expect(agentResponse.json().error_code).toBe('ollama_timeout');
+
+    const session = await app.services.database.query<{ status: string }>(
+      'SELECT status FROM proposal_sessions WHERE id = $1',
+      [sessionId],
+    );
+    const failedRun = await app.services.database.query<{ status: string; error_code: string | null }>(
+      'SELECT status, error_code FROM agent_runs WHERE request_id = $1',
+      ['req-timeout-agent'],
+    );
+
+    expect(session.rows[0]?.status).toBe('blocked');
+    expect(failedRun.rows[0]?.status).toBe('model_failed');
+    expect(failedRun.rows[0]?.error_code).toBe('ollama_timeout');
   });
 });
