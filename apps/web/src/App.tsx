@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react';
 
 import type { ProposalStartRequest, RecentSession, SessionAuditView } from './domain/contracts';
-import { ApiError, fetchSessionAudit, replySession, startSession } from './lib/api';
+import { fetchSessionAudit, replySession, startSession } from './lib/api';
+import { mapApiError } from './lib/feedback';
 import { deriveSessionPresentation } from './lib/session-view';
 import { readLastSessionId, readRecentSessions, persistRecentSession } from './lib/storage';
 import { ContinueSessionPanel } from './components/ContinueSessionPanel';
 import { NewProposalPanel } from './components/NewProposalPanel';
 import { SessionStatePanel } from './components/SessionStatePanel';
 import { SessionWorkspace } from './components/SessionWorkspace';
+import { WorkflowLoadingPanel } from './components/WorkflowLoadingPanel';
 
 type BannerTone = 'info' | 'success' | 'error';
 type ModeView = 'start' | 'resume';
@@ -25,38 +27,6 @@ interface ModeCardProps {
   mode: ModeView;
   onSelect: (mode: ModeView) => void;
   title: string;
-}
-
-function mapError(error: unknown): string {
-  if (!(error instanceof ApiError)) {
-    return 'Ha ocurrido un error inesperado en el frontend.';
-  }
-
-  if (error.errorCode === 'invalid_response_contract') {
-    return 'La respuesta del backend no coincide con el contrato esperado. Revisa la versión de API, workflows o frontend.';
-  }
-
-  if (error.errorCode === 'session_not_found') {
-    return 'No existe una sesión con ese `session_id`. Comprueba el valor o crea una nueva sesión.';
-  }
-
-  if (
-    error.errorCode === 'ollama_request_failed' ||
-    error.errorCode === 'invalid_model_json' ||
-    error.errorCode === 'invalid_model_json_after_repair'
-  ) {
-    return 'El modelo local no pudo completar el turno. Revisa Ollama y vuelve a intentarlo.';
-  }
-
-  if (error.errorCode === 'request_timeout') {
-    return 'La llamada ha superado el tiempo de espera. Revisa n8n, API y Ollama.';
-  }
-
-  if (error.errorCode === 'invalid_pdf_file' || error.errorCode === 'invalid_pdf_payload') {
-    return 'El PDF no es válido para la v1. Usa un PDF con texto extraíble.';
-  }
-
-  return error.message;
 }
 
 function writeSessionToUrl(sessionId: string) {
@@ -221,7 +191,7 @@ export function App() {
     } catch (error) {
       setBanner({
         tone: 'error',
-        text: mapError(error),
+        text: mapApiError(error),
       });
     } finally {
       setIsLoadingSession(false);
@@ -232,7 +202,7 @@ export function App() {
     setIsSubmittingStart(true);
     setBanner({
       tone: 'info',
-      text: 'Creando sesión, ejecutando extracción inicial y esperando la primera pregunta del lane…',
+      text: 'Propuesta enviada. Preparando structured brief y primer diagnóstico del lane…',
     });
 
     try {
@@ -244,7 +214,7 @@ export function App() {
     } catch (error) {
       setBanner({
         tone: 'error',
-        text: mapError(error),
+        text: mapApiError(error),
       });
     } finally {
       setIsSubmittingStart(false);
@@ -259,7 +229,7 @@ export function App() {
     setIsReplying(true);
     setBanner({
       tone: 'info',
-      text: 'Enviando respuesta al workflow y esperando la actualización del estado…',
+      text: 'Respuesta enviada. Generando el siguiente diagnóstico y actualizando el estado de la sesión…',
     });
 
     try {
@@ -275,7 +245,7 @@ export function App() {
     } catch (error) {
       setBanner({
         tone: 'error',
-        text: mapError(error),
+        text: mapApiError(error),
       });
     } finally {
       setIsReplying(false);
@@ -496,7 +466,9 @@ export function App() {
         </section>
 
         <section className="detail-shell">
-          {selectedMode === 'start' ? (
+          {isSubmittingStart ? (
+            <WorkflowLoadingPanel kind="start" />
+          ) : selectedMode === 'start' ? (
             <NewProposalPanel isSubmitting={isSubmittingStart} onSubmit={handleStart} />
           ) : (
             <ContinueSessionPanel

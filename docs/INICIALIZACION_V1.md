@@ -184,6 +184,10 @@ ALLOW_SENSITIVE_HEALTH_DATA=false
 N8N_BASIC_AUTH_USER=admin
 N8N_BASIC_AUTH_PASSWORD=admin
 N8N_ENCRYPTION_KEY=change-this-to-another-long-random-secret
+
+VITE_START_SESSION_TIMEOUT_MS=420000
+VITE_REPLY_SESSION_TIMEOUT_MS=225000
+VITE_SESSION_AUDIT_TIMEOUT_MS=10000
 ```
 
 ### 5.3 Que valores dejar tal cual
@@ -972,6 +976,7 @@ Normalmente significa:
 - el modelo no se ha descargado aun
 - Ollama esta frio
 - el modelo elegido es demasiado pesado para tu maquina
+- o antes habia un timeout desalineado entre UI, n8n y API
 
 Comprueba:
 
@@ -983,7 +988,12 @@ docker compose logs -f ollama
 Si la API devuelve un `502` con algo como:
 
 - `ollama_request_failed`
+- `ollama_invalid_response`
 - `The local model did not return a successful response`
+
+o un `504` con:
+
+- `ollama_timeout`
 
 y en los logs de `ollama` aparece algo como:
 
@@ -991,6 +1001,16 @@ y en los logs de `ollama` aparece algo como:
 - `Load failed`
 
 entonces la integracion `n8n -> api` esta bien, pero el modelo local no consigue cargarse o responder.
+
+La UI de esta version no elimina el timeout: lo deja alto y coherente para que el primer diagnostico pueda completarse, pero sigue fallando de forma controlada si el modelo se queda colgado.
+
+Presupuestos por defecto:
+
+- `OLLAMA_TIMEOUT_MS=90000` por llamada de modelo
+- `VITE_START_SESSION_TIMEOUT_MS=420000` para el arranque completo
+- `VITE_REPLY_SESSION_TIMEOUT_MS=225000` para respuestas de turno
+
+Ademas, los workflows exportados ya no reintentan automaticamente los nodos `HTTP Request`, para no ocultar fallos reales de la API detras de esperas adicionales.
 
 La causa mas habitual en local es memoria insuficiente para el modelo actual o un `num_ctx` demasiado alto.
 

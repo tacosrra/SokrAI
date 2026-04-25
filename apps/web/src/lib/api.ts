@@ -15,9 +15,23 @@ import {
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
 const WEBHOOK_BASE_URL = (import.meta.env.VITE_WEBHOOK_BASE_URL ?? '').replace(/\/$/, '');
+const START_SESSION_TIMEOUT_MS = readTimeout('VITE_START_SESSION_TIMEOUT_MS', 420000);
+const REPLY_SESSION_TIMEOUT_MS = readTimeout('VITE_REPLY_SESSION_TIMEOUT_MS', 225000);
+const SESSION_AUDIT_TIMEOUT_MS = readTimeout('VITE_SESSION_AUDIT_TIMEOUT_MS', 10000);
 
 function joinUrl(baseUrl: string, path: string): string {
   return `${baseUrl}${path}`;
+}
+
+function readTimeout(name: string, fallback: number): number {
+  const raw = (import.meta.env as Record<string, string | undefined>)[name];
+
+  if (!raw) {
+    return fallback;
+  }
+
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
 export class ApiError extends Error {
@@ -74,6 +88,15 @@ async function requestJson<T>(params: {
         'La solicitud ha superado el tiempo de espera configurado.',
         408,
         'request_timeout',
+        true,
+      );
+    }
+
+    if (error instanceof TypeError) {
+      throw new ApiError(
+        'No se pudo contactar con los servicios locales. Revisa API, n8n y el proxy del frontend.',
+        503,
+        'network_error',
         true,
       );
     }
@@ -135,7 +158,7 @@ export async function startSession(
     url: joinUrl(WEBHOOK_BASE_URL, '/webhook/proposal-start-v1'),
     method: 'POST',
     payload,
-    timeoutMs: 120000,
+    timeoutMs: START_SESSION_TIMEOUT_MS,
     parse: parseProposalStartResponse,
   });
 }
@@ -147,7 +170,7 @@ export async function replySession(
     url: joinUrl(WEBHOOK_BASE_URL, '/webhook/proposal-reply-v1'),
     method: 'POST',
     payload,
-    timeoutMs: 120000,
+    timeoutMs: REPLY_SESSION_TIMEOUT_MS,
     parse: parseProposalReplyResponse,
   });
 }
@@ -155,7 +178,7 @@ export async function replySession(
 export async function fetchSessionAudit(sessionId: string): Promise<SessionAuditView> {
   return requestJson({
     url: joinUrl(API_BASE_URL, `/api/v1/sessions/${encodeURIComponent(sessionId)}`),
-    timeoutMs: 10000,
+    timeoutMs: SESSION_AUDIT_TIMEOUT_MS,
     parse: parseSessionAuditView,
   });
 }
