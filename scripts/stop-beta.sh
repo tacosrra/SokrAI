@@ -12,7 +12,7 @@ if [[ ! -f "$BETA_ENV_FILE" ]]; then
   fail "$(basename "$BETA_ENV_FILE") does not exist yet. Nothing to stop."
 fi
 
-log_step "Stopping isolated beta stack"
+log_step "Stopping beta stack"
 docker_compose stop
 
 cat <<EOF

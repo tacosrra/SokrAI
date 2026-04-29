@@ -237,6 +237,132 @@ describe('proposal flow integration', () => {
     expect(replyResult.body.agent_status).toBe('done');
   });
 
+  it('exposes completed request execution state for start and reply request ids', async () => {
+    const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
+    const startAgentTurn = {
+      agent_status: 'continue',
+      diagnosis: ['Falta identificar con precision quien responde hoy por el problema'],
+      updated_problem_definition: {
+        problem_owner: '',
+        problem_statement: structuredBrief.problem_statement,
+        evidence_of_problem: structuredBrief.evidence_of_problem,
+        scope: structuredBrief.scope,
+        current_alternatives: structuredBrief.current_alternatives,
+        assumptions: structuredBrief.assumptions,
+        ambiguities_remaining: structuredBrief.ambiguities,
+      },
+      next_question: '¿Qué equipo o responsable responde hoy por este problema en urgencias?',
+      completion_reason: '',
+    };
+    const doneTurn = await readFixture('expected', 'problem-definition.done.json');
+
+    ({ app } = await buildTestApp(
+      new QueueLanguageModelClient([
+        JSON.stringify(structuredBrief),
+        JSON.stringify(startAgentTurn),
+        JSON.stringify(doneTurn),
+      ]),
+    ));
+
+    const strongProposal = await readFixture('start', 'strong-proposal.json');
+    const strongAnswer = await readFixture('reply', 'strong-answer.json');
+
+    const startResult = await startFlow(app, 'req-start-status', strongProposal);
+    const replyResult = await replyFlow(app, 'req-reply-status', startResult.body.session_id, strongAnswer as { answer: string });
+
+    expect(replyResult.statusCode).toBe(200);
+
+    const startStatus = await app.inject({
+      method: 'GET',
+      url: '/api/v1/requests/req-start-status',
+    });
+    const replyStatus = await app.inject({
+      method: 'GET',
+      url: '/api/v1/requests/req-reply-status',
+    });
+
+    expect(startStatus.statusCode).toBe(200);
+    expect(startStatus.json()).toMatchObject({
+      request_id: 'req-start-status',
+      request_kind: 'proposal_start',
+      status: 'completed',
+      session_id: startResult.body.session_id,
+    });
+
+    expect(replyStatus.statusCode).toBe(200);
+    expect(replyStatus.json()).toMatchObject({
+      request_id: 'req-reply-status',
+      request_kind: 'proposal_reply',
+      status: 'completed',
+      session_id: startResult.body.session_id,
+    });
+  });
+
+  it('can actively recover a start request that created the session but never opened the first turn', async () => {
+    const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
+    const startAgentTurn = {
+      agent_status: 'continue',
+      diagnosis: ['Falta identificar con precision quien responde hoy por el problema'],
+      updated_problem_definition: {
+        problem_owner: '',
+        problem_statement: structuredBrief.problem_statement,
+        evidence_of_problem: structuredBrief.evidence_of_problem,
+        scope: structuredBrief.scope,
+        current_alternatives: structuredBrief.current_alternatives,
+        assumptions: structuredBrief.assumptions,
+        ambiguities_remaining: structuredBrief.ambiguities,
+      },
+      next_question: '¿Qué equipo o responsable responde hoy por este problema en urgencias?',
+      completion_reason: '',
+    };
+
+    ({ app } = await buildTestApp(
+      new QueueLanguageModelClient([
+        JSON.stringify(structuredBrief),
+        JSON.stringify(startAgentTurn),
+      ]),
+    ));
+
+    const strongProposal = await readFixture('start', 'strong-proposal.json');
+    const startContextResponse = await startContext(app, 'req-start-recover', strongProposal);
+
+    expect(startContextResponse.statusCode).toBe(200);
+
+    const pendingStatus = await app.inject({
+      method: 'GET',
+      url: '/api/v1/requests/req-start-recover',
+    });
+
+    expect(pendingStatus.statusCode).toBe(200);
+    expect(pendingStatus.json()).toMatchObject({
+      request_id: 'req-start-recover',
+      request_kind: 'proposal_start',
+      status: 'pending',
+    });
+
+    const recoveredStatus = await app.inject({
+      method: 'POST',
+      url: '/api/v1/requests/req-start-recover/recover',
+    });
+
+    expect(recoveredStatus.statusCode).toBe(200);
+    expect(recoveredStatus.json()).toMatchObject({
+      request_id: 'req-start-recover',
+      request_kind: 'proposal_start',
+      status: 'completed',
+      session_id: startContextResponse.json().session_id,
+    });
+
+    const audit = await app.inject({
+      method: 'GET',
+      url: `/api/v1/sessions/${startContextResponse.json().session_id}`,
+    });
+
+    expect(audit.statusCode).toBe(200);
+    expect(audit.json().turns).toHaveLength(1);
+    expect(audit.json().turns[0]?.question_text).toContain('responsable');
+  });
+
   it('returns controlled validation errors and avoids side effects for invalid inputs', async () => {
     ({ app } = await buildTestApp(new QueueLanguageModelClient([])));
 

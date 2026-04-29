@@ -25,6 +25,39 @@ describe('mapApiError', () => {
 
     expect(mapApiError(error)).toContain('navegador agotó el tiempo');
   });
+
+  it('explains when the proxy returns HTML instead of JSON', () => {
+    const error = new ApiError(
+      'El proxy devolvió HTML en lugar del JSON esperado.',
+      502,
+      'unexpected_html_response',
+      false,
+    );
+
+    expect(mapApiError(error)).toContain('recibió HTML');
+  });
+
+  it('explains when timeout recovery also expires', () => {
+    const error = new ApiError(
+      'The workflow did not expose a recoverable final state before the recovery window expired',
+      504,
+      'request_recovery_timeout',
+      true,
+    );
+
+    expect(mapApiError(error)).toContain('tampoco pudo recuperar');
+  });
+
+  it('explains when active recovery still cannot find the request id', () => {
+    const error = new ApiError(
+      'The workflow request could not be found after active recovery',
+      404,
+      'request_not_found_after_recovery',
+      false,
+    );
+
+    expect(mapApiError(error)).toContain('no encontró ningún rastro persistido');
+  });
 });
 
 describe('getWorkflowLoadingCopy', () => {

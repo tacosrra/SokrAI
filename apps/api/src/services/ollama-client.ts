@@ -44,6 +44,7 @@ export class OllamaClient implements LanguageModelClient {
           model: params.model,
           stream: false,
           format: params.responseSchema,
+          keep_alive: this.config.ollamaKeepAlive,
           options: {
             temperature: 0.2,
             num_ctx: this.config.ollamaNumCtx,

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sokrai.local/contracts/schemas/request-execution.response.schema.json",
+  "title": "RequestExecutionResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "request_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "request_kind": {
+      "type": "string",
+      "enum": [
+        "proposal_start",
+        "proposal_reply",
+        "unknown"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "completed",
+        "failed",
+        "not_found"
+      ]
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "error_code": {
+      "type": "string",
+      "minLength": 1
+    },
+    "safe_message": {
+      "type": "string",
+      "minLength": 1
+    },
+    "retryable": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "request_id",
+    "request_kind",
+    "status"
+  ]
+}

@@ -50,9 +50,13 @@ export function mapApiError(error: unknown): string {
 
   switch (error.errorCode) {
     case 'invalid_response_contract':
-      return 'La respuesta del backend no coincide con el contrato esperado. Revisa la versión de API, workflows o frontend.';
+      return 'La respuesta del backend no coincide con el contrato esperado. Lo más habitual aquí es que web, API y workflows estén en versiones distintas o que falte reiniciar/reconstruir servicios tras los cambios.';
+    case 'unexpected_html_response':
+      return 'El frontend recibió HTML donde esperaba JSON. Suele indicar que el proxy apunta al servicio incorrecto o que n8n devolvió una página intermedia o de login en vez del webhook/API.';
     case 'session_not_found':
       return 'No existe una sesión con ese `session_id`. Comprueba el valor o crea una nueva sesión.';
+    case 'invalid_request_recovery':
+      return 'La API devolvió un estado de recuperación inconsistente con la petición original. Revisa n8n, API y el contrato de inspección.';
     case 'ollama_timeout':
       return 'Ollama agotó el tiempo máximo configurado antes de devolver una respuesta. Revisa carga del modelo, memoria disponible o sube `OLLAMA_TIMEOUT_MS` si tu máquina es lenta.';
     case 'ollama_unreachable':
@@ -66,6 +70,14 @@ export function mapApiError(error: unknown): string {
       return 'El modelo respondió, pero no pudo cumplir el contrato JSON del turno. Revisa prompts, modelo y guardrails.';
     case 'request_timeout':
       return 'El navegador agotó el tiempo de espera de la llamada. El workflow puede seguir ejecutándose; revisa n8n, API y Ollama.';
+    case 'request_recovery_timeout':
+      return 'La UI agotó la espera y tampoco pudo recuperar el resultado final del workflow. Revisa n8n, API y Ollama con el `request_id` de la petición.';
+    case 'request_not_found_after_recovery':
+      return 'La API no encontró ningún rastro persistido para ese `request_id`, incluso tras la recuperación activa. Suele indicar que la petición nunca llegó correctamente al backend o al workflow.';
+    case 'session_blocked':
+      return 'La sesión quedó bloqueada antes de devolver el turno esperado. Revisa la trazabilidad y los logs del backend.';
+    case 'reply_processing_failed':
+      return 'La respuesta del usuario se guardó, pero el workflow falló antes de completar el siguiente turno.';
     case 'network_error':
       return 'No se pudo contactar con los servicios locales. Revisa el proxy del frontend, n8n y la API.';
     case 'internal_error':

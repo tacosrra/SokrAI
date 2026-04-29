@@ -195,6 +195,10 @@ Si te pedimos logs, ejecuta:
 SOKRAI_ENV_FILE=.env.beta docker compose --env-file .env.beta -p sokrai-beta -f docker-compose.yml -f docker-compose.beta.yml logs -f
 ```
 
+El bootstrap beta crea contenedores con nombres fijos `postgres`, `ollama`, `api`, `n8n` y `web`, sin el sufijo `-beta` en el nombre del contenedor.
+
+Si `ollama pull` falla con `no such host`, reintenta el bootstrap. Si el modelo ya estaba descargado antes, puedes saltarte ese paso con `SOKRAI_BETA_SKIP_OLLAMA_PULL=1 ./scripts/bootstrap-beta.sh`.
+
 ## 9. Resumen mínimo
 
 Primera vez si ya tienes Docker:

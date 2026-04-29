@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
 
 import type { ProposalStartRequest, RecentSession, SessionAuditView } from './domain/contracts';
-import { fetchSessionAudit, replySession, startSession } from './lib/api';
+import {
+  ApiError,
+  fetchRequestExecution,
+  recoverRequestExecution,
+  fetchSessionAudit,
+  replySession,
+  startSession,
+} from './lib/api';
 import { mapApiError } from './lib/feedback';
 import { deriveSessionPresentation } from './lib/session-view';
 import { readLastSessionId, readRecentSessions, persistRecentSession } from './lib/storage';
@@ -18,6 +25,18 @@ interface BannerState {
   tone: BannerTone;
   text: string;
 }
+
+const START_SESSION_TIMEOUT_MS = readTimeout('VITE_START_SESSION_TIMEOUT_MS', 960000);
+const REPLY_SESSION_TIMEOUT_MS = readTimeout('VITE_REPLY_SESSION_TIMEOUT_MS', 540000);
+const REQUEST_RECOVERY_TIMEOUT_MS = readTimeout(
+  'VITE_REQUEST_RECOVERY_TIMEOUT_MS',
+  Math.max(START_SESSION_TIMEOUT_MS, REPLY_SESSION_TIMEOUT_MS, 960000),
+);
+const REQUEST_RECOVERY_POLL_INTERVAL_MS = 4000;
+const ACTIVE_RECOVERY_AFTER_MS = readTimeout('VITE_ACTIVE_RECOVERY_AFTER_MS', 60000);
+const MAX_CONSECUTIVE_RECOVERY_TRANSPORT_ERRORS = 5;
+
+type RecoverableRequestKind = 'proposal_start' | 'proposal_reply';
 
 interface ModeCardProps {
   activeMode: ModeView;
@@ -39,6 +58,53 @@ function writeSessionToUrl(sessionId: string) {
   }
 
   window.history.replaceState({}, '', url);
+}
+
+function createClientRequestId(prefix: 'start' | 'reply'): string {
+  return `web-${prefix}-${crypto.randomUUID()}`;
+}
+
+function isRecoverableWorkflowDeliveryError(error: unknown): error is ApiError {
+  return (
+    error instanceof ApiError &&
+    (
+      error.errorCode === 'request_timeout' ||
+      error.errorCode === 'invalid_response_contract' ||
+      error.errorCode === 'unexpected_html_response'
+    )
+  );
+}
+
+function toApiErrorFromRecoveredRequest(status: {
+  request_id: string;
+  error_code?: string;
+  safe_message?: string;
+  retryable?: boolean;
+  session_id?: string;
+}): ApiError {
+  return new ApiError(
+    status.safe_message ?? 'The workflow failed before returning a final response',
+    status.retryable ? 503 : 502,
+    status.error_code ?? 'request_failed',
+    status.retryable ?? false,
+    status.request_id,
+    status.session_id,
+  );
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function readTimeout(name: string, fallback: number): number {
+  const raw = (import.meta.env as Record<string, string | undefined>)[name];
+
+  if (!raw) {
+    return fallback;
+  }
+
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
 function formatSessionDate(value: string) {
@@ -198,7 +264,113 @@ export function App() {
     }
   }
 
+  async function recoverTimedOutRequest(
+    requestId: string,
+    requestKind: RecoverableRequestKind,
+  ): Promise<string> {
+    const deadline = Date.now() + REQUEST_RECOVERY_TIMEOUT_MS;
+    const activeRecoveryAfter = Date.now() + ACTIVE_RECOVERY_AFTER_MS;
+    let consecutiveTransportErrors = 0;
+    let activeRecoveryTriggered = false;
+
+    while (Date.now() < deadline) {
+      try {
+        const status = await fetchRequestExecution(requestId);
+        consecutiveTransportErrors = 0;
+
+        if (status.request_kind !== requestKind && status.request_kind !== 'unknown') {
+          throw new ApiError(
+            'The recovered workflow state does not match the expected request kind',
+            502,
+            'invalid_request_recovery',
+            false,
+            requestId,
+            status.session_id,
+          );
+        }
+
+        if (status.status === 'completed' && status.session_id) {
+          return status.session_id;
+        }
+
+        if (status.status === 'failed') {
+          throw toApiErrorFromRecoveredRequest(status);
+        }
+
+        if (
+          !activeRecoveryTriggered &&
+          Date.now() >= activeRecoveryAfter &&
+          (status.status === 'pending' || status.status === 'not_found')
+        ) {
+          activeRecoveryTriggered = true;
+
+          const recoveredStatus = await recoverRequestExecution(requestId);
+
+          if (
+            recoveredStatus.request_kind !== requestKind &&
+            recoveredStatus.request_kind !== 'unknown'
+          ) {
+            throw new ApiError(
+              'The active recovery response does not match the expected request kind',
+              502,
+              'invalid_request_recovery',
+              false,
+              requestId,
+              recoveredStatus.session_id,
+            );
+          }
+
+          if (recoveredStatus.status === 'completed' && recoveredStatus.session_id) {
+            return recoveredStatus.session_id;
+          }
+
+          if (recoveredStatus.status === 'failed') {
+            throw toApiErrorFromRecoveredRequest(recoveredStatus);
+          }
+
+          if (recoveredStatus.status === 'not_found') {
+            throw new ApiError(
+              'The workflow request could not be found after active recovery',
+              404,
+              'request_not_found_after_recovery',
+              false,
+              requestId,
+            );
+          }
+        }
+      } catch (error) {
+        if (
+          error instanceof ApiError &&
+          error.errorCode !== 'network_error' &&
+          error.errorCode !== 'request_timeout' &&
+          error.errorCode !== 'invalid_response_contract' &&
+          error.errorCode !== 'unexpected_html_response' &&
+          error.errorCode !== 'http_error'
+        ) {
+          throw error;
+        }
+
+        consecutiveTransportErrors += 1;
+
+        if (consecutiveTransportErrors >= MAX_CONSECUTIVE_RECOVERY_TRANSPORT_ERRORS) {
+          throw error;
+        }
+      }
+
+      await wait(REQUEST_RECOVERY_POLL_INTERVAL_MS);
+    }
+
+    throw new ApiError(
+      'The workflow did not expose a recoverable final state before the recovery window expired',
+      504,
+      'request_recovery_timeout',
+      true,
+      requestId,
+    );
+  }
+
   async function handleStart(payload: ProposalStartRequest) {
+    const requestId = createClientRequestId('start');
     setIsSubmittingStart(true);
     setBanner({
       tone: 'info',
@@ -206,12 +378,40 @@ export function App() {
     });
 
     try {
-      const result = await startSession(payload);
+      const result = await startSession({
+        ...payload,
+        request_id: requestId,
+      });
       await loadSession(result.session_id, {
         successMessage: `Sesión ${result.session_id} creada. Structured brief y siguiente pregunta listos.`,
         skipBannerOnStart: true,
       });
     } catch (error) {
+      if (isRecoverableWorkflowDeliveryError(error)) {
+        setBanner({
+          tone: 'info',
+          text:
+            error.errorCode === 'request_timeout'
+              ? `La llamada inicial venció en el navegador. Recuperando el resultado del workflow para request_id ${requestId}…`
+              : `La respuesta inicial llegó con un formato inesperado. Intentando recuperar la sesión real con request_id ${requestId}…`,
+        });
+
+        try {
+          const sessionId = await recoverTimedOutRequest(requestId, 'proposal_start');
+          await loadSession(sessionId, {
+            successMessage: `Sesión ${sessionId} recuperada tras completar el workflow fuera del tiempo de espera inicial.`,
+            skipBannerOnStart: true,
+          });
+          return;
+        } catch (recoveryError) {
+          setBanner({
+            tone: 'error',
+            text: mapApiError(recoveryError),
+          });
+          return;
+        }
+      }
+
       setBanner({
         tone: 'error',
         text: mapApiError(error),
@@ -226,6 +426,7 @@ export function App() {
       return;
     }
 
+    const requestId = createClientRequestId('reply');
     setIsReplying(true);
     setBanner({
       tone: 'info',
@@ -234,6 +435,7 @@ export function App() {
 
     try {
       const result = await replySession({
+        request_id: requestId,
         session_id: activeAudit.session.id,
         answer,
       });
@@ -243,6 +445,41 @@ export function App() {
         skipBannerOnStart: true,
       });
     } catch (error) {
+      if (isRecoverableWorkflowDeliveryError(error)) {
+        setBanner({
+          tone: 'info',
+          text:
+            error.errorCode === 'request_timeout'
+              ? `La llamada del turno venció en el navegador. Recuperando el resultado del workflow para request_id ${requestId}…`
+              : `La respuesta del turno llegó con un formato inesperado. Intentando recuperar el estado real con request_id ${requestId}…`,
+        });
+
+        try {
+          const sessionId = await recoverTimedOutRequest(requestId, 'proposal_reply');
+          await loadSession(sessionId, {
+            successMessage: 'Turno recuperado tras completar el workflow fuera del tiempo de espera inicial.',
+            skipBannerOnStart: true,
+          });
+          return;
+        } catch (recoveryError) {
+          try {
+            await loadSession(activeAudit.session.id, {
+              successMessage: 'Se recuperó el estado de la sesión directamente desde la API tras expirar la llamada del navegador.',
+              skipBannerOnStart: true,
+            });
+            return;
+          } catch {
+            // Preserve the original recovery error when the direct session refresh also fails.
+          }
+
+          setBanner({
+            tone: 'error',
+            text: mapApiError(recoveryError),
+          });
+          return;
+        }
+      }
+
       setBanner({
         tone: 'error',
         text: mapApiError(error),

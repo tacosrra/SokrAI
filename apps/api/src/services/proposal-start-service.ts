@@ -3,7 +3,12 @@ import { AppError, ensure } from '../utils/errors';
 import { sha256 } from '../utils/hash';
 import type { Logger } from '../utils/logger';
 import type { AppConfig } from '../config/env';
-import { deriveDetectedGaps, mergeSourceText, toProblemDefinitionState } from '../domain/intake';
+import {
+  deriveDetectedGaps,
+  mergeSourceText,
+  prepareBriefExtractionInput,
+  toProblemDefinitionState,
+} from '../domain/intake';
 import { schemaIds } from '../contracts/schema-registry';
 import type { SessionStore } from '../repositories/session-store';
 import type { LlmOrchestrator } from './llm-orchestrator';
@@ -67,10 +72,18 @@ export class ProposalStartService {
       new AppError(400, 'empty_submission', 'The submission must include proposal text or a PDF with extractable text'),
     );
 
+    const briefExtractionInput = prepareBriefExtractionInput(
+      sourceText.normalizedText,
+      this.config.briefExtractionMaxChars,
+    );
+    const workflowWarnings = Array.from(
+      new Set([...sourceText.warnings, ...briefExtractionInput.warnings]),
+    );
+
     const briefResult = await this.llmOrchestrator.extractStructuredBrief({
       projectTitle: payload.project_title,
       goal: payload.goal,
-      normalizedText: sourceText.normalizedText,
+      normalizedText: briefExtractionInput.text,
     });
 
     const detectedGaps = deriveDetectedGaps(briefResult.output);
@@ -151,7 +164,7 @@ export class ProposalStartService {
           currentProblemDefinition: initialProblemDefinition,
           detectedGaps,
           agentStatus: 'continue',
-          warnings: sourceText.warnings,
+          warnings: workflowWarnings,
           snapshotHash: sha256(
             JSON.stringify({
               structured_brief: briefResult.output,
@@ -196,7 +209,7 @@ export class ProposalStartService {
       stage: 'problem_definition',
       structured_brief: briefResult.output,
       detected_gaps: detectedGaps,
-      warnings: sourceText.warnings,
+      warnings: workflowWarnings,
     };
   }
 }

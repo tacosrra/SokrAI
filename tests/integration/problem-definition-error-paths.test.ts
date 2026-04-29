@@ -138,6 +138,7 @@ describe('problem-definition invalid JSON handling', () => {
 
   it('returns a controlled ollama timeout error and blocks the session for inspection', async () => {
     const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
+    const requestId = 'req-timeout-start';
 
     ({ app } = await buildTestApp(
       new QueueLanguageModelClient([
@@ -160,7 +161,7 @@ describe('problem-definition invalid JSON handling', () => {
         'x-internal-shared-secret': 'test-secret',
       },
       payload: {
-        request_id: 'req-timeout-start',
+        request_id: requestId,
         workflow_version: 'proposal_start_v1',
         payload: strongProposal,
       },
@@ -175,7 +176,7 @@ describe('problem-definition invalid JSON handling', () => {
         'x-internal-shared-secret': 'test-secret',
       },
       payload: {
-        request_id: 'req-timeout-agent',
+        request_id: requestId,
         workflow_version: 'agent_problem_definition_v1',
         session_id: sessionId,
         trigger: 'start',
@@ -191,11 +192,23 @@ describe('problem-definition invalid JSON handling', () => {
     );
     const failedRun = await app.services.database.query<{ status: string; error_code: string | null }>(
       'SELECT status, error_code FROM agent_runs WHERE request_id = $1',
-      ['req-timeout-agent'],
+      [requestId],
     );
+    const requestStatus = await app.inject({
+      method: 'GET',
+      url: `/api/v1/requests/${requestId}`,
+    });
 
     expect(session.rows[0]?.status).toBe('blocked');
     expect(failedRun.rows[0]?.status).toBe('model_failed');
     expect(failedRun.rows[0]?.error_code).toBe('ollama_timeout');
+    expect(requestStatus.statusCode).toBe(200);
+    expect(requestStatus.json()).toMatchObject({
+      request_id: requestId,
+      request_kind: 'proposal_start',
+      status: 'failed',
+      error_code: 'ollama_timeout',
+      session_id: sessionId,
+    });
   });
 });

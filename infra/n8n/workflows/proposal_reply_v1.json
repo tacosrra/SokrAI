@@ -55,6 +55,10 @@
             {
               "name": "x-internal-shared-secret",
               "value": "={{ $env.INTERNAL_SHARED_SECRET }}"
+            },
+            {
+              "name": "x-request-id",
+              "value": "={{ $json.request_id }}"
             }
           ]
         },
@@ -62,7 +66,14 @@
         "specifyBody": "json",
         "jsonBody": "={{ { request_id: $json.request_id, workflow_version: $json.workflow_version, workflow_execution_id: $execution.id, payload: $node[\"Webhook_ProposalReply\"].json.body } }}",
         "options": {
-          "timeout": 60000
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
         }
       },
       "id": "64a61734-4e7f-402a-8c5e-f590b6314ff8",
@@ -76,6 +87,40 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "914f7cc9-1147-4852-bbb0-b377c387cd01",
+              "leftValue": "={{ Number($json.statusCode ?? 0) < 400 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1d6f16fe-d475-43e9-8462-f643bce5fb03",
+      "name": "If_AppendReplySucceeded",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        940,
+        300
+      ]
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "http://api:3001/internal/agents/problem-definition/run",
         "sendHeaders": true,
@@ -84,14 +129,25 @@
             {
               "name": "x-internal-shared-secret",
               "value": "={{ $env.INTERNAL_SHARED_SECRET }}"
+            },
+            {
+              "name": "x-request-id",
+              "value": "={{ $node[\"Set_ReplyPayload\"].json.request_id }}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { request_id: $json.request_id, workflow_version: \"agent_problem_definition_v1\", workflow_execution_id: $execution.id, session_id: $node[\"HTTP_AppendReply\"].json.session_id, trigger: \"reply\" } }}",
+        "jsonBody": "={{ { request_id: $node[\"Set_ReplyPayload\"].json.request_id, workflow_version: \"agent_problem_definition_v1\", workflow_execution_id: $execution.id, session_id: $node[\"HTTP_AppendReply\"].json.body.session_id, trigger: \"reply\" } }}",
         "options": {
-          "timeout": 195000
+          "timeout": 450000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
         }
       },
       "id": "d436b621-a30c-4b0c-9260-ddf1b9f80564",
@@ -99,14 +155,17 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1080,
-        300
+        1140,
+        220
       ]
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ $json }}"
+        "responseBody": "={{ $json.body ?? $json }}",
+        "options": {
+          "responseCode": "={{ Number($json.statusCode ?? 200) }}"
+        }
       },
       "id": "8dfb2d36-6fa0-4fb0-bd4f-4a152770fe35",
       "name": "Respond_Reply",
@@ -145,7 +204,25 @@
       "main": [
         [
           {
+            "node": "If_AppendReplySucceeded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If_AppendReplySucceeded": {
+      "main": [
+        [
+          {
             "node": "Invoke_AgentProblemDefinition",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond_Reply",
             "type": "main",
             "index": 0
           }

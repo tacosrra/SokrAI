@@ -13,7 +13,7 @@ if [[ ! -f "$BETA_ENV_FILE" ]]; then
   fail "$(basename "$BETA_ENV_FILE") does not exist yet. Run ./scripts/bootstrap-beta.sh first."
 fi
 
-log_step "Starting isolated beta stack"
+log_step "Starting beta stack"
 docker_compose up -d postgres ollama api n8n web
 wait_for "postgres" 60 postgres_ready
 wait_for "ollama" 60 ollama_ready
