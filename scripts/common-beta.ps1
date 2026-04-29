@@ -344,13 +344,36 @@ function Test-WebReady {
 
 function Invoke-OllamaModelPull {
   $model = Read-EnvValue -Path $script:BetaEnvFile -Key 'OLLAMA_MODEL'
+  $retryCount = if ($env:SOKRAI_BETA_OLLAMA_PULL_RETRIES) { [int]$env:SOKRAI_BETA_OLLAMA_PULL_RETRIES } else { 3 }
 
   if ([string]::IsNullOrWhiteSpace($model)) {
     Fail "OLLAMA_MODEL is empty in $([System.IO.Path]::GetFileName($script:BetaEnvFile))"
   }
 
-  Write-Step "Pulling Ollama model: $model"
-  Invoke-DockerCompose exec -T ollama ollama pull $model
+  if ($env:SOKRAI_BETA_SKIP_OLLAMA_PULL -eq '1') {
+    Write-Step 'Skipping Ollama model pull because SOKRAI_BETA_SKIP_OLLAMA_PULL=1'
+    return
+  }
+
+  if (Test-DockerCompose -ComposeArgs @('exec', '-T', 'ollama', 'ollama', 'show', $model)) {
+    Write-Step "Ollama model already present: $model"
+    return
+  }
+
+  for ($attempt = 1; $attempt -le $retryCount; $attempt++) {
+    Write-Step "Pulling Ollama model: $model (attempt $attempt/$retryCount)"
+
+    try {
+      Invoke-DockerCompose exec -T ollama ollama pull $model
+      return
+    } catch {
+      if ($attempt -ge $retryCount) {
+        Fail "Could not pull Ollama model '$model'. The Ollama container could not resolve or reach the model registry. Check Docker DNS/outbound network, retry later, or rerun with SOKRAI_BETA_SKIP_OLLAMA_PULL=1 if the model is already cached."
+      }
+
+      Start-Sleep -Seconds 5
+    }
+  }
 }
 
 function Invoke-DatabaseMigrations {

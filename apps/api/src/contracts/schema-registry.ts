@@ -10,6 +10,7 @@ import proposalStartResponseSchema from '../../../../contracts/schemas/proposal-
 import ragPacksResponseSchema from '../../../../contracts/schemas/rag-packs-response.schema.json';
 import ragSearchRequestSchema from '../../../../contracts/schemas/rag-search-request.schema.json';
 import ragSearchResponseSchema from '../../../../contracts/schemas/rag-search-response.schema.json';
+import requestExecutionResponseSchema from '../../../../contracts/schemas/request-execution.response.schema.json';
 import structuredBriefSchema from '../../../../contracts/schemas/structured-brief.schema.json';
 import type {
   ErrorResponse,
@@ -18,6 +19,7 @@ import type {
   ProposalReplyResponse,
   ProposalStartRequest,
   ProposalStartResponse,
+  RequestExecutionResponse,
   StructuredBrief,
 } from './types';
 import { AppError } from '../utils/errors';
@@ -35,6 +37,7 @@ ajv.addSchema(proposalStartRequestSchema, proposalStartRequestSchema.$id);
 ajv.addSchema(proposalStartResponseSchema, proposalStartResponseSchema.$id);
 ajv.addSchema(proposalReplyRequestSchema, proposalReplyRequestSchema.$id);
 ajv.addSchema(proposalReplyResponseSchema, proposalReplyResponseSchema.$id);
+ajv.addSchema(requestExecutionResponseSchema, requestExecutionResponseSchema.$id);
 ajv.addSchema(errorResponseSchema, errorResponseSchema.$id);
 ajv.addSchema(ragSearchRequestSchema, ragSearchRequestSchema.$id);
 ajv.addSchema(ragSearchResponseSchema, ragSearchResponseSchema.$id);
@@ -72,6 +75,7 @@ export const schemaIds = {
   proposalReplyResponse: proposalReplyResponseSchema.$id,
   proposalStartRequest: proposalStartRequestSchema.$id,
   proposalStartResponse: proposalStartResponseSchema.$id,
+  requestExecutionResponse: requestExecutionResponseSchema.$id,
   structuredBrief: structuredBriefSchema.$id,
   ragSearchRequest: ragSearchRequestSchema.$id,
   ragSearchResponse: ragSearchResponseSchema.$id,
@@ -85,6 +89,7 @@ export const schemaDocuments = {
   proposalReplyResponse: proposalReplyResponseSchema,
   proposalStartRequest: proposalStartRequestSchema,
   proposalStartResponse: proposalStartResponseSchema,
+  requestExecutionResponse: requestExecutionResponseSchema,
   structuredBrief: structuredBriefSchema,
   ragSearchRequest: ragSearchRequestSchema,
   ragSearchResponse: ragSearchResponseSchema,
@@ -140,4 +145,12 @@ export function assertRagSearchResponse<T>(payload: T): T {
 
 export function assertRagPacksResponse<T>(payload: T): T {
   return assertSchema<T>(schemaIds.ragPacksResponse, payload, 'invalid_rag_packs_response');
+}
+
+export function assertRequestExecutionResponse(payload: unknown): RequestExecutionResponse {
+  return assertSchema<RequestExecutionResponse>(
+    schemaIds.requestExecutionResponse,
+    payload,
+    'invalid_request_execution_response',
+  );
 }

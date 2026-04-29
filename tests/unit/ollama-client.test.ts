@@ -81,4 +81,30 @@ describe('OllamaClient', () => {
       retryable: false,
     });
   });
+
+  it('sends keep_alive to reduce cold starts between nearby requests', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({
+        model: 'fake-model',
+        message: {
+          content: '{"ok":true}',
+        },
+      }),
+    } satisfies Partial<Response>);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = createClient();
+
+    await client.generate({
+      model: 'fake-model',
+      systemPrompt: 'system',
+      userPrompt: 'user',
+    });
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const payload = JSON.parse(String(init.body));
+
+    expect(payload.keep_alive).toBe('30m');
+  });
 });

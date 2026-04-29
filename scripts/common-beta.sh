@@ -230,12 +230,37 @@ publish_workflow() {
 
 pull_ollama_model() {
   local model
+  local retry_count
+  local attempt
 
   model="$(read_env_value "$BETA_ENV_FILE" "OLLAMA_MODEL")"
   [[ -n "$model" ]] || fail "OLLAMA_MODEL is empty in $(basename "$BETA_ENV_FILE")"
 
-  log_step "Pulling Ollama model: $model"
-  docker_compose exec -T ollama ollama pull "$model"
+  if [[ "${SOKRAI_BETA_SKIP_OLLAMA_PULL:-0}" == "1" ]]; then
+    log_step "Skipping Ollama model pull because SOKRAI_BETA_SKIP_OLLAMA_PULL=1"
+    return 0
+  fi
+
+  if docker_compose exec -T ollama ollama show "$model" >/dev/null 2>&1; then
+    log_step "Ollama model already present: $model"
+    return 0
+  fi
+
+  retry_count="${SOKRAI_BETA_OLLAMA_PULL_RETRIES:-3}"
+
+  for (( attempt=1; attempt<=retry_count; attempt++ )); do
+    log_step "Pulling Ollama model: $model (attempt ${attempt}/${retry_count})"
+
+    if docker_compose exec -T ollama ollama pull "$model"; then
+      return 0
+    fi
+
+    if (( attempt < retry_count )); then
+      sleep 5
+    fi
+  done
+
+  fail "Could not pull Ollama model '$model'. The Ollama container could not resolve or reach the model registry. Check Docker DNS/outbound network, retry later, or rerun with SOKRAI_BETA_SKIP_OLLAMA_PULL=1 if the model is already cached."
 }
 
 run_database_migrations() {

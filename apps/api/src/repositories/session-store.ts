@@ -55,6 +55,8 @@ export interface AgentRunRecord {
   raw_model_output: string | null;
   validated_output_json: Record<string, unknown> | null;
   status: 'completed' | 'validation_failed' | 'repair_failed' | 'model_failed' | 'controlled_error';
+  error_code?: string | null;
+  error_message?: string | null;
 }
 
 export interface SnapshotRecord {
@@ -71,6 +73,23 @@ export interface SnapshotRecord {
   agent_status: 'continue' | 'done' | 'blocked';
   completion_reason: string | null;
   warnings_json: string[];
+}
+
+export interface RequestExecutionLookup {
+  request_id: string;
+  request_kind: 'proposal_start' | 'proposal_reply' | 'unknown';
+  status: 'pending' | 'completed' | 'failed' | 'not_found';
+  session_id?: string;
+  error_code?: string;
+  safe_message?: string;
+  retryable?: boolean;
+}
+
+interface AgentRunStatusLookup {
+  session_id: string;
+  status: AgentRunRecord['status'];
+  error_code: string | null;
+  error_message: string | null;
 }
 
 export class SessionStore {
@@ -563,6 +582,112 @@ export class SessionStore {
     };
   }
 
+  async getRequestExecutionStatus(requestId: string): Promise<RequestExecutionLookup> {
+    const startSession = await this.findSessionByStartRequestId(requestId);
+
+    if (startSession) {
+      const problemDefinitionRun = await this.findLatestAgentRunStatus(requestId, 'problem_definition');
+
+      if (problemDefinitionRun) {
+        return toRequestExecutionFromRun(requestId, 'proposal_start', problemDefinitionRun);
+      }
+
+      if (
+        startSession.status === 'waiting_for_user' ||
+        startSession.status === 'completed' ||
+        startSession.current_turn_seq > 0
+      ) {
+        return {
+          request_id: requestId,
+          request_kind: 'proposal_start',
+          status: 'completed',
+          session_id: startSession.id,
+        };
+      }
+
+      if (startSession.status === 'blocked' || startSession.status === 'failed') {
+        return {
+          request_id: requestId,
+          request_kind: 'proposal_start',
+          status: 'failed',
+          session_id: startSession.id,
+          error_code: 'session_blocked',
+          safe_message: 'The session was blocked before the first turn could be returned',
+          retryable: true,
+        };
+      }
+
+      return {
+        request_id: requestId,
+        request_kind: 'proposal_start',
+        status: 'pending',
+        session_id: startSession.id,
+      };
+    }
+
+    const replyTurn = await this.findTurnByAnswerRequestId(requestId);
+
+    if (replyTurn) {
+      const problemDefinitionRun = await this.findLatestAgentRunStatus(requestId, 'problem_definition');
+
+      if (problemDefinitionRun) {
+        return toRequestExecutionFromRun(requestId, 'proposal_reply', problemDefinitionRun);
+      }
+
+      if (replyTurn.status === 'resolved') {
+        return {
+          request_id: requestId,
+          request_kind: 'proposal_reply',
+          status: 'completed',
+          session_id: replyTurn.session_id,
+        };
+      }
+
+      if (replyTurn.status === 'failed') {
+        return {
+          request_id: requestId,
+          request_kind: 'proposal_reply',
+          status: 'failed',
+          session_id: replyTurn.session_id,
+          error_code: 'reply_processing_failed',
+          safe_message: 'The reply was persisted but the turn failed before completing',
+          retryable: true,
+        };
+      }
+
+      return {
+        request_id: requestId,
+        request_kind: 'proposal_reply',
+        status: 'pending',
+        session_id: replyTurn.session_id,
+      };
+    }
+
+    return {
+      request_id: requestId,
+      request_kind: 'unknown',
+      status: 'not_found',
+    };
+  }
+
+  private async findLatestAgentRunStatus(
+    requestId: string,
+    runPurpose: AgentRunRecord['run_purpose'],
+  ): Promise<AgentRunStatusLookup | null> {
+    const result = await this.database.query<AgentRunStatusLookup>(
+      [
+        'SELECT session_id, status, error_code, error_message',
+        'FROM agent_runs',
+        'WHERE request_id = $1 AND run_purpose = $2',
+        'ORDER BY started_at DESC',
+        'LIMIT 1',
+      ].join(' '),
+      [requestId, runPurpose],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
   private async getNextSnapshotSeq(client: PoolClient, sessionId: string): Promise<number> {
     const result = await client.query<{ next_seq: number }>(
       'SELECT COALESCE(MAX(snapshot_seq), -1) + 1 AS next_seq FROM session_snapshots WHERE session_id = $1',
@@ -592,4 +717,29 @@ async function runQuery<T extends QueryResultRow>(
 
 function toJson(value: unknown): string {
   return JSON.stringify(value);
+}
+
+function toRequestExecutionFromRun(
+  requestId: string,
+  requestKind: RequestExecutionLookup['request_kind'],
+  run: AgentRunStatusLookup,
+): RequestExecutionLookup {
+  if (run.status === 'completed') {
+    return {
+      request_id: requestId,
+      request_kind: requestKind,
+      status: 'completed',
+      session_id: run.session_id,
+    };
+  }
+
+  return {
+    request_id: requestId,
+    request_kind: requestKind,
+    status: 'failed',
+    session_id: run.session_id,
+    error_code: run.error_code ?? 'request_failed',
+    safe_message: run.error_message ?? 'The request failed while executing the workflow',
+    retryable: run.status === 'model_failed',
+  };
 }

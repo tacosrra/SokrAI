@@ -6,6 +6,7 @@ import type {
   ProblemDefinitionState,
   ProposalReplyResponse,
   ProposalStartResponse,
+  RequestExecutionResponse,
   SessionAuditView,
   SessionEvent,
   SessionRecord,
@@ -15,6 +16,8 @@ import type {
 } from '../domain/contracts';
 
 type JsonRecord = Record<string, unknown>;
+
+const WRAPPER_KEYS = ['body', 'data', 'payload', 'result', 'response', 'output', 'json'] as const;
 
 const AGENT_STATUSES: AgentStatus[] = ['continue', 'done', 'blocked'];
 const SESSION_STATUSES: SessionStatus[] = [
@@ -44,6 +47,14 @@ function expectString(value: unknown, label: string): string {
 function expectNullableString(value: unknown, label: string): string | null {
   if (value === null || value === undefined) {
     return null;
+  }
+
+  return expectString(value, label);
+}
+
+function expectOptionalString(value: unknown, fallback: string, label: string): string {
+  if (value === null || value === undefined) {
+    return fallback;
   }
 
   return expectString(value, label);
@@ -87,6 +98,22 @@ function expectStringArray(value: unknown, label: string): string[] {
   );
 }
 
+function expectOptionalStringArray(value: unknown, fallback: string[], label: string): string[] {
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+
+  return expectStringArray(value, label);
+}
+
+function expectOptionalArray(value: unknown, fallback: unknown[], label: string): unknown[] {
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+
+  return expectArray(value, label);
+}
+
 function expectEnum<T extends string>(value: unknown, label: string, choices: readonly T[]): T {
   const stringValue = expectString(value, label);
 
@@ -95,6 +122,63 @@ function expectEnum<T extends string>(value: unknown, label: string, choices: re
   }
 
   return stringValue as T;
+}
+
+function isRecord(value: unknown): value is JsonRecord {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function looksLikeJsonString(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed.startsWith('{') || trimmed.startsWith('[');
+}
+
+function unwrapContractValue(value: unknown, seen = new Set<unknown>()): unknown {
+  if (typeof value === 'string' && looksLikeJsonString(value)) {
+    try {
+      return unwrapContractValue(JSON.parse(value), seen);
+    } catch {
+      return value;
+    }
+  }
+
+  if (Array.isArray(value)) {
+    if (value.length === 1) {
+      return unwrapContractValue(value[0], seen);
+    }
+
+    return value;
+  }
+
+  if (!isRecord(value) || seen.has(value)) {
+    return value;
+  }
+
+  seen.add(value);
+
+  for (const key of WRAPPER_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
+      const unwrapped = unwrapContractValue(value[key], seen);
+
+      if (unwrapped !== value[key]) {
+        return unwrapped;
+      }
+
+      if (isRecord(unwrapped) || Array.isArray(unwrapped)) {
+        return unwrapped;
+      }
+    }
+  }
+
+  if (
+    Object.prototype.hasOwnProperty.call(value, 'items') &&
+    Array.isArray(value.items) &&
+    value.items.length === 1
+  ) {
+    return unwrapContractValue(value.items[0], seen);
+  }
+
+  return value;
 }
 
 function parseStructuredBrief(value: unknown, label: string): StructuredBrief {
@@ -326,7 +410,10 @@ function parseSessionEvent(value: unknown, label: string): SessionEvent {
 }
 
 export function parseProposalStartResponse(value: unknown): ProposalStartResponse {
-  const record = expectRecord(value, 'proposal start response');
+  const record = expectRecord(
+    unwrapContractValue(value),
+    'proposal start response',
+  );
 
   return {
     session_id: expectString(record.session_id, 'proposal start response.session_id'),
@@ -335,8 +422,9 @@ export function parseProposalStartResponse(value: unknown): ProposalStartRespons
       record.structured_brief,
       'proposal start response.structured_brief',
     ),
-    detected_gaps: expectStringArray(
+    detected_gaps: expectOptionalStringArray(
       record.detected_gaps,
+      [],
       'proposal start response.detected_gaps',
     ),
     next_question: expectString(record.next_question, 'proposal start response.next_question'),
@@ -345,12 +433,15 @@ export function parseProposalStartResponse(value: unknown): ProposalStartRespons
       'proposal start response.agent_status',
       AGENT_STATUSES,
     ),
-    warnings: expectStringArray(record.warnings, 'proposal start response.warnings'),
+    warnings: expectOptionalStringArray(record.warnings, [], 'proposal start response.warnings'),
   };
 }
 
 export function parseProposalReplyResponse(value: unknown): ProposalReplyResponse {
-  const record = expectRecord(value, 'proposal reply response');
+  const record = expectRecord(
+    unwrapContractValue(value),
+    'proposal reply response',
+  );
 
   return {
     session_id: expectString(record.session_id, 'proposal reply response.session_id'),
@@ -366,16 +457,17 @@ export function parseProposalReplyResponse(value: unknown): ProposalReplyRespons
     )!,
     diagnosis: expectStringArray(record.diagnosis, 'proposal reply response.diagnosis'),
     next_question: expectString(record.next_question, 'proposal reply response.next_question'),
-    completion_reason: expectString(
+    completion_reason: expectOptionalString(
       record.completion_reason,
+      '',
       'proposal reply response.completion_reason',
     ),
-    warnings: expectStringArray(record.warnings, 'proposal reply response.warnings'),
+    warnings: expectOptionalStringArray(record.warnings, [], 'proposal reply response.warnings'),
   };
 }
 
 export function parseErrorResponse(value: unknown): ErrorResponse {
-  const record = expectRecord(value, 'error response');
+  const record = expectRecord(unwrapContractValue(value), 'error response');
 
   return {
     error_code: expectString(record.error_code, 'error response.error_code'),
@@ -389,21 +481,58 @@ export function parseErrorResponse(value: unknown): ErrorResponse {
   };
 }
 
+export function parseRequestExecutionResponse(value: unknown): RequestExecutionResponse {
+  const record = expectRecord(
+    unwrapContractValue(value),
+    'request execution response',
+  );
+
+  return {
+    request_id: expectString(record.request_id, 'request execution response.request_id'),
+    request_kind: expectEnum(
+      record.request_kind,
+      'request execution response.request_kind',
+      ['proposal_start', 'proposal_reply', 'unknown'],
+    ),
+    status: expectEnum(
+      record.status,
+      'request execution response.status',
+      ['pending', 'completed', 'failed', 'not_found'],
+    ),
+    session_id:
+      record.session_id === null || record.session_id === undefined
+        ? undefined
+        : expectString(record.session_id, 'request execution response.session_id'),
+    error_code:
+      record.error_code === null || record.error_code === undefined
+        ? undefined
+        : expectString(record.error_code, 'request execution response.error_code'),
+    safe_message:
+      record.safe_message === null || record.safe_message === undefined
+        ? undefined
+        : expectString(record.safe_message, 'request execution response.safe_message'),
+    retryable:
+      record.retryable === null || record.retryable === undefined
+        ? undefined
+        : expectBoolean(record.retryable, 'request execution response.retryable'),
+  };
+}
+
 export function parseSessionAuditView(value: unknown): SessionAuditView {
-  const record = expectRecord(value, 'session audit view');
+  const record = expectRecord(unwrapContractValue(value), 'session audit view');
 
   return {
     session: parseSessionRecord(record.session),
-    turns: expectArray(record.turns, 'session audit view.turns').map((item, index) =>
+    turns: expectOptionalArray(record.turns, [], 'session audit view.turns').map((item, index) =>
       parseConversationTurn(item, `session audit view.turns[${index}]`),
     ),
-    runs: expectArray(record.runs, 'session audit view.runs').map((item, index) =>
+    runs: expectOptionalArray(record.runs, [], 'session audit view.runs').map((item, index) =>
       parseAgentRun(item, `session audit view.runs[${index}]`),
     ),
-    snapshots: expectArray(record.snapshots, 'session audit view.snapshots').map((item, index) =>
+    snapshots: expectOptionalArray(record.snapshots, [], 'session audit view.snapshots').map((item, index) =>
       parseSnapshot(item, `session audit view.snapshots[${index}]`),
     ),
-    events: expectArray(record.events, 'session audit view.events').map((item, index) =>
+    events: expectOptionalArray(record.events, [], 'session audit view.events').map((item, index) =>
       parseSessionEvent(item, `session audit view.events[${index}]`),
     ),
   };

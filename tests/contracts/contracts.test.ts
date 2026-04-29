@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import {
   assertProblemDefinitionTurn,
+  assertRequestExecutionResponse,
   assertProposalReplyRequest,
   assertProposalReplyResponse,
   assertProposalStartRequest,
@@ -58,6 +59,17 @@ describe('contract schemas', () => {
 
     expect(startResponse.stage).toBe('problem_definition');
     expect(replyResponse.agent_status).toBe('done');
+  });
+
+  it('accepts canonical request recovery envelopes', () => {
+    const recovered = assertRequestExecutionResponse({
+      request_id: 'web-start-1',
+      request_kind: 'proposal_start',
+      status: 'completed',
+      session_id: 'session-1',
+    });
+
+    expect(recovered.status).toBe('completed');
   });
 
   it('accepts a valid proposal reply request fixture', async () => {

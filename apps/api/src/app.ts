@@ -3,7 +3,12 @@ import crypto from 'node:crypto';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 
 import { loadConfig, type AppConfig } from './config/env';
-import { assertErrorResponse, assertProposalReplyResponse, assertProposalStartResponse } from './contracts/schema-registry';
+import {
+  assertErrorResponse,
+  assertProposalReplyResponse,
+  assertProposalStartResponse,
+  assertRequestExecutionResponse,
+} from './contracts/schema-registry';
 import { buildRagModule, type EmbeddingClient as RagEmbeddingClient } from './rag';
 import { Database } from './repositories/database';
 import { SessionStore } from './repositories/session-store';
@@ -112,6 +117,22 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   });
 
   registerRagInspectionRoutes(app, rag);
+  app.get('/api/v1/requests/:requestId', async (request, reply) => {
+    const params = request.params as { requestId: string };
+    const status = await sessionStore.getRequestExecutionStatus(params.requestId);
+    return reply.send(assertRequestExecutionResponse(status));
+  });
+
+  app.post('/api/v1/requests/:requestId/recover', async (request, reply) => {
+    const params = request.params as { requestId: string };
+    const status = await recoverRequestExecution({
+      requestId: params.requestId,
+      problemDefinitionService,
+      sessionStore,
+    });
+
+    return reply.send(assertRequestExecutionResponse(status));
+  });
 
   app.post('/internal/sessions/start-context', async (request, reply) => {
     assertInternalSecret(request);
@@ -222,4 +243,82 @@ function assertInternalSecret(request: FastifyRequest): void {
   if (headerValue !== secret) {
     throw new AppError(401, 'unauthorized_internal_request', 'Missing or invalid internal shared secret');
   }
+}
+
+async function recoverRequestExecution(params: {
+  requestId: string;
+  sessionStore: SessionStore;
+  problemDefinitionService: ProblemDefinitionService;
+}) {
+  const currentStatus = await params.sessionStore.getRequestExecutionStatus(params.requestId);
+
+  if (currentStatus.status !== 'pending') {
+    return currentStatus;
+  }
+
+  const startSession = await params.sessionStore.findSessionByStartRequestId(params.requestId);
+
+  if (startSession) {
+    try {
+      await params.problemDefinitionService.execute({
+        context: {
+          requestId: params.requestId,
+          workflowVersion: 'request_recovery_v1',
+        },
+        sessionId: startSession.id,
+        trigger: 'start',
+      });
+    } catch (error) {
+      const refreshedStatus = await params.sessionStore.getRequestExecutionStatus(params.requestId);
+
+      if (refreshedStatus.status !== 'pending') {
+        return refreshedStatus;
+      }
+
+      if (
+        error instanceof AppError &&
+        (error.errorCode === 'start_already_initialized' || error.errorCode === 'session_completed')
+      ) {
+        return refreshedStatus;
+      }
+
+      throw error;
+    }
+
+    return params.sessionStore.getRequestExecutionStatus(params.requestId);
+  }
+
+  const replyTurn = await params.sessionStore.findTurnByAnswerRequestId(params.requestId);
+
+  if (replyTurn) {
+    try {
+      await params.problemDefinitionService.execute({
+        context: {
+          requestId: params.requestId,
+          workflowVersion: 'request_recovery_v1',
+        },
+        sessionId: replyTurn.session_id,
+        trigger: 'reply',
+      });
+    } catch (error) {
+      const refreshedStatus = await params.sessionStore.getRequestExecutionStatus(params.requestId);
+
+      if (refreshedStatus.status !== 'pending') {
+        return refreshedStatus;
+      }
+
+      if (
+        error instanceof AppError &&
+        (error.errorCode === 'reply_not_ready_for_agent' || error.errorCode === 'session_completed')
+      ) {
+        return refreshedStatus;
+      }
+
+      throw error;
+    }
+
+    return params.sessionStore.getRequestExecutionStatus(params.requestId);
+  }
+
+  return currentStatus;
 }
