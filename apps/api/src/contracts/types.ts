@@ -38,6 +38,7 @@ export interface ProposalStartFile {
 }
 
 export interface ProposalStartRequest {
+  request_id?: string;
   user_id?: string;
   project_title: string;
   goal: string;
@@ -58,6 +59,7 @@ export interface ProposalStartResponse {
 }
 
 export interface ProposalReplyRequest {
+  request_id?: string;
   session_id: string;
   answer: string;
 }
@@ -79,4 +81,14 @@ export interface ErrorResponse {
   request_id: string;
   session_id?: string;
   retryable: boolean;
+}
+
+export interface RequestExecutionResponse {
+  request_id: string;
+  request_kind: 'proposal_start' | 'proposal_reply' | 'unknown';
+  status: 'pending' | 'completed' | 'failed' | 'not_found';
+  session_id?: string;
+  error_code?: string;
+  safe_message?: string;
+  retryable?: boolean;
 }

@@ -10,7 +10,7 @@ if (-not (Test-Path -LiteralPath $script:BetaEnvFile)) {
   Fail "$([System.IO.Path]::GetFileName($script:BetaEnvFile)) does not exist yet. Nothing to stop."
 }
 
-Write-Step 'Stopping isolated beta stack'
+Write-Step 'Stopping beta stack'
 Invoke-DockerCompose stop
 
 @"

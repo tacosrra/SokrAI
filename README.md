@@ -118,10 +118,10 @@ Que hace:
 - crea `.env.beta` a partir de `.env.example`
 - genera secretos locales si siguen en placeholder
 - arranca `Docker Desktop` si ya esta instalado pero no esta corriendo
-- levanta un proyecto Docker aislado llamado `sokrai-beta`
+- levanta el stack beta con contenedores fijos `postgres`, `ollama`, `api`, `n8n` y `web`
 - usa volumenes Docker dedicados para `postgres`, `ollama` y `n8n`
 - espera a que `PostgreSQL`, `Ollama`, `API`, `n8n` y `web` esten listos
-- descarga el modelo configurado en `OLLAMA_MODEL`
+- descarga el modelo configurado en `OLLAMA_MODEL` con reintentos; si ya esta cacheado, lo reutiliza
 - ejecuta migraciones
 - importa y activa los workflows de `n8n`
 - abre la UI principal en el navegador al terminar
@@ -133,6 +133,12 @@ Requisitos de esta ruta:
 - `PowerShell` en Windows nativo
 
 Para esta ruta beta no hace falta instalar `Node.js` ni `pnpm` en host.
+
+Si el pull de Ollama falla con `no such host`, el stack beta ya fuerza DNS publicos en el contenedor de `ollama`. Si aun asi tu red bloquea la descarga, puedes:
+
+- reintentar el bootstrap;
+- cambiar `OLLAMA_MODEL` a otro modelo que ya tengas cacheado;
+- o lanzar `SOKRAI_BETA_SKIP_OLLAMA_PULL=1 ./scripts/bootstrap-beta.sh` si el modelo ya existe en el volumen de `ollama`.
 
 Comandos posteriores:
 
@@ -172,10 +178,10 @@ Esta v1 usa `{{$env.INTERNAL_SHARED_SECRET}}` dentro de nodos `HTTP Request` de 
 ### 3. Cargar un modelo en Ollama
 
 ```bash
-docker exec -it $(docker ps -qf "ancestor=ollama/ollama:latest") ollama pull qwen2.5:7b-instruct
+docker exec -it $(docker ps -qf "ancestor=ollama/ollama:latest") ollama pull qwen2.5:3b-instruct
 ```
 
-Si tu maquina tiene poca RAM libre o estas en WSL con memoria ajustada, reduce `OLLAMA_NUM_CTX` a `4096` y considera usar un modelo mas pequeno. El error tipico en ese caso es `ollama_request_failed` porque el runner termina al cargar el modelo.
+`qwen2.5:3b-instruct` es ahora el valor por defecto recomendado para esta v1 local. Si tu maquina tiene mas margen y quieres priorizar calidad sobre latencia, puedes volver a `qwen2.5:7b-instruct` manualmente en `.env`.
 
 ### 4. Aplicar migraciones
 
@@ -208,11 +214,19 @@ Usa el proxy de Vite para hablar con:
 
 La UI tiene budgets de espera mas altos para el flujo real:
 
-- `VITE_START_SESSION_TIMEOUT_MS=420000`
-- `VITE_REPLY_SESSION_TIMEOUT_MS=225000`
+- `VITE_START_SESSION_TIMEOUT_MS=960000`
+- `VITE_REPLY_SESSION_TIMEOUT_MS=540000`
 - `VITE_SESSION_AUDIT_TIMEOUT_MS=10000`
+- `VITE_REQUEST_STATUS_TIMEOUT_MS=10000`
+- `VITE_REQUEST_RECOVERY_TIMEOUT_MS=960000`
 
 No se recomienda quitar el timeout por completo. El primer diagnostico puede tardar mas porque encadena la extraccion del brief y la primera ejecucion del agente, pero si Ollama queda colgado la UI debe terminar mostrando un error controlado.
+
+La API tambien deja `OLLAMA_KEEP_ALIVE=30m` por defecto para que el modelo permanezca cargado entre la extraccion inicial y la primera pregunta, reduciendo cargas frias repetidas.
+
+Ademas, la extraccion inicial del brief usa un excerpt acotado por `BRIEF_EXTRACTION_MAX_CHARS=10000`. El texto completo se sigue persistiendo, pero no se manda entero al primer prompt de Ollama para evitar timeouts innecesarios en local.
+
+Ademas, la UI envia un `request_id` por cada start/reply y, si el navegador agota la espera inicial, consulta `GET /api/v1/requests/:requestId` para intentar recuperar el resultado final del workflow. Si detecta que la ejecucion quedo a medias, tambien puede disparar `POST /api/v1/requests/:requestId/recover` para completar el turno directamente desde la API usando el estado persistido.
 
 Si prefieres levantar toda la superficie de demo en Docker, añade `web` al `docker compose up`.
 
@@ -226,7 +240,11 @@ Archivos:
 
 Abre `http://localhost:5678`, importa los tres workflows y asegúrate de que `INTERNAL_SHARED_SECRET` coincide entre `.env`, la API y `n8n`.
 
-Los exports de workflow de esta version eliminan reintentos sincronos en nodos `HTTP Request` para que los errores de la API lleguen al usuario sin esperas duplicadas. Si reimportas los workflows, activa la nueva version exportada del repo.
+Los exports de workflow de esta version eliminan reintentos sincronos en nodos `HTTP Request` y propagan `statusCode + body` de la API al webhook para que un `ollama_timeout` o cualquier error controlado llegue a la UI como JSON consistente. Si reimportas los workflows, activa la nueva version exportada del repo.
+
+Si ejecutas `web` o `api` en Docker Compose, recuerda reconstruir esas imagenes tras cambiar el codigo; si ejecutas con Vite/tsx en local, reinicia ambos procesos para que se carguen los nuevos budgets y la recuperacion por `request_id`.
+
+No cambies `N8N_ENCRYPTION_KEY` una vez que `n8n` haya inicializado su volumen persistido. Si la clave del `.env` ya no coincide con la guardada en `/home/node/.n8n/config`, `n8n` no arrancara hasta que vuelvas a poner la clave original o resetees el volumen de `n8n`.
 
 ## Endpoints y workflows
 
@@ -248,6 +266,8 @@ Los exports de workflow de esta version eliminan reintentos sincronos en nodos `
 ### API de inspeccion
 
 - `GET /api/v1/sessions/:sessionId`
+- `GET /api/v1/requests/:requestId`
+- `POST /api/v1/requests/:requestId/recover`
 - `GET /healthz`
 
 ### UI operativa

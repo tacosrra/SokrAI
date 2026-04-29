@@ -1,3 +1,5 @@
+import type { PoolClient } from 'pg';
+
 import { schemaIds } from '../contracts/schema-registry';
 import type {
   ProblemDefinitionState,
@@ -34,13 +36,10 @@ export class ProblemDefinitionService {
   async execute(command: RunProblemDefinitionCommand): Promise<ProblemDefinitionRunResponse> {
     const requestId = command.context.requestId;
 
-    if (requestId) {
-      const existingRun = await this.sessionStore.findAgentRunByRequestId(requestId, 'problem_definition');
+    const existingResponse = await this.findExistingResponse(command.sessionId, requestId);
 
-      if (existingRun?.validated_output_json) {
-        const session = await this.sessionStore.getSession(command.sessionId);
-        return this.buildResponseFromRun(session, existingRun);
-      }
+    if (existingResponse) {
+      return existingResponse;
     }
 
     const session = await this.sessionStore.getSession(command.sessionId);
@@ -108,9 +107,34 @@ export class ProblemDefinitionService {
         .getDatabase()
         .withTransaction(async (client) => {
           const lockedSession = await this.sessionStore.getSessionForUpdate(command.sessionId, client);
-          const activeTurn = command.trigger === 'reply'
-            ? await this.sessionStore.getOpenTurn(command.sessionId, client)
-            : null;
+          const recoveredResponse = await this.findExistingResponse(command.sessionId, requestId);
+
+          if (recoveredResponse) {
+            return recoveredResponse;
+          }
+
+          const currentOpenTurn = await this.sessionStore.getOpenTurn(command.sessionId, client);
+          const activeTurn = command.trigger === 'reply' ? currentOpenTurn : null;
+
+          if (command.trigger === 'reply' && (!activeTurn || activeTurn.status !== 'processing')) {
+            throw new AppError(
+              409,
+              'reply_not_ready_for_agent',
+              'The session does not have a processing turn ready for the agent',
+              false,
+              command.sessionId,
+            );
+          }
+
+          if (command.trigger === 'start' && currentOpenTurn) {
+            throw new AppError(
+              409,
+              'start_already_initialized',
+              'The session already has an open clarification turn',
+              false,
+              command.sessionId,
+            );
+          }
 
           const run = await this.sessionStore.insertAgentRun(client, {
             sessionId: lockedSession.id,
@@ -168,6 +192,16 @@ export class ProblemDefinitionService {
           });
         });
     } catch (error) {
+      const recoveredAfterConflict = await this.recoverExistingResponseAfterConflict(
+        command.sessionId,
+        requestId,
+        error,
+      );
+
+      if (recoveredAfterConflict) {
+        return recoveredAfterConflict;
+      }
+
       if (error instanceof ModelOutputError || error instanceof AppError) {
         await this.persistFailure(command, session, openTurn, error);
       }
@@ -182,6 +216,39 @@ export class ProblemDefinitionService {
     latestAnswer?: string,
   ) {
     return enforceTurnGuardrails(brief, turn, latestAnswer);
+  }
+
+  private async findExistingResponse(
+    sessionId: string,
+    requestId?: string,
+  ): Promise<ProblemDefinitionRunResponse | null> {
+    if (!requestId) {
+      return null;
+    }
+
+    const existingRun = await this.sessionStore.findAgentRunByRequestId(
+      requestId,
+      'problem_definition',
+    );
+
+    if (!existingRun?.validated_output_json) {
+      return null;
+    }
+
+    const session = await this.sessionStore.getSession(sessionId);
+    return this.buildResponseFromRun(session, existingRun);
+  }
+
+  private async recoverExistingResponseAfterConflict(
+    sessionId: string,
+    requestId: string,
+    error: unknown,
+  ): Promise<ProblemDefinitionRunResponse | null> {
+    if (!requestId || !isUniqueViolation(error)) {
+      return null;
+    }
+
+    return this.findExistingResponse(sessionId, requestId);
   }
 
   private async persistSuccessfulTurn(params: {
@@ -335,77 +402,83 @@ export class ProblemDefinitionService {
     openTurn: ConversationTurnRecord | null,
     error: AppError,
   ): Promise<void> {
-    await this.sessionStore
-      .getDatabase()
-      .withTransaction(async (client) => {
-        const lockedSession = await this.sessionStore.getSessionForUpdate(session.id, client);
-        const run = await this.sessionStore.insertAgentRun(client, {
-          sessionId: lockedSession.id,
-          turnSeq: openTurn?.turn_seq ?? lockedSession.current_turn_seq + 1,
-          requestId: command.context.requestId,
-          runPurpose: 'problem_definition',
-          agentName: 'problem_definition_agent',
-          workflowName: 'agent_problem_definition_v1',
-          workflowVersion: command.context.workflowVersion,
-          workflowExecutionId: command.context.workflowExecutionId,
-          promptName: 'problem-definition-agent',
-          promptVersion: 'v1',
-          promptSha256: '',
-          modelName: this.config.ollamaModel,
-          inputContractName: 'problem-definition-agent.input',
-          inputContractVersion: 'v1',
-          outputContractName: 'problem-definition-turn',
-          outputContractVersion: 'v1',
-          inputPayloadJson: {
-            session_id: lockedSession.id,
-          },
-          rawModelOutput: error instanceof ModelOutputError ? error.rawOutput : undefined,
-          status:
-            error instanceof ModelOutputError
-              ? error.repairAttempted
-                ? 'repair_failed'
-                : 'validation_failed'
-              : error.retryable
-                ? 'model_failed'
-                : 'controlled_error',
-          errorCode: error.errorCode,
-          errorMessage: error.safeMessage,
-          repairAttempted: error instanceof ModelOutputError ? error.repairAttempted : false,
-        });
+    try {
+      await this.sessionStore
+        .getDatabase()
+        .withTransaction(async (client) => {
+          const lockedSession = await this.sessionStore.getSessionForUpdate(session.id, client);
+          const run = await this.sessionStore.insertAgentRun(client, {
+            sessionId: lockedSession.id,
+            turnSeq: openTurn?.turn_seq ?? lockedSession.current_turn_seq + 1,
+            requestId: command.context.requestId,
+            runPurpose: 'problem_definition',
+            agentName: 'problem_definition_agent',
+            workflowName: 'agent_problem_definition_v1',
+            workflowVersion: command.context.workflowVersion,
+            workflowExecutionId: command.context.workflowExecutionId,
+            promptName: 'problem-definition-agent',
+            promptVersion: 'v1',
+            promptSha256: '',
+            modelName: this.config.ollamaModel,
+            inputContractName: 'problem-definition-agent.input',
+            inputContractVersion: 'v1',
+            outputContractName: 'problem-definition-turn',
+            outputContractVersion: 'v1',
+            inputPayloadJson: {
+              session_id: lockedSession.id,
+            },
+            rawModelOutput: error instanceof ModelOutputError ? error.rawOutput : undefined,
+            status:
+              error instanceof ModelOutputError
+                ? error.repairAttempted
+                  ? 'repair_failed'
+                  : 'validation_failed'
+                : error.retryable
+                  ? 'model_failed'
+                  : 'controlled_error',
+            errorCode: error.errorCode,
+            errorMessage: error.safeMessage,
+            repairAttempted: error instanceof ModelOutputError ? error.repairAttempted : false,
+          });
 
-        await this.sessionStore.insertEvent(client, {
-          sessionId: lockedSession.id,
-          turnSeq: openTurn?.turn_seq,
-          runId: run.id,
-          eventType: 'run_failed',
-          actorType: 'agent',
-          requestId: command.context.requestId,
-          payloadJson: {
-            error_code: error.errorCode,
-          },
-        });
+          await this.sessionStore.insertEvent(client, {
+            sessionId: lockedSession.id,
+            turnSeq: openTurn?.turn_seq,
+            runId: run.id,
+            eventType: 'run_failed',
+            actorType: 'agent',
+            requestId: command.context.requestId,
+            payloadJson: {
+              error_code: error.errorCode,
+            },
+          });
 
-        await this.sessionStore.insertEvent(client, {
-          sessionId: lockedSession.id,
-          turnSeq: openTurn?.turn_seq,
-          runId: run.id,
-          eventType: 'session_blocked',
-          actorType: 'system',
-          requestId: command.context.requestId,
-        });
+          await this.sessionStore.insertEvent(client, {
+            sessionId: lockedSession.id,
+            turnSeq: openTurn?.turn_seq,
+            runId: run.id,
+            eventType: 'session_blocked',
+            actorType: 'system',
+            requestId: command.context.requestId,
+          });
 
-        await this.sessionStore.updateSessionHead(client, {
-          sessionId: lockedSession.id,
-          status: 'blocked',
-          currentTurnSeq: lockedSession.current_turn_seq,
-          stateVersion: lockedSession.state_version,
-          latestStructuredBrief: lockedSession.latest_structured_brief_json,
-          latestProblemDefinition: lockedSession.latest_problem_definition_json,
-          latestSnapshotId: lockedSession.latest_snapshot_id ?? undefined,
-          latestSuccessfulRunId: lockedSession.latest_successful_run_id ?? undefined,
-          completionReason: lockedSession.completion_reason ?? undefined,
+          await this.sessionStore.updateSessionHead(client, {
+            sessionId: lockedSession.id,
+            status: 'blocked',
+            currentTurnSeq: lockedSession.current_turn_seq,
+            stateVersion: lockedSession.state_version,
+            latestStructuredBrief: lockedSession.latest_structured_brief_json,
+            latestProblemDefinition: lockedSession.latest_problem_definition_json,
+            latestSnapshotId: lockedSession.latest_snapshot_id ?? undefined,
+            latestSuccessfulRunId: lockedSession.latest_successful_run_id ?? undefined,
+            completionReason: lockedSession.completion_reason ?? undefined,
+          });
         });
-      });
+    } catch (persistError) {
+      if (!isUniqueViolation(persistError)) {
+        throw persistError;
+      }
+    }
 
     this.logger.error('problem_definition_failed', {
       request_id: command.context.requestId,
@@ -459,4 +532,12 @@ export class ProblemDefinitionService {
     };
   }
 }
-import type { PoolClient } from 'pg';
+
+function isUniqueViolation(error: unknown): error is { code: string } {
+  return Boolean(
+    error &&
+    typeof error === 'object' &&
+    'code' in error &&
+    (error as { code?: unknown }).code === '23505',
+  );
+}
