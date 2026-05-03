@@ -8,6 +8,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "migrate": "tsx scripts/migrate.ts",
+    "rag:ingest": "tsx scripts/rag-ingest.ts",
+    "rag:search": "tsx scripts/rag-search.ts",
     "test": "vitest run",
     "test:contracts": "vitest run ../../tests/contracts",
     "test:unit": "vitest run ../../tests/unit",
@@ -20,7 +22,8 @@
     "dotenv": "^16.4.7",
     "fastify": "^5.2.1",
     "pdf-parse": "^1.1.1",
-    "pg": "^8.13.1"
+    "pg": "^8.13.1",
+    "yaml": "^2.6.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

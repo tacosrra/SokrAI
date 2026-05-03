@@ -282,6 +282,23 @@ TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pn
 - Si la reparacion falla, se devuelve error controlado y se persiste `raw_model_output`.
 - La reanudacion y trazabilidad salen de SQL, no de estado en memoria.
 
+## Modulo RAG (v1.5)
+
+A partir de esta version la API incluye un modulo lateral de RAG basado en
+`pgvector` y `bge-m3` via Ollama. Permite indexar documentos por dominio
+(legal, costes, glosarios) y buscarlos por similitud semantica en
+castellano, catalan e ingles.
+
+- Ingesta por CLI: `pnpm rag:ingest --pack <pack_name>`
+- Busqueda por CLI: `pnpm rag:search --pack <pack_name> --query "..."`
+- Inspeccion HTTP: `GET /api/v1/rag/packs`, `GET /api/v1/rag/search`
+
+El modulo es **independiente** del lane `problem_definition_agent`. No
+modifica prompts, contratos, schemas, workflows ni frontend de la v1
+existente.
+
+Guia detallada: [docs/RAG.md](docs/RAG.md).
+
 ## Limitaciones conocidas
 
 - El soporte PDF es para documentos con texto extraible, no OCR.

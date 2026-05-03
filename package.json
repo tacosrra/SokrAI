@@ -7,6 +7,8 @@
     "dev": "pnpm --filter @sokrai/api dev",
     "dev:web": "pnpm --filter @sokrai/web dev",
     "migrate": "pnpm --filter @sokrai/api migrate",
+    "rag:ingest": "pnpm --filter @sokrai/api rag:ingest",
+    "rag:search": "pnpm --filter @sokrai/api rag:search",
     "start": "pnpm --filter @sokrai/api start",
     "test": "pnpm --filter @sokrai/api test",
     "test:web": "pnpm --filter @sokrai/web test",

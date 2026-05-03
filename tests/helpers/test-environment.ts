@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify';
 
 import { buildApp } from '../../apps/api/src/app.ts';
 import type { AppConfig } from '../../apps/api/src/config/env.ts';
+import type { EmbeddingClient } from '../../apps/api/src/rag/embedding-client.ts';
 import { Database } from '../../apps/api/src/repositories/database.ts';
 import { JsonLogger } from '../../apps/api/src/utils/logger.ts';
 import { fromRepoRoot } from '../../apps/api/src/utils/paths.ts';
@@ -11,7 +12,7 @@ import type { LanguageModelClient } from '../../apps/api/src/services/ollama-cli
 
 let migrationsApplied = false;
 
-export function createTestConfig(): AppConfig {
+export function createTestConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   return {
     appEnv: 'test',
     appPort: 3001,
@@ -33,6 +34,14 @@ export function createTestConfig(): AppConfig {
     maxDiagnosisItems: 3,
     allowSensitiveHealthData: false,
     internalSharedSecret: 'test-secret',
+    embeddingProvider: 'ollama',
+    embeddingModel: 'fake-embedder',
+    embeddingDimension: 1024,
+    embeddingTimeoutMs: 1000,
+    embeddingBatchSize: 16,
+    ragDefaultTopK: 8,
+    ragPacksDir: './tests/fixtures/rag',
+    ...overrides,
   };
 }
 
@@ -66,18 +75,39 @@ export async function truncateAll(database: Database): Promise<void> {
   );
 }
 
+export async function truncateRag(database: Database): Promise<void> {
+  await database.query(
+    [
+      'TRUNCATE TABLE',
+      'rag_retrievals,',
+      'rag_chunks,',
+      'rag_documents,',
+      'context_packs',
+      'RESTART IDENTITY CASCADE',
+    ].join(' '),
+  );
+}
+
+export interface BuildTestAppOptions {
+  resetDatabase?: boolean;
+  resetRag?: boolean;
+  database?: Database;
+  embeddingClient?: EmbeddingClient;
+  configOverrides?: Partial<AppConfig>;
+}
+
 export async function buildTestApp(languageModelClient: LanguageModelClient): Promise<{
   app: FastifyInstance;
   database: Database;
 }>;
 export async function buildTestApp(
   languageModelClient: LanguageModelClient,
-  options?: { resetDatabase?: boolean; database?: Database },
+  options?: BuildTestAppOptions,
 ): Promise<{
   app: FastifyInstance;
   database: Database;
 }> {
-  const config = createTestConfig();
+  const config = createTestConfig(options?.configOverrides);
   const database = options?.database ?? new Database(config);
   await applyMigrations(database);
 
@@ -85,11 +115,16 @@ export async function buildTestApp(
     await truncateAll(database);
   }
 
+  if (options?.resetRag) {
+    await truncateRag(database);
+  }
+
   const app = await buildApp({
     config,
     database,
     languageModelClient,
     logger: new JsonLogger('error'),
+    embeddingClient: options?.embeddingClient,
   });
 
   return {

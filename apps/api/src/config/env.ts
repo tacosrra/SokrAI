@@ -20,6 +20,13 @@ export interface AppConfig {
   maxDiagnosisItems: number;
   allowSensitiveHealthData: boolean;
   internalSharedSecret: string;
+  embeddingProvider: 'ollama';
+  embeddingModel: string;
+  embeddingDimension: number;
+  embeddingTimeoutMs: number;
+  embeddingBatchSize: number;
+  ragDefaultTopK: number;
+  ragPacksDir: string;
 }
 
 function getString(name: string, fallback?: string): string {
@@ -77,5 +84,12 @@ export function loadConfig(): AppConfig {
     maxDiagnosisItems: getNumber('MAX_DIAGNOSIS_ITEMS', 3),
     allowSensitiveHealthData: getBoolean('ALLOW_SENSITIVE_HEALTH_DATA', false),
     internalSharedSecret: getString('INTERNAL_SHARED_SECRET', 'local-shared-secret'),
+    embeddingProvider: getString('EMBEDDING_PROVIDER', 'ollama') as AppConfig['embeddingProvider'],
+    embeddingModel: getString('EMBEDDING_MODEL', 'bge-m3'),
+    embeddingDimension: getNumber('EMBEDDING_DIMENSION', 1024),
+    embeddingTimeoutMs: getNumber('EMBEDDING_TIMEOUT_MS', 30000),
+    embeddingBatchSize: getNumber('EMBEDDING_BATCH_SIZE', 16),
+    ragDefaultTopK: getNumber('RAG_DEFAULT_TOP_K', 8),
+    ragPacksDir: getString('RAG_PACKS_DIR', './context-packs'),
   };
 }

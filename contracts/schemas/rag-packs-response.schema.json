@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sokrai.local/contracts/schemas/rag-packs-response.schema.json",
+  "title": "RagPacksResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "packs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": ["string", "null"] },
+          "primary_language": { "type": ["string", "null"] },
+          "embedding_provider": { "type": "string" },
+          "embedding_model": { "type": "string" },
+          "embedding_dimension": { "type": "integer" },
+          "active_documents": { "type": "integer" },
+          "archived_documents": { "type": "integer" },
+          "active_chunks": { "type": "integer" },
+          "updated_at": { "type": "string" }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "primary_language",
+          "embedding_provider",
+          "embedding_model",
+          "embedding_dimension",
+          "active_documents",
+          "archived_documents",
+          "active_chunks",
+          "updated_at"
+        ]
+      }
+    }
+  },
+  "required": ["packs"]
+}

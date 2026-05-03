@@ -1,4 +1,5 @@
 import type { AppConfig } from '../config/env';
+import type { RagModule } from '../rag';
 import type { Database } from '../repositories/database';
 import type { SessionStore } from '../repositories/session-store';
 import type { LlmOrchestrator } from '../services/llm-orchestrator';
@@ -20,6 +21,7 @@ declare module 'fastify' {
       proposalStartService: ProposalStartService;
       proposalReplyService: ProposalReplyService;
       problemDefinitionService: ProblemDefinitionService;
+      rag: RagModule;
     };
   }
 }
