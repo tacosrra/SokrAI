@@ -58,16 +58,41 @@ RAG_PACKS_DIR=./context-packs   # en docker: /app/context-packs
 
 ## Setup inicial
 
+Desde la raíz del repo (con `docker compose up -d`), en el orden:
+
 ```bash
 # 1. Pull del modelo de embeddings (una sola vez)
-docker exec -it $(docker ps -qf "ancestor=ollama/ollama:latest") ollama pull bge-m3
+docker compose exec -T ollama ollama pull bge-m3
 
-# 2. Aplicar migraciones (incluye 002_rag.sql)
+# 2. Aplicar migraciones (incluye 002_rag.sql).
+#    Preferible desde el host con DATABASE_URL al puerto que expone Postgres en tu máquina,
+#    o con `pnpm migrate` dentro del contenedor `api` si usas redes internas de Docker.
 pnpm migrate
 
 # 3. (Opcional) Probar el pack de ejemplo
 pnpm rag:ingest --pack general_glossary
-pnpm rag:search --pack general_glossary --query "sesión turno snapshot"
+pnpm rag:search --pack general_glossary --query "sesión turno snapshot" --k 5
+```
+
+### Si `ollama pull bge-m3` falla (antivirus / firewall / CDN)
+
+Ollama descarga blobs desde infraestructura que a veces pasa por **Cloudflare R2**.
+Antivirus muy agresivos (p. ej. Norton) pueden **bloquear ese tráfico** y el `pull` termina en
+timeouts o «connection refused» a dominios tipo `*.r2.cloudflarestorage.com`.
+
+**Alternativa gratuita (misma pila):** desde Ollama **0.3+**, puedes obtener el GGUF público desde
+**HuggingFace** (muchas redes bloquean R2 pero no el bridge `xethub` de HF) y crear el alias que ya
+usa SokrAI (`bge-m3`):
+
+```bash
+docker compose exec -T ollama ollama pull hf.co/CompendiumLabs/bge-m3-gguf
+docker compose exec -T ollama ollama cp hf.co/CompendiumLabs/bge-m3-gguf bge-m3
+```
+
+Comprueba que el vector tiene **1024** dimensiones (requerido por la migración `002_rag.sql`):
+
+```bash
+docker compose exec -T api node -e "fetch('http://ollama:11434/api/embed',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({model:'bge-m3',input:'prueba'})}).then(r=>r.json()).then(j=>console.log('dim',j.embeddings[0].length))"
 ```
 
 ## Crear un nuevo pack
