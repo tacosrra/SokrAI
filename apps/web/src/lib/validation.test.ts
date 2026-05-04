@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseProposalStartResponse, parseSessionAuditView } from './validation';
+import {
+  parseProposalReplyResponse,
+  parseProposalStartResponse,
+  parseRequestExecutionResponse,
+  parseSessionAuditView,
+} from './validation';
 
 describe('parseProposalStartResponse', () => {
   it('accepts payloads aligned with the canonical contract', () => {
@@ -43,6 +48,63 @@ describe('parseProposalStartResponse', () => {
         warnings: [],
       }),
     ).toThrow(/structured_brief/);
+  });
+
+  it('unwraps nested response bodies produced by proxies or workflow wrappers', () => {
+    const response = parseProposalStartResponse({
+      data: JSON.stringify({
+        session_id: 'session-1',
+        stage: 'problem_definition',
+        structured_brief: {
+          project_title: 'Triage IA en Urgencias',
+          goal: 'Definir mejor el problema',
+          target_user: 'Enfermería de admisión',
+          problem_owner: '',
+          problem_statement: 'El triaje se retrasa en horas punta.',
+          evidence_of_problem: 'Esperas de 20 a 35 minutos.',
+          current_alternatives: 'Protocolo manual.',
+          scope: 'Urgencias de adultos.',
+          constraints_known: [],
+          assumptions: [],
+          ambiguities: [],
+          missing_information: [],
+        },
+        next_question: '¿Qué equipo responde hoy por este problema?',
+        agent_status: 'continue',
+      }),
+    });
+
+    expect(response.session_id).toBe('session-1');
+    expect(response.detected_gaps).toEqual([]);
+    expect(response.warnings).toEqual([]);
+  });
+});
+
+describe('parseProposalReplyResponse', () => {
+  it('accepts null completion_reason and missing warnings from older payloads', () => {
+    const response = parseProposalReplyResponse({
+      body: {
+        session_id: 'session-1',
+        stage: 'problem_definition',
+        agent_status: 'continue',
+        updated_problem_definition: {
+          problem_owner: '',
+          problem_statement: 'El triaje se retrasa.',
+          evidence_of_problem: 'Esperas de 20 minutos.',
+          scope: 'Urgencias.',
+          current_alternatives: 'Protocolo manual.',
+          assumptions: [],
+          ambiguities_remaining: ['Falta concretar la causa operativa.'],
+        },
+        diagnosis: ['Falta concretar la causa operativa.'],
+        next_question: '¿Qué equipo responde hoy por este cuello de botella?',
+        completion_reason: null,
+      },
+    });
+
+    expect(response.completion_reason).toBe('');
+    expect(response.warnings).toEqual([]);
+    expect(response.updated_problem_definition.problem_statement).toContain('triaje');
   });
 });
 
@@ -143,5 +205,88 @@ describe('parseSessionAuditView', () => {
     expect(audit.session.state_version).toBe(1);
     expect(audit.snapshots[0]?.snapshot_seq).toBe(1);
     expect(audit.events[0]?.event_seq).toBe(1);
+  });
+
+  it('unwraps enveloped payloads and tolerates omitted array sections', () => {
+    const audit = parseSessionAuditView({
+      payload: {
+        session: {
+          id: 'session-2',
+          project_title: 'Triage',
+          goal: 'Goal',
+          current_stage: 'problem_definition',
+          current_agent: 'problem_definition_agent',
+          status: 'waiting_for_user',
+          current_turn_seq: 1,
+          state_version: 1,
+          latest_structured_brief_json: {
+            project_title: 'Triage',
+            goal: 'Goal',
+            target_user: '',
+            problem_owner: '',
+            problem_statement: '',
+            evidence_of_problem: '',
+            current_alternatives: '',
+            scope: '',
+            constraints_known: [],
+            assumptions: [],
+            ambiguities: [],
+            missing_information: [],
+          },
+          latest_problem_definition_json: {},
+          latest_snapshot_id: null,
+          latest_successful_run_id: null,
+          completion_reason: null,
+        },
+      },
+    });
+
+    expect(audit.session.id).toBe('session-2');
+    expect(audit.turns).toEqual([]);
+    expect(audit.runs).toEqual([]);
+    expect(audit.snapshots).toEqual([]);
+    expect(audit.events).toEqual([]);
+  });
+});
+
+describe('parseRequestExecutionResponse', () => {
+  it('accepts completed recovery payloads with session_id', () => {
+    const response = parseRequestExecutionResponse({
+      request_id: 'web-start-1',
+      request_kind: 'proposal_start',
+      status: 'completed',
+      session_id: 'session-1',
+    });
+
+    expect(response.request_kind).toBe('proposal_start');
+    expect(response.session_id).toBe('session-1');
+  });
+
+  it('accepts failed recovery payloads with error details', () => {
+    const response = parseRequestExecutionResponse({
+      request_id: 'web-reply-1',
+      request_kind: 'proposal_reply',
+      status: 'failed',
+      session_id: 'session-1',
+      error_code: 'ollama_timeout',
+      safe_message: 'The local model exceeded the configured timeout',
+      retryable: true,
+    });
+
+    expect(response.status).toBe('failed');
+    expect(response.error_code).toBe('ollama_timeout');
+    expect(response.retryable).toBe(true);
+  });
+
+  it('unwraps response envelopes when the recovery endpoint is proxied', () => {
+    const response = parseRequestExecutionResponse({
+      response: {
+        request_id: 'web-reply-2',
+        request_kind: 'proposal_reply',
+        status: 'pending',
+      },
+    });
+
+    expect(response.status).toBe('pending');
   });
 });

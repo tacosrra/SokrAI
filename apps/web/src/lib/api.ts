@@ -4,20 +4,51 @@ import type {
   ProposalReplyResponse,
   ProposalStartRequest,
   ProposalStartResponse,
+  RequestExecutionResponse,
   SessionAuditView,
 } from '../domain/contracts';
 import {
   parseErrorResponse,
   parseProposalReplyResponse,
   parseProposalStartResponse,
+  parseRequestExecutionResponse,
   parseSessionAuditView,
 } from './validation';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
 const WEBHOOK_BASE_URL = (import.meta.env.VITE_WEBHOOK_BASE_URL ?? '').replace(/\/$/, '');
+const START_SESSION_TIMEOUT_MS = readTimeout('VITE_START_SESSION_TIMEOUT_MS', 960000);
+const REPLY_SESSION_TIMEOUT_MS = readTimeout('VITE_REPLY_SESSION_TIMEOUT_MS', 540000);
+const SESSION_AUDIT_TIMEOUT_MS = readTimeout('VITE_SESSION_AUDIT_TIMEOUT_MS', 10000);
+const REQUEST_STATUS_TIMEOUT_MS = readTimeout('VITE_REQUEST_STATUS_TIMEOUT_MS', 10000);
+const REQUEST_RECOVERY_EXECUTION_TIMEOUT_MS = Math.max(
+  START_SESSION_TIMEOUT_MS,
+  REPLY_SESSION_TIMEOUT_MS,
+  240000,
+);
 
 function joinUrl(baseUrl: string, path: string): string {
   return `${baseUrl}${path}`;
+}
+
+function readTimeout(name: string, fallback: number): number {
+  const raw = (import.meta.env as Record<string, string | undefined>)[name];
+
+  if (!raw) {
+    return fallback;
+  }
+
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function isHtmlDocument(value: unknown): value is string {
+  if (typeof value !== 'string') {
+    return false;
+  }
+
+  const trimmed = value.trim().toLowerCase();
+  return trimmed.startsWith('<!doctype html') || trimmed.startsWith('<html');
 }
 
 export class ApiError extends Error {
@@ -38,19 +69,27 @@ async function requestJson<T>(params: {
   url: string;
   method?: 'GET' | 'POST';
   payload?: unknown;
+  headers?: Record<string, string>;
   timeoutMs: number;
   parse: (value: unknown) => T;
 }): Promise<T> {
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), params.timeoutMs);
+  const hasPayload = params.payload !== undefined;
+  const headers = {
+    ...(params.headers ?? {}),
+    ...(hasPayload
+      ? {
+          'Content-Type': 'application/json',
+        }
+      : {}),
+  };
 
   try {
     const response = await fetch(params.url, {
       method: params.method ?? 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: params.payload ? JSON.stringify(params.payload) : undefined,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
+      body: hasPayload ? JSON.stringify(params.payload) : undefined,
       signal: controller.signal,
     });
 
@@ -61,6 +100,15 @@ async function requestJson<T>(params: {
 
     if (!response.ok) {
       throw toApiError(response.status, body);
+    }
+
+    if (isHtmlDocument(body)) {
+      throw new ApiError(
+        'El proxy devolvió HTML en lugar del JSON esperado.',
+        502,
+        'unexpected_html_response',
+        false,
+      );
     }
 
     return params.parse(body);
@@ -74,6 +122,15 @@ async function requestJson<T>(params: {
         'La solicitud ha superado el tiempo de espera configurado.',
         408,
         'request_timeout',
+        true,
+      );
+    }
+
+    if (error instanceof TypeError) {
+      throw new ApiError(
+        'No se pudo contactar con los servicios locales. Revisa API, n8n y el proxy del frontend.',
+        503,
+        'network_error',
         true,
       );
     }
@@ -135,7 +192,12 @@ export async function startSession(
     url: joinUrl(WEBHOOK_BASE_URL, '/webhook/proposal-start-v1'),
     method: 'POST',
     payload,
-    timeoutMs: 120000,
+    headers: payload.request_id
+      ? {
+          'x-request-id': payload.request_id,
+        }
+      : undefined,
+    timeoutMs: START_SESSION_TIMEOUT_MS,
     parse: parseProposalStartResponse,
   });
 }
@@ -147,7 +209,12 @@ export async function replySession(
     url: joinUrl(WEBHOOK_BASE_URL, '/webhook/proposal-reply-v1'),
     method: 'POST',
     payload,
-    timeoutMs: 120000,
+    headers: payload.request_id
+      ? {
+          'x-request-id': payload.request_id,
+        }
+      : undefined,
+    timeoutMs: REPLY_SESSION_TIMEOUT_MS,
     parse: parseProposalReplyResponse,
   });
 }
@@ -155,7 +222,30 @@ export async function replySession(
 export async function fetchSessionAudit(sessionId: string): Promise<SessionAuditView> {
   return requestJson({
     url: joinUrl(API_BASE_URL, `/api/v1/sessions/${encodeURIComponent(sessionId)}`),
-    timeoutMs: 10000,
+    timeoutMs: SESSION_AUDIT_TIMEOUT_MS,
     parse: parseSessionAuditView,
+  });
+}
+
+export async function fetchRequestExecution(requestId: string): Promise<RequestExecutionResponse> {
+  return requestJson({
+    url: joinUrl(API_BASE_URL, `/api/v1/requests/${encodeURIComponent(requestId)}`),
+    headers: {
+      'x-request-id': requestId,
+    },
+    timeoutMs: REQUEST_STATUS_TIMEOUT_MS,
+    parse: parseRequestExecutionResponse,
+  });
+}
+
+export async function recoverRequestExecution(requestId: string): Promise<RequestExecutionResponse> {
+  return requestJson({
+    url: joinUrl(API_BASE_URL, `/api/v1/requests/${encodeURIComponent(requestId)}/recover`),
+    method: 'POST',
+    headers: {
+      'x-request-id': requestId,
+    },
+    timeoutMs: REQUEST_RECOVERY_EXECUTION_TIMEOUT_MS,
+    parse: parseRequestExecutionResponse,
   });
 }

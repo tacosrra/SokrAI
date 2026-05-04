@@ -12,7 +12,9 @@ export interface AppConfig {
   ollamaBaseUrl: string;
   ollamaModel: string;
   ollamaTimeoutMs: number;
+  ollamaKeepAlive: string;
   ollamaNumCtx: number;
+  briefExtractionMaxChars: number;
   jsonRepairMaxAttempts: number;
   maxProposalChars: number;
   maxReplyChars: number;
@@ -67,9 +69,11 @@ export function loadConfig(): AppConfig {
     databasePoolMax: getNumber('DATABASE_POOL_MAX', 10),
     databaseStatementTimeoutMs: getNumber('DATABASE_STATEMENT_TIMEOUT_MS', 5000),
     ollamaBaseUrl: getString('OLLAMA_BASE_URL', 'http://localhost:11434'),
-    ollamaModel: getString('OLLAMA_MODEL', 'qwen2.5:7b-instruct'),
-    ollamaTimeoutMs: getNumber('OLLAMA_TIMEOUT_MS', 90000),
+    ollamaModel: getString('OLLAMA_MODEL', 'qwen2.5:3b-instruct'),
+    ollamaTimeoutMs: getNumber('OLLAMA_TIMEOUT_MS', 420000),
+    ollamaKeepAlive: getString('OLLAMA_KEEP_ALIVE', '30m'),
     ollamaNumCtx: getNumber('OLLAMA_NUM_CTX', 4096),
+    briefExtractionMaxChars: getNumber('BRIEF_EXTRACTION_MAX_CHARS', 10000),
     jsonRepairMaxAttempts: getNumber('JSON_REPAIR_MAX_ATTEMPTS', 1),
     maxProposalChars: getNumber('MAX_PROPOSAL_CHARS', 30000),
     maxReplyChars: getNumber('MAX_REPLY_CHARS', 4000),

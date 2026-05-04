@@ -7,6 +7,7 @@ import proposalReplyRequestSchema from '../../../../contracts/schemas/proposal-r
 import proposalReplyResponseSchema from '../../../../contracts/schemas/proposal-reply.response.schema.json';
 import proposalStartRequestSchema from '../../../../contracts/schemas/proposal-start.request.schema.json';
 import proposalStartResponseSchema from '../../../../contracts/schemas/proposal-start.response.schema.json';
+import requestExecutionResponseSchema from '../../../../contracts/schemas/request-execution.response.schema.json';
 import structuredBriefSchema from '../../../../contracts/schemas/structured-brief.schema.json';
 import type {
   ErrorResponse,
@@ -15,6 +16,7 @@ import type {
   ProposalReplyResponse,
   ProposalStartRequest,
   ProposalStartResponse,
+  RequestExecutionResponse,
   StructuredBrief,
 } from './types';
 import { AppError } from '../utils/errors';
@@ -32,6 +34,7 @@ ajv.addSchema(proposalStartRequestSchema, proposalStartRequestSchema.$id);
 ajv.addSchema(proposalStartResponseSchema, proposalStartResponseSchema.$id);
 ajv.addSchema(proposalReplyRequestSchema, proposalReplyRequestSchema.$id);
 ajv.addSchema(proposalReplyResponseSchema, proposalReplyResponseSchema.$id);
+ajv.addSchema(requestExecutionResponseSchema, requestExecutionResponseSchema.$id);
 ajv.addSchema(errorResponseSchema, errorResponseSchema.$id);
 
 function formatErrors(validate: ValidateFunction): string {
@@ -66,6 +69,7 @@ export const schemaIds = {
   proposalReplyResponse: proposalReplyResponseSchema.$id,
   proposalStartRequest: proposalStartRequestSchema.$id,
   proposalStartResponse: proposalStartResponseSchema.$id,
+  requestExecutionResponse: requestExecutionResponseSchema.$id,
   structuredBrief: structuredBriefSchema.$id,
 } as const;
 
@@ -76,6 +80,7 @@ export const schemaDocuments = {
   proposalReplyResponse: proposalReplyResponseSchema,
   proposalStartRequest: proposalStartRequestSchema,
   proposalStartResponse: proposalStartResponseSchema,
+  requestExecutionResponse: requestExecutionResponseSchema,
   structuredBrief: structuredBriefSchema,
 } as const;
 
@@ -105,4 +110,12 @@ export function assertProblemDefinitionTurn(payload: unknown): ProblemDefinition
 
 export function assertErrorResponse(payload: unknown): ErrorResponse {
   return assertSchema<ErrorResponse>(schemaIds.errorResponse, payload, 'invalid_error_response');
+}
+
+export function assertRequestExecutionResponse(payload: unknown): RequestExecutionResponse {
+  return assertSchema<RequestExecutionResponse>(
+    schemaIds.requestExecutionResponse,
+    payload,
+    'invalid_request_execution_response',
+  );
 }

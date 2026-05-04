@@ -55,6 +55,10 @@
             {
               "name": "x-internal-shared-secret",
               "value": "={{ $env.INTERNAL_SHARED_SECRET }}"
+            },
+            {
+              "name": "x-request-id",
+              "value": "={{ $json.request_id }}"
             }
           ]
         },
@@ -62,7 +66,14 @@
         "specifyBody": "json",
         "jsonBody": "={{ { request_id: $json.request_id, workflow_version: $json.workflow_version, workflow_execution_id: $execution.id, payload: $node[\"Webhook_StartProposal\"].json.body } }}",
         "options": {
-          "timeout": 60000
+          "timeout": 450000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
         }
       },
       "id": "7b8669ca-a537-49ca-954c-c4cddd31b7bb",
@@ -72,10 +83,41 @@
       "position": [
         800,
         300
-      ],
-      "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 3000
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "de3b5936-5d3c-480d-adc4-b0a773b7680f",
+              "leftValue": "={{ Number($json.statusCode ?? 0) < 400 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "60a3fb5e-ae6e-4f42-a0af-8b321a16c4d6",
+      "name": "If_StartContextSucceeded",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        940,
+        300
+      ]
     },
     {
       "parameters": {
@@ -87,14 +129,25 @@
             {
               "name": "x-internal-shared-secret",
               "value": "={{ $env.INTERNAL_SHARED_SECRET }}"
+            },
+            {
+              "name": "x-request-id",
+              "value": "={{ $node[\"Set_StartPayload\"].json.request_id }}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { request_id: $json.request_id, workflow_version: \"agent_problem_definition_v1\", workflow_execution_id: $execution.id, session_id: $node[\"HTTP_StartSession\"].json.session_id, trigger: \"start\" } }}",
+        "jsonBody": "={{ { request_id: $node[\"Set_StartPayload\"].json.request_id, workflow_version: \"agent_problem_definition_v1\", workflow_execution_id: $execution.id, session_id: $node[\"HTTP_StartSession\"].json.body.session_id, trigger: \"start\" } }}",
         "options": {
-          "timeout": 90000
+          "timeout": 450000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
         }
       },
       "id": "50e103b7-f3d0-4f0b-b4ec-d416338f3521",
@@ -102,17 +155,17 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1080,
-        300
-      ],
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 3000
+        1140,
+        220
+      ]
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ $json }}"
+        "responseBody": "={{ $json.body ?? $json }}",
+        "options": {
+          "responseCode": "={{ Number($json.statusCode ?? 200) }}"
+        }
       },
       "id": "3da1ac8a-a0ef-4516-aae9-265216b3d9e9",
       "name": "Respond_Start",
@@ -151,7 +204,25 @@
       "main": [
         [
           {
+            "node": "If_StartContextSucceeded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If_StartContextSucceeded": {
+      "main": [
+        [
+          {
             "node": "Invoke_AgentProblemDefinition",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond_Start",
             "type": "main",
             "index": 0
           }

@@ -34,3 +34,10 @@ Reason:
 
 If you imported an older version of the workflows, reimport `proposal_start_v1.json`
 and `proposal_reply_v1.json` or update the `Invoke_AgentProblemDefinition` node in place.
+
+The current exports also keep the upstream API status code and JSON body when
+`/internal/sessions/start-context`, `/internal/sessions/append-reply`, or
+`/internal/agents/problem-definition/run` fail. This applies to
+`proposal_start_v1`, `proposal_reply_v1`, and `agent_problem_definition_v1`, and
+avoids n8n wrapping a controlled API error such as `ollama_timeout` into an
+unexpected webhook payload.

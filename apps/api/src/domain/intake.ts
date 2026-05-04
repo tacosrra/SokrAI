@@ -6,6 +6,11 @@ export interface NormalizedSourceText {
   warnings: string[];
 }
 
+export interface BriefExtractionInput {
+  text: string;
+  warnings: string[];
+}
+
 function cleanWhitespace(input: string): string {
   return input
     .replace(/\r\n/g, '\n')
@@ -44,6 +49,40 @@ export function mergeSourceText(
     rawText,
     normalizedText,
     warnings,
+  };
+}
+
+export function prepareBriefExtractionInput(
+  normalizedText: string,
+  maxChars: number,
+): BriefExtractionInput {
+  if (normalizedText.length <= maxChars) {
+    return {
+      text: normalizedText,
+      warnings: [],
+    };
+  }
+
+  const separator = '\n\n[... middle section omitted to keep local brief extraction responsive ...]\n\n';
+
+  if (maxChars <= separator.length + 200) {
+    return {
+      text: normalizedText.slice(0, maxChars),
+      warnings: [
+        `Brief extraction input was reduced to ${maxChars} characters to keep the local model responsive`,
+      ],
+    };
+  }
+
+  const availableChars = maxChars - separator.length;
+  const headChars = Math.ceil(availableChars * 0.7);
+  const tailChars = Math.max(availableChars - headChars, 0);
+
+  return {
+    text: `${normalizedText.slice(0, headChars)}${separator}${normalizedText.slice(-tailChars)}`,
+    warnings: [
+      `Brief extraction input was reduced to ${maxChars} characters to keep the local model responsive`,
+    ],
   };
 }
 

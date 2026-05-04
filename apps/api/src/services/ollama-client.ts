@@ -19,37 +19,52 @@ export interface LanguageModelClient {
   generate(params: ModelGenerationParams): Promise<ModelCompletionResult>;
 }
 
+interface OllamaChatPayload {
+  model?: string;
+  message?: { content?: string };
+  total_duration?: number;
+  prompt_eval_count?: number;
+  eval_count?: number;
+}
+
 export class OllamaClient implements LanguageModelClient {
   constructor(private readonly config: AppConfig) {}
 
   async generate(params: ModelGenerationParams): Promise<ModelCompletionResult> {
     const start = Date.now();
-    const response = await fetch(`${this.config.ollamaBaseUrl}/api/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: params.model,
-        stream: false,
-        format: params.responseSchema,
-        options: {
-          temperature: 0.2,
-          num_ctx: this.config.ollamaNumCtx,
+    let response: Response;
+
+    try {
+      response = await fetch(`${this.config.ollamaBaseUrl}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
-        messages: [
-          {
-            role: 'system',
-            content: params.systemPrompt,
+        body: JSON.stringify({
+          model: params.model,
+          stream: false,
+          format: params.responseSchema,
+          keep_alive: this.config.ollamaKeepAlive,
+          options: {
+            temperature: 0.2,
+            num_ctx: this.config.ollamaNumCtx,
           },
-          {
-            role: 'user',
-            content: params.userPrompt,
-          },
-        ],
-      }),
-      signal: AbortSignal.timeout(this.config.ollamaTimeoutMs),
-    });
+          messages: [
+            {
+              role: 'system',
+              content: params.systemPrompt,
+            },
+            {
+              role: 'user',
+              content: params.userPrompt,
+            },
+          ],
+        }),
+        signal: AbortSignal.timeout(this.config.ollamaTimeoutMs),
+      });
+    } catch (error) {
+      throw toOllamaAppError(error, this.config);
+    }
 
     if (!response.ok) {
       const text = await response.text();
@@ -59,13 +74,22 @@ export class OllamaClient implements LanguageModelClient {
       });
     }
 
-    const payload = (await response.json()) as {
-      model?: string;
-      message?: { content?: string };
-      total_duration?: number;
-      prompt_eval_count?: number;
-      eval_count?: number;
-    };
+    let payload: OllamaChatPayload;
+
+    try {
+      payload = (await response.json()) as OllamaChatPayload;
+    } catch (error) {
+      throw new AppError(
+        502,
+        'ollama_invalid_response',
+        'The local model returned an invalid JSON payload',
+        false,
+        undefined,
+        {
+          cause: error instanceof Error ? error.message : 'unknown',
+        },
+      );
+    }
 
     return {
       content: payload.message?.content ?? '',
@@ -78,4 +102,35 @@ export class OllamaClient implements LanguageModelClient {
       },
     };
   }
+}
+
+function toOllamaAppError(error: unknown, config: AppConfig): AppError {
+  if (error instanceof AppError) {
+    return error;
+  }
+
+  if (error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
+    return new AppError(504, 'ollama_timeout', 'The local model exceeded the configured timeout', true, undefined, {
+      base_url: config.ollamaBaseUrl,
+      timeout_ms: config.ollamaTimeoutMs,
+    });
+  }
+
+  if (error instanceof TypeError) {
+    return new AppError(503, 'ollama_unreachable', 'The local model could not be reached', true, undefined, {
+      base_url: config.ollamaBaseUrl,
+      cause: error.message,
+    });
+  }
+
+  if (error instanceof Error) {
+    return new AppError(502, 'ollama_request_failed', 'The local model request failed unexpectedly', true, undefined, {
+      base_url: config.ollamaBaseUrl,
+      cause: error.message,
+    });
+  }
+
+  return new AppError(502, 'ollama_request_failed', 'The local model request failed unexpectedly', true, undefined, {
+    base_url: config.ollamaBaseUrl,
+  });
 }

@@ -12,7 +12,7 @@ require_command mktemp
 require_docker_access
 ensure_beta_env_file
 
-log_step "Starting isolated beta stack"
+log_step "Starting beta stack"
 docker_compose up -d postgres ollama api n8n web
 
 log_step "Waiting for PostgreSQL"

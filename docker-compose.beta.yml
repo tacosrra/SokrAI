@@ -1,12 +1,26 @@
 services:
   postgres:
+    container_name: postgres
     volumes:
       - sokrai_beta_postgres_data:/var/lib/postgresql/data
       - ./infra/docker/postgres/init:/docker-entrypoint-initdb.d:ro
 
   ollama:
+    container_name: ollama
+    dns:
+      - ${BETA_OLLAMA_DNS_PRIMARY:-1.1.1.1}
+      - ${BETA_OLLAMA_DNS_SECONDARY:-8.8.8.8}
     volumes:
       - sokrai_beta_ollama_data:/root/.ollama
+
+  api:
+    container_name: api
+
+  web:
+    container_name: web
+
+  n8n:
+    container_name: n8n
 
 volumes:
   sokrai_beta_postgres_data:

@@ -55,6 +55,10 @@
             {
               "name": "x-internal-shared-secret",
               "value": "={{ $env.INTERNAL_SHARED_SECRET }}"
+            },
+            {
+              "name": "x-request-id",
+              "value": "={{ $json.request_id }}"
             }
           ]
         },
@@ -62,7 +66,14 @@
         "specifyBody": "json",
         "jsonBody": "={{ { request_id: $json.request_id, workflow_version: $json.workflow_version, workflow_execution_id: $execution.id, session_id: $node[\"Webhook_AgentProblemDefinition\"].json.body.session_id, trigger: $node[\"Webhook_AgentProblemDefinition\"].json.body.trigger } }}",
         "options": {
-          "timeout": 90000
+          "timeout": 450000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
         }
       },
       "id": "4ebdd524-9f7d-4e27-afc6-e33d2fcaad34",
@@ -72,15 +83,15 @@
       "position": [
         820,
         300
-      ],
-      "retryOnFail": true,
-      "maxTries": 2,
-      "waitBetweenTries": 3000
+      ]
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ $json }}"
+        "responseBody": "={{ $json.body ?? $json }}",
+        "options": {
+          "responseCode": "={{ Number($json.statusCode ?? 200) }}"
+        }
       },
       "id": "a645fef2-b9b7-4a56-8a94-b7902f7d6da8",
       "name": "Respond_AgentTurn",

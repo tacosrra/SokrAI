@@ -60,10 +60,10 @@ Este bootstrap:
 - crea `.env.beta` si no existe
 - genera secretos locales si siguen en placeholder
 - arranca `Docker Desktop` si ya esta instalado pero no esta corriendo
-- levanta un proyecto Docker aislado `sokrai-beta`
+- levanta el stack beta con contenedores fijos `postgres`, `ollama`, `api`, `n8n` y `web`
 - usa volumenes Docker nombrados para evitar problemas de permisos en `postgres` y `ollama`
 - espera a que `postgres`, `ollama`, `api`, `n8n` y `web` esten listos
-- hace `ollama pull` del modelo configurado
+- hace `ollama pull` del modelo configurado con reintentos; si ya esta cacheado, lo reutiliza
 - ejecuta migraciones
 - importa y activa los workflows versionados de `n8n`
 - abre la UI principal en el navegador al terminar
@@ -89,6 +89,12 @@ Notas de esta ruta:
 - esta pensada para macOS, Linux y WSL con `bash`
 - en Windows nativo usa `PowerShell`
 - no requiere `Node.js` ni `pnpm` en host
+
+Si el pull del modelo falla por DNS o conectividad:
+
+- reintenta `./scripts/bootstrap-beta.sh`;
+- si el modelo ya existe en el volumen de `ollama`, usa `SOKRAI_BETA_SKIP_OLLAMA_PULL=1 ./scripts/bootstrap-beta.sh`;
+- si tu red necesita otro resolver, cambia `BETA_OLLAMA_DNS_PRIMARY` y `BETA_OLLAMA_DNS_SECONDARY` en `.env.beta`.
 
 Si necesitas el flujo manual o quieres inspeccionar cada paso, continua con la guia normal de abajo.
 
@@ -154,7 +160,8 @@ Abre `.env` y cambia como minimo estos valores:
 - `N8N_ENCRYPTION_KEY`
 - opcionalmente `N8N_BASIC_AUTH_USER`
 - opcionalmente `N8N_BASIC_AUTH_PASSWORD`
-- opcionalmente `OLLAMA_MODEL` si no quieres usar `qwen2.5:7b-instruct`
+- opcionalmente `OLLAMA_MODEL` si no quieres usar `qwen2.5:3b-instruct`
+- opcionalmente `BETA_OLLAMA_DNS_PRIMARY` y `BETA_OLLAMA_DNS_SECONDARY` si tu Docker necesita DNS explicito para descargar modelos
 
 Ejemplo razonable:
 
@@ -169,9 +176,13 @@ DATABASE_POOL_MAX=10
 DATABASE_STATEMENT_TIMEOUT_MS=5000
 
 OLLAMA_BASE_URL=http://ollama:11434
-OLLAMA_MODEL=qwen2.5:7b-instruct
-OLLAMA_TIMEOUT_MS=90000
+OLLAMA_MODEL=qwen2.5:3b-instruct
+OLLAMA_TIMEOUT_MS=420000
+OLLAMA_KEEP_ALIVE=30m
 OLLAMA_NUM_CTX=4096
+BRIEF_EXTRACTION_MAX_CHARS=10000
+BETA_OLLAMA_DNS_PRIMARY=1.1.1.1
+BETA_OLLAMA_DNS_SECONDARY=8.8.8.8
 
 INTERNAL_SHARED_SECRET=change-this-to-a-long-random-secret
 JSON_REPAIR_MAX_ATTEMPTS=1
@@ -184,6 +195,13 @@ ALLOW_SENSITIVE_HEALTH_DATA=false
 N8N_BASIC_AUTH_USER=admin
 N8N_BASIC_AUTH_PASSWORD=admin
 N8N_ENCRYPTION_KEY=change-this-to-another-long-random-secret
+
+VITE_START_SESSION_TIMEOUT_MS=960000
+VITE_REPLY_SESSION_TIMEOUT_MS=540000
+VITE_SESSION_AUDIT_TIMEOUT_MS=10000
+VITE_REQUEST_STATUS_TIMEOUT_MS=10000
+VITE_REQUEST_RECOVERY_TIMEOUT_MS=960000
+VITE_ACTIVE_RECOVERY_AFTER_MS=60000
 ```
 
 ### 5.3 Que valores dejar tal cual
@@ -323,7 +341,7 @@ docker compose ps ollama
 ### 8.2 Descargar el modelo configurado
 
 ```bash
-docker compose exec ollama ollama pull qwen2.5:7b-instruct
+docker compose exec ollama ollama pull qwen2.5:3b-instruct
 ```
 
 Si en `.env` pusiste otro modelo, sustituye ese nombre.
@@ -493,6 +511,8 @@ Estas rutas existen, pero normalmente las usa n8n:
 - `POST /internal/sessions/start-context`
 - `POST /internal/sessions/append-reply`
 - `POST /internal/agents/problem-definition/run`
+- `GET /api/v1/requests/:requestId`
+- `POST /api/v1/requests/:requestId/recover`
 
 Todas las rutas internas exigen:
 
@@ -724,7 +744,7 @@ Si quieres un recorrido sin desviarte, sigue exactamente esto:
 cp .env.example .env
 pnpm install --store-dir ./.pnpm-store
 docker compose up -d postgres ollama api n8n
-docker compose exec ollama ollama pull qwen2.5:7b-instruct
+docker compose exec ollama ollama pull qwen2.5:3b-instruct
 docker compose exec api pnpm migrate
 curl -i http://localhost:3001/healthz
 ```
@@ -965,6 +985,42 @@ Si ademas quieres limpiar la carpeta antigua que ya no se usa:
 rm -rf n8n_data
 ```
 
+### 20.1.2 `n8n` falla con `Mismatching encryption keys`
+
+Ese error significa que el volumen persistido de `n8n` ya tiene una clave guardada en `/home/node/.n8n/config`, pero ahora el contenedor arranca con otro valor en `N8N_ENCRYPTION_KEY`.
+
+Opciones:
+
+1. si quieres conservar el estado actual de `n8n`, vuelve a poner en `.env` o `.env.beta` la clave antigua;
+2. si es un entorno local de prueba y no necesitas conservar credenciales/workflows internos de `n8n`, elimina solo el volumen de `n8n` y deja que se regenere con la clave actual.
+
+Ejemplo para el stack beta de este repo:
+
+```bash
+docker compose \
+  --env-file .env.beta \
+  -p sokrai-beta \
+  -f docker-compose.yml \
+  -f docker-compose.beta.yml \
+  down
+
+docker volume rm sokrai-beta_n8n_data
+
+docker compose \
+  --env-file .env.beta \
+  -p sokrai-beta \
+  -f docker-compose.yml \
+  -f docker-compose.beta.yml \
+  up -d n8n
+```
+
+Si usas el stack local por defecto en lugar del beta, el volumen suele llamarse `sokrai_n8n_data`.
+
+Recomendacion:
+
+- fija `N8N_ENCRYPTION_KEY` una vez;
+- no la regeneres despues de que `n8n` haya arrancado por primera vez con ese volumen.
+
 ### 20.2 El webhook tarda mucho o falla en el primer turno
 
 Normalmente significa:
@@ -972,6 +1028,7 @@ Normalmente significa:
 - el modelo no se ha descargado aun
 - Ollama esta frio
 - el modelo elegido es demasiado pesado para tu maquina
+- o antes habia un timeout desalineado entre UI, n8n y API
 
 Comprueba:
 
@@ -983,7 +1040,12 @@ docker compose logs -f ollama
 Si la API devuelve un `502` con algo como:
 
 - `ollama_request_failed`
+- `ollama_invalid_response`
 - `The local model did not return a successful response`
+
+o un `504` con:
+
+- `ollama_timeout`
 
 y en los logs de `ollama` aparece algo como:
 
@@ -992,13 +1054,33 @@ y en los logs de `ollama` aparece algo como:
 
 entonces la integracion `n8n -> api` esta bien, pero el modelo local no consigue cargarse o responder.
 
+La UI de esta version no elimina el timeout: lo deja alto y coherente para que el primer diagnostico pueda completarse, pero sigue fallando de forma controlada si el modelo se queda colgado.
+
+Presupuestos por defecto:
+
+- `OLLAMA_TIMEOUT_MS=420000` por llamada de modelo
+- `VITE_START_SESSION_TIMEOUT_MS=960000` para el arranque completo
+- `VITE_REPLY_SESSION_TIMEOUT_MS=540000` para respuestas de turno
+- `VITE_REQUEST_STATUS_TIMEOUT_MS=10000` para la inspeccion de recuperacion
+- `VITE_REQUEST_RECOVERY_TIMEOUT_MS=960000` para la ventana de recuperacion de la UI
+
+Ademas, la API envia `keep_alive` a Ollama con `OLLAMA_KEEP_ALIVE=30m` para mantener el modelo cargado entre llamadas cercanas y reducir latencia de arranque.
+
+La extraccion inicial del brief no envia necesariamente todo el texto persistido al modelo. Usa un excerpt acotado por `BRIEF_EXTRACTION_MAX_CHARS=10000`, con aviso trazable en la sesion, para mantener el primer turno viable en hardware local.
+
+Ademas, los workflows exportados ya no reintentan automaticamente los nodos `HTTP Request`, para no ocultar fallos reales de la API detras de esperas adicionales.
+
+La UI tambien envia un `request_id` por turno. Si la llamada principal vence en el navegador, intenta recuperar el resultado consultando `GET /api/v1/requests/:requestId` durante una ventana adicional. Si detecta que el workflow quedo a medias, puede forzar una recuperacion activa con `POST /api/v1/requests/:requestId/recover`.
+
 La causa mas habitual en local es memoria insuficiente para el modelo actual o un `num_ctx` demasiado alto.
 
 Prueba este ajuste minimo en tu `.env`:
 
 ```dotenv
-OLLAMA_TIMEOUT_MS=180000
+OLLAMA_TIMEOUT_MS=420000
+OLLAMA_KEEP_ALIVE=30m
 OLLAMA_NUM_CTX=4096
+BRIEF_EXTRACTION_MAX_CHARS=10000
 ```
 
 Luego recrea la API:
@@ -1007,9 +1089,9 @@ Luego recrea la API:
 docker compose up -d --force-recreate api
 ```
 
-Si sigue fallando con `qwen2.5:7b-instruct`, cambia a un modelo mas pequeno en `.env`, descarga ese modelo en `ollama` y vuelve a probar.
+Si sigue fallando incluso con `qwen2.5:3b-instruct`, baja otro escalon en `.env`, por ejemplo a `qwen2.5:1.5b-instruct`, descarga ese modelo en `ollama` y vuelve a probar.
 
-Si prefieres mantener el modelo de 7B, revisa tambien la memoria disponible para Docker Desktop / WSL.
+Si prefieres volver a `qwen2.5:7b-instruct`, revisa tambien la memoria disponible para Docker Desktop / WSL.
 
 ### 20.3 `proposal_start_v1` responde 500/502
 

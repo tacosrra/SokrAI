@@ -1,62 +1,210 @@
 import { useEffect, useState } from 'react';
 
 import type { ProposalStartRequest, RecentSession, SessionAuditView } from './domain/contracts';
-import { ApiError, fetchSessionAudit, replySession, startSession } from './lib/api';
-import { readLastSessionId, readRecentSessions, persistRecentSession } from './lib/storage';
+import {
+  ApiError,
+  fetchRequestExecution,
+  recoverRequestExecution,
+  fetchSessionAudit,
+  replySession,
+  startSession,
+} from './lib/api';
+import { mapApiError } from './lib/feedback';
 import { deriveSessionPresentation } from './lib/session-view';
+import { readLastSessionId, readRecentSessions, persistRecentSession } from './lib/storage';
 import { ContinueSessionPanel } from './components/ContinueSessionPanel';
 import { NewProposalPanel } from './components/NewProposalPanel';
+import { SessionStatePanel } from './components/SessionStatePanel';
 import { SessionWorkspace } from './components/SessionWorkspace';
+import { WorkflowLoadingPanel } from './components/WorkflowLoadingPanel';
 
 type BannerTone = 'info' | 'success' | 'error';
+type ModeView = 'start' | 'resume';
 
 interface BannerState {
   tone: BannerTone;
   text: string;
 }
 
-function mapError(error: unknown): string {
-  if (!(error instanceof ApiError)) {
-    return 'Ha ocurrido un error inesperado en el frontend.';
-  }
+const START_SESSION_TIMEOUT_MS = readTimeout('VITE_START_SESSION_TIMEOUT_MS', 960000);
+const REPLY_SESSION_TIMEOUT_MS = readTimeout('VITE_REPLY_SESSION_TIMEOUT_MS', 540000);
+const REQUEST_RECOVERY_TIMEOUT_MS = readTimeout(
+  'VITE_REQUEST_RECOVERY_TIMEOUT_MS',
+  Math.max(START_SESSION_TIMEOUT_MS, REPLY_SESSION_TIMEOUT_MS, 960000),
+);
+const REQUEST_RECOVERY_POLL_INTERVAL_MS = 4000;
+const ACTIVE_RECOVERY_AFTER_MS = readTimeout('VITE_ACTIVE_RECOVERY_AFTER_MS', 60000);
+const MAX_CONSECUTIVE_RECOVERY_TRANSPORT_ERRORS = 5;
 
-  if (error.errorCode === 'invalid_response_contract') {
-    return 'La respuesta del backend no coincide con el contrato esperado. Revisa la versión de API, workflows o frontend.';
-  }
+type RecoverableRequestKind = 'proposal_start' | 'proposal_reply';
 
-  if (error.errorCode === 'session_not_found') {
-    return 'No existe una sesión con ese `session_id`. Comprueba el valor o crea una nueva sesión.';
-  }
-
-  if (
-    error.errorCode === 'ollama_request_failed' ||
-    error.errorCode === 'invalid_model_json' ||
-    error.errorCode === 'invalid_model_json_after_repair'
-  ) {
-    return 'El modelo local no pudo completar el turno. Revisa Ollama y vuelve a intentarlo.';
-  }
-
-  if (error.errorCode === 'request_timeout') {
-    return 'La llamada ha superado el tiempo de espera. Revisa n8n, API y Ollama.';
-  }
-
-  if (error.errorCode === 'invalid_pdf_file' || error.errorCode === 'invalid_pdf_payload') {
-    return 'El PDF no es válido para la v1. Usa un PDF con texto extraíble.';
-  }
-
-  return error.message;
+interface ModeCardProps {
+  activeMode: ModeView;
+  callout: string;
+  cta: string;
+  description: string;
+  mode: ModeView;
+  onSelect: (mode: ModeView) => void;
+  title: string;
 }
 
 function writeSessionToUrl(sessionId: string) {
   const url = new URL(window.location.href);
-  url.searchParams.set('session', sessionId);
+
+  if (sessionId) {
+    url.searchParams.set('session', sessionId);
+  } else {
+    url.searchParams.delete('session');
+  }
+
   window.history.replaceState({}, '', url);
+}
+
+function createClientRequestId(prefix: 'start' | 'reply'): string {
+  return `web-${prefix}-${crypto.randomUUID()}`;
+}
+
+function isRecoverableWorkflowDeliveryError(error: unknown): error is ApiError {
+  return (
+    error instanceof ApiError &&
+    (
+      error.errorCode === 'request_timeout' ||
+      error.errorCode === 'invalid_response_contract' ||
+      error.errorCode === 'unexpected_html_response'
+    )
+  );
+}
+
+function toApiErrorFromRecoveredRequest(status: {
+  request_id: string;
+  error_code?: string;
+  safe_message?: string;
+  retryable?: boolean;
+  session_id?: string;
+}): ApiError {
+  return new ApiError(
+    status.safe_message ?? 'The workflow failed before returning a final response',
+    status.retryable ? 503 : 502,
+    status.error_code ?? 'request_failed',
+    status.retryable ?? false,
+    status.request_id,
+    status.session_id,
+  );
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function readTimeout(name: string, fallback: number): number {
+  const raw = (import.meta.env as Record<string, string | undefined>)[name];
+
+  if (!raw) {
+    return fallback;
+  }
+
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function formatSessionDate(value: string) {
+  return new Date(value).toLocaleString('es-ES', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  });
+}
+
+function ModeCard({
+  activeMode,
+  callout,
+  cta,
+  description,
+  mode,
+  onSelect,
+  title,
+}: ModeCardProps) {
+  const isSelected = activeMode === mode;
+
+  return (
+    <button
+      className={`mode-card ${isSelected ? 'mode-card--selected' : ''}`}
+      type="button"
+      onClick={() => onSelect(mode)}
+      aria-pressed={isSelected}
+    >
+      <div className="mode-card__check" aria-hidden="true">
+        <span />
+      </div>
+
+      <div className="mode-card__icon" aria-hidden="true">
+        {mode === 'start' ? (
+          <svg viewBox="0 0 24 24" fill="none">
+            <path
+              d="M4 6.75A2.75 2.75 0 0 1 6.75 4h6.5A2.75 2.75 0 0 1 16 6.75v2.5A2.75 2.75 0 0 1 13.25 12h-3.7l-3.07 2.6a.75.75 0 0 1-1.23-.57V12.6A2.74 2.74 0 0 1 4 10.25v-3.5Z"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M10 16.75h3.45l3.08 2.59a.75.75 0 0 0 1.22-.57V16.6A2.74 2.74 0 0 0 20 14.25v-3.5A2.75 2.75 0 0 0 17.25 8H17"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 24 24" fill="none">
+            <path
+              d="M12 5.25a6.75 6.75 0 1 0 6.08 9.67"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+            />
+            <path
+              d="M12 8.5V12l2.5 1.75"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M15.5 5.5H19v3.5"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M19 5.5 15.5 9"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+            />
+          </svg>
+        )}
+      </div>
+
+      <div className="mode-card__body">
+        <h2>{title}</h2>
+        <p>{description}</p>
+      </div>
+
+      <div className="mode-card__footer">
+        <span className="mode-card__chip">{callout}</span>
+        <span className="mode-card__cta">{cta}</span>
+      </div>
+    </button>
+  );
 }
 
 export function App() {
   const [activeAudit, setActiveAudit] = useState<SessionAuditView | null>(null);
   const [recentSessions, setRecentSessions] = useState<RecentSession[]>([]);
   const [defaultSessionId, setDefaultSessionId] = useState('');
+  const [sessionLookupId, setSessionLookupId] = useState('');
+  const [selectedMode, setSelectedMode] = useState<ModeView>('start');
   const [isSubmittingStart, setIsSubmittingStart] = useState(false);
   const [isLoadingSession, setIsLoadingSession] = useState(false);
   const [isReplying, setIsReplying] = useState(false);
@@ -69,6 +217,8 @@ export function App() {
 
     setRecentSessions(recent);
     setDefaultSessionId(lastSessionId);
+    setSessionLookupId(lastSessionId);
+    setSelectedMode(lastSessionId ? 'resume' : 'start');
 
     if (fromUrl) {
       void loadSession(fromUrl, {
@@ -96,6 +246,7 @@ export function App() {
       setActiveAudit(audit);
       setRecentSessions(persistRecentSession(audit));
       setDefaultSessionId(audit.session.id);
+      setSessionLookupId(audit.session.id);
       writeSessionToUrl(audit.session.id);
       setBanner({
         tone: 'success',
@@ -106,30 +257,164 @@ export function App() {
     } catch (error) {
       setBanner({
         tone: 'error',
-        text: mapError(error),
+        text: mapApiError(error),
       });
     } finally {
       setIsLoadingSession(false);
     }
   }
 
+  async function recoverTimedOutRequest(
+    requestId: string,
+    requestKind: RecoverableRequestKind,
+  ): Promise<string> {
+    const deadline = Date.now() + REQUEST_RECOVERY_TIMEOUT_MS;
+    const activeRecoveryAfter = Date.now() + ACTIVE_RECOVERY_AFTER_MS;
+    let consecutiveTransportErrors = 0;
+    let activeRecoveryTriggered = false;
+
+    while (Date.now() < deadline) {
+      try {
+        const status = await fetchRequestExecution(requestId);
+        consecutiveTransportErrors = 0;
+
+        if (status.request_kind !== requestKind && status.request_kind !== 'unknown') {
+          throw new ApiError(
+            'The recovered workflow state does not match the expected request kind',
+            502,
+            'invalid_request_recovery',
+            false,
+            requestId,
+            status.session_id,
+          );
+        }
+
+        if (status.status === 'completed' && status.session_id) {
+          return status.session_id;
+        }
+
+        if (status.status === 'failed') {
+          throw toApiErrorFromRecoveredRequest(status);
+        }
+
+        if (
+          !activeRecoveryTriggered &&
+          Date.now() >= activeRecoveryAfter &&
+          (status.status === 'pending' || status.status === 'not_found')
+        ) {
+          activeRecoveryTriggered = true;
+
+          const recoveredStatus = await recoverRequestExecution(requestId);
+
+          if (
+            recoveredStatus.request_kind !== requestKind &&
+            recoveredStatus.request_kind !== 'unknown'
+          ) {
+            throw new ApiError(
+              'The active recovery response does not match the expected request kind',
+              502,
+              'invalid_request_recovery',
+              false,
+              requestId,
+              recoveredStatus.session_id,
+            );
+          }
+
+          if (recoveredStatus.status === 'completed' && recoveredStatus.session_id) {
+            return recoveredStatus.session_id;
+          }
+
+          if (recoveredStatus.status === 'failed') {
+            throw toApiErrorFromRecoveredRequest(recoveredStatus);
+          }
+
+          if (recoveredStatus.status === 'not_found') {
+            throw new ApiError(
+              'The workflow request could not be found after active recovery',
+              404,
+              'request_not_found_after_recovery',
+              false,
+              requestId,
+            );
+          }
+        }
+      } catch (error) {
+        if (
+          error instanceof ApiError &&
+          error.errorCode !== 'network_error' &&
+          error.errorCode !== 'request_timeout' &&
+          error.errorCode !== 'invalid_response_contract' &&
+          error.errorCode !== 'unexpected_html_response' &&
+          error.errorCode !== 'http_error'
+        ) {
+          throw error;
+        }
+
+        consecutiveTransportErrors += 1;
+
+        if (consecutiveTransportErrors >= MAX_CONSECUTIVE_RECOVERY_TRANSPORT_ERRORS) {
+          throw error;
+        }
+      }
+
+      await wait(REQUEST_RECOVERY_POLL_INTERVAL_MS);
+    }
+
+    throw new ApiError(
+      'The workflow did not expose a recoverable final state before the recovery window expired',
+      504,
+      'request_recovery_timeout',
+      true,
+      requestId,
+    );
+  }
+
   async function handleStart(payload: ProposalStartRequest) {
+    const requestId = createClientRequestId('start');
     setIsSubmittingStart(true);
     setBanner({
       tone: 'info',
-      text: 'Creando sesión, ejecutando extracción inicial y esperando la primera pregunta del lane…',
+      text: 'Propuesta enviada. Preparando structured brief y primer diagnóstico del lane…',
     });
 
     try {
-      const result = await startSession(payload);
+      const result = await startSession({
+        ...payload,
+        request_id: requestId,
+      });
       await loadSession(result.session_id, {
         successMessage: `Sesión ${result.session_id} creada. Structured brief y siguiente pregunta listos.`,
         skipBannerOnStart: true,
       });
     } catch (error) {
+      if (isRecoverableWorkflowDeliveryError(error)) {
+        setBanner({
+          tone: 'info',
+          text:
+            error.errorCode === 'request_timeout'
+              ? `La llamada inicial venció en el navegador. Recuperando el resultado del workflow para request_id ${requestId}…`
+              : `La respuesta inicial llegó con un formato inesperado. Intentando recuperar la sesión real con request_id ${requestId}…`,
+        });
+
+        try {
+          const sessionId = await recoverTimedOutRequest(requestId, 'proposal_start');
+          await loadSession(sessionId, {
+            successMessage: `Sesión ${sessionId} recuperada tras completar el workflow fuera del tiempo de espera inicial.`,
+            skipBannerOnStart: true,
+          });
+          return;
+        } catch (recoveryError) {
+          setBanner({
+            tone: 'error',
+            text: mapApiError(recoveryError),
+          });
+          return;
+        }
+      }
+
       setBanner({
         tone: 'error',
-        text: mapError(error),
+        text: mapApiError(error),
       });
     } finally {
       setIsSubmittingStart(false);
@@ -141,14 +426,16 @@ export function App() {
       return;
     }
 
+    const requestId = createClientRequestId('reply');
     setIsReplying(true);
     setBanner({
       tone: 'info',
-      text: 'Enviando respuesta al workflow y esperando la actualización del estado…',
+      text: 'Respuesta enviada. Generando el siguiente diagnóstico y actualizando el estado de la sesión…',
     });
 
     try {
       const result = await replySession({
+        request_id: requestId,
         session_id: activeAudit.session.id,
         answer,
       });
@@ -158,87 +445,283 @@ export function App() {
         skipBannerOnStart: true,
       });
     } catch (error) {
+      if (isRecoverableWorkflowDeliveryError(error)) {
+        setBanner({
+          tone: 'info',
+          text:
+            error.errorCode === 'request_timeout'
+              ? `La llamada del turno venció en el navegador. Recuperando el resultado del workflow para request_id ${requestId}…`
+              : `La respuesta del turno llegó con un formato inesperado. Intentando recuperar el estado real con request_id ${requestId}…`,
+        });
+
+        try {
+          const sessionId = await recoverTimedOutRequest(requestId, 'proposal_reply');
+          await loadSession(sessionId, {
+            successMessage: 'Turno recuperado tras completar el workflow fuera del tiempo de espera inicial.',
+            skipBannerOnStart: true,
+          });
+          return;
+        } catch (recoveryError) {
+          try {
+            await loadSession(activeAudit.session.id, {
+              successMessage: 'Se recuperó el estado de la sesión directamente desde la API tras expirar la llamada del navegador.',
+              skipBannerOnStart: true,
+            });
+            return;
+          } catch {
+            // Preserve the original recovery error when the direct session refresh also fails.
+          }
+
+          setBanner({
+            tone: 'error',
+            text: mapApiError(recoveryError),
+          });
+          return;
+        }
+      }
+
       setBanner({
         tone: 'error',
-        text: mapError(error),
+        text: mapApiError(error),
       });
     } finally {
       setIsReplying(false);
     }
   }
 
+  function handleStartFreshSession() {
+    setActiveAudit(null);
+    setBanner(null);
+    setDefaultSessionId('');
+    setSessionLookupId('');
+    setSelectedMode('start');
+    writeSessionToUrl('');
+  }
+
+  async function handleLoadFromSidebar(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const trimmedSessionId = sessionLookupId.trim();
+
+    if (!trimmedSessionId) {
+      setBanner({
+        tone: 'error',
+        text: 'Indica un `session_id` válido para reabrir una sesión.',
+      });
+      return;
+    }
+
+    await loadSession(trimmedSessionId);
+  }
+
   const presentation = activeAudit ? deriveSessionPresentation(activeAudit) : null;
+
+  if (presentation && activeAudit) {
+    return (
+      <div className="app-shell app-shell--workspace">
+        <div className="app-shell__ambient" />
+
+        {banner ? <div className={`flash-banner flash-banner--${banner.tone}`}>{banner.text}</div> : null}
+
+        <main className="workspace-shell">
+          <aside className="workspace-rail">
+            <div className="workspace-rail__brand">
+              <div className="brand-mark">S</div>
+              <div className="brand-copy">
+                <span className="brand-copy__eyebrow">SokrAI v1</span>
+                <strong>Problem Definition Console</strong>
+                <span className="brand-copy__meta">Inspirado en el shell conversacional de Stitch.</span>
+              </div>
+            </div>
+
+            <section className="workspace-rail__section workspace-rail__section--hero">
+              <span className="panel__eyebrow">Sesión activa</span>
+              <h2>{presentation.projectTitle}</h2>
+              <p>{presentation.progress.description}</p>
+
+              <div className="rail-kpis">
+                <article>
+                  <strong>{presentation.progress.percent}%</strong>
+                  <span>madurez</span>
+                </article>
+                <article>
+                  <strong>{activeAudit.turns.length}</strong>
+                  <span>turnos</span>
+                </article>
+              </div>
+
+              <button className="button button--primary" type="button" onClick={handleStartFreshSession}>
+                Nueva propuesta
+              </button>
+            </section>
+
+            <section className="workspace-rail__section">
+              <div className="workspace-rail__heading">
+                <span className="panel__eyebrow">Acceso rápido</span>
+                <h3>Abrir otra sesión</h3>
+              </div>
+
+              <form className="workspace-rail__form" onSubmit={handleLoadFromSidebar}>
+                <label className="field">
+                  <span className="field__label">Session ID</span>
+                  <input
+                    className="field__control field__control--code"
+                    type="text"
+                    value={sessionLookupId}
+                    onChange={(event) => setSessionLookupId(event.target.value)}
+                    placeholder="85cf3299-4fc3-4770-9944-6049d97e7b59"
+                    disabled={isLoadingSession}
+                  />
+                </label>
+
+                <button className="button button--secondary" type="submit" disabled={isLoadingSession}>
+                  {isLoadingSession ? 'Consultando…' : 'Abrir sesión'}
+                </button>
+              </form>
+            </section>
+
+            <section className="workspace-rail__section workspace-rail__section--list">
+              <div className="workspace-rail__heading">
+                <span className="panel__eyebrow">Recientes</span>
+                <h3>{recentSessions.length} conversaciones</h3>
+              </div>
+
+              {recentSessions.length === 0 ? (
+                <div className="empty-state">
+                  Aún no hay sesiones recientes guardadas en este navegador.
+                </div>
+              ) : (
+                <div className="session-rail-list">
+                  {recentSessions.map((session) => (
+                    <button
+                      key={session.sessionId}
+                      className={`session-rail-item ${
+                        presentation.sessionId === session.sessionId ? 'session-rail-item--active' : ''
+                      }`}
+                      type="button"
+                      onClick={() => void loadSession(session.sessionId)}
+                      disabled={isLoadingSession}
+                    >
+                      <div className="session-rail-item__header">
+                        <strong>{session.projectTitle}</strong>
+                        <span>{formatSessionDate(session.updatedAt)}</span>
+                      </div>
+                      <p>{session.goal}</p>
+                      <div className="session-rail-item__meta">
+                        <span>{session.status.replaceAll('_', ' ')}</span>
+                        <span>{session.currentQuestion || 'Sin pregunta abierta'}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+          </aside>
+
+          <section className="workspace-main">
+            <SessionWorkspace
+              audit={activeAudit}
+              isReplying={isReplying}
+              onReply={handleReply}
+              presentation={presentation}
+            />
+          </section>
+
+          <aside className="workspace-insights">
+            <SessionStatePanel audit={activeAudit} presentation={presentation} />
+          </aside>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="app-shell">
       <div className="app-shell__ambient" />
 
-      <header className="hero">
-        <div className="hero__copy">
-          <div className="hero__kicker">SokrAI v1</div>
-          <h1>Consola de precomité para maduración de proyectos</h1>
-          <p>
-            Interfaz operativa para iniciar propuestas, inspeccionar el
-            structured brief, responder la siguiente pregunta socrática y
-            retomar sesiones persistidas sin salir del flujo real de la v1.
-          </p>
+      <header className="app-topbar">
+        <div className="app-topbar__brand">
+          <div className="brand-mark">S</div>
+          <div className="brand-copy">
+            <span className="brand-copy__eyebrow">SokrAI v1</span>
+            <strong>Problem Definition Console</strong>
+            <span className="brand-copy__meta">Intake, structured brief y entrevista resumible.</span>
+          </div>
         </div>
 
-        <div className="hero__rail">
-          <div className="hero__note">
-            <span>Backplane</span>
-            <strong>n8n + Ollama + PostgreSQL + Fastify</strong>
-          </div>
-          <div className="hero__note">
-            <span>Lane operativo</span>
-            <strong>problem_definition_agent</strong>
-          </div>
-          <div className="hero__note">
-            <span>Contratos</span>
-            <strong>source of truth en `contracts/schemas`</strong>
-          </div>
-        </div>
+        <div className="topbar-chip">UI alineada con "Interview Mode Selection"</div>
       </header>
 
-      {banner ? (
-        <div className={`banner banner--${banner.tone}`}>{banner.text}</div>
-      ) : null}
+      {banner ? <div className={`flash-banner flash-banner--${banner.tone}`}>{banner.text}</div> : null}
 
-      <main className="main-grid">
-        <NewProposalPanel isSubmitting={isSubmittingStart} onSubmit={handleStart} />
-        <ContinueSessionPanel
-          defaultSessionId={defaultSessionId}
-          isLoading={isLoadingSession}
-          recentSessions={recentSessions}
-          onLoad={loadSession}
-        />
-      </main>
+      <main className="mode-page">
+        <nav className="mode-breadcrumbs" aria-label="breadcrumbs">
+          <span>SokrAI</span>
+          <span>/</span>
+          <span>Problem Definition</span>
+          <span>/</span>
+          <span>Interview mode</span>
+        </nav>
 
-      {presentation && activeAudit ? (
-        <SessionWorkspace
-          audit={activeAudit}
-          isReplying={isReplying}
-          onReply={handleReply}
-          presentation={presentation}
-        />
-      ) : (
-        <section className="workspace workspace--empty">
-          <div className="workspace-card">
-            <div className="workspace-card__header">
-              <h2>Sin sesión cargada todavía</h2>
-              <p>
-                Crea una propuesta nueva o recupera una sesión existente para
-                inspeccionar brief, gaps, warnings y trazabilidad.
-              </p>
+        <section className="mode-hero">
+          <div className="mode-hero__visual" aria-hidden="true">
+            <div className="mode-hero__pulse" />
+            <div className="mode-hero__orb">AI</div>
+            <div className="mode-hero__presence">
+              <span />
             </div>
           </div>
-        </section>
-      )}
 
-      <footer className="footer">
-        <span>Demo local recomendada con `pnpm --filter @sokrai/web dev` o `docker compose up web`.</span>
-        <span>Servicios esperados: `localhost:3000`, `localhost:3001`, `localhost:5678`.</span>
-      </footer>
+          <span className="panel__eyebrow">AI evaluator ready</span>
+          <h1>Selecciona cómo abrir la entrevista de maduración</h1>
+          <p>
+            La propuesta nueva crea la sesión y deja la primera pregunta lista. Si ya tienes
+            un `session_id`, puedes reabrir el chat, los snapshots y el estado persistido sin perder el contexto.
+          </p>
+        </section>
+
+        <section className="mode-grid" aria-label="modes">
+          <ModeCard
+            activeMode={selectedMode}
+            callout="Recomendado para contexto nuevo y PDFs"
+            cta="Crear sesión"
+            description="Empieza con una propuesta estructurada y deja que la v1 construya el brief inicial antes del primer turno socrático."
+            mode="start"
+            onSelect={setSelectedMode}
+            title="Nueva propuesta"
+          />
+
+          <ModeCard
+            activeMode={selectedMode}
+            callout={defaultSessionId ? 'Última sesión detectada automáticamente' : 'Ideal para demos y reanudación'}
+            cta="Abrir sesión"
+            description="Retoma una conversación existente con su historial real de turnos, snapshots, runs y checklist del problema."
+            mode="resume"
+            onSelect={setSelectedMode}
+            title="Continuar sesión"
+          />
+        </section>
+
+        <section className="detail-shell">
+          {isSubmittingStart ? (
+            <WorkflowLoadingPanel kind="start" />
+          ) : selectedMode === 'start' ? (
+            <NewProposalPanel isSubmitting={isSubmittingStart} onSubmit={handleStart} />
+          ) : (
+            <ContinueSessionPanel
+              defaultSessionId={defaultSessionId}
+              isLoading={isLoadingSession}
+              recentSessions={recentSessions}
+              onLoad={loadSession}
+            />
+          )}
+        </section>
+
+        <div className="trust-note">
+          Todas las sesiones quedan auditadas por `session_id` y el flujo está pensado para trabajo operable:
+          estado claro, foco visible y reanudación rápida.
+        </div>
+      </main>
     </div>
   );
 }
