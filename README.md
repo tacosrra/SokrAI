@@ -1,47 +1,77 @@
-# SokrAI v1
+# SokrAI v1 — Estado del proyecto (2026-04-29)
 
-Middleware de maduracion de propuestas antes de comite, orientado a demostrar una sola capacidad de forma solida en v1:
-
-> digerir una propuesta inicial, construir un `structured_brief` y conducir una conversacion socratica resumible para clarificar el problema.
+Middleware de maduracion de propuestas antes de comite, enfocado en demostrar una sola capacidad solida en v1: digerir una propuesta inicial, construir un `structured_brief` y conducir una conversacion socratica resumible para clarificar el problema.
 
 Guia detallada de arranque y prueba:
 
-- [docs/INICIALIZACION_V1.md](/home/tacosrra/PAE/docs/INICIALIZACION_V1.md)
+- `docs/INICIALIZACION_V1.md`
+
+## Estado actual (resumen)
+
+- La v1 esta implementada y es ejecutable localmente con Docker Compose.
+- El unico carril funcional es `problem_definition_agent`.
+- El flujo end-to-end incluye intake, extraccion de brief, turnos socraticos, persistencia completa y reanudacion por `session_id`.
+- Hay workflows n8n versionados en el repo y prompts versionados en archivos.
+- Se incluyen contratos JSON, migracion inicial y una UI de demo para operar el flujo sin curl.
 
 ## Alcance de esta v1
 
-- Orquestacion principal con `n8n`
-- Inferencia local con `Ollama`
-- Persistencia en `PostgreSQL`
-- Interfaz operativa en `apps/web` para demo local y uso humano
-- Un unico lane operativo: `problem_definition_agent`
-- Una pregunta principal por turno
-- Persistencia de sesiones, turnos, snapshots, agent runs y eventos
-- Reanudacion por `session_id`
-- Contratos JSON versionados y validados
+- Orquestacion principal con `n8n`.
+- Inferencia local con `Ollama`.
+- Persistencia en `PostgreSQL`.
+- Interfaz operativa en `apps/web` para demo local y uso humano.
+- Una pregunta principal por turno.
+- Persistencia de sesiones, turnos, snapshots, agent runs y eventos.
+- Reanudacion por `session_id`.
+- Contratos JSON versionados y validados.
 
-## Fuera de alcance
+## Fuera de alcance (deliberado)
 
-- Lane legal
-- Lane de costes
-- Scoring o priorizacion de comite
-- RAG complejo
-- OCR para PDFs escaneados
-- BI/dashboard amplio o superficies multi-lane fuera del carril `problem_definition`
+- Lane legal.
+- Lane de costes.
+- Scoring o priorizacion de comite.
+- RAG complejo.
+- OCR para PDFs escaneados.
+- BI/dashboard amplio o superficies multi-lane fuera del carril `problem_definition`.
 
-## Estructura
+## Stack tecnico
 
-```text
-apps/api                 Servicio Fastify con dominio, persistencia y adaptadores
-apps/web                 Frontend React + Vite para crear, responder y reanudar sesiones
-contracts/schemas        Source of truth de request/response y artefactos internos
-db/migrations            SQL versionado
-infra/n8n/workflows      Exportes versionados de n8n
-prompts/v1               Prompts versionados
-tests                    Contratos, dominio, integracion y smoke
-examples                 Payloads de ejemplo
-PLAN.md                  Plan de implementacion de esta v1
-```
+Backend y orquestacion:
+
+- Node.js 24+, TypeScript.
+- Fastify + Ajv para contratos JSON.
+- PostgreSQL con `pg`.
+- `n8n` para orquestacion y webhooks.
+- Ollama local para inferencia.
+
+Frontend:
+
+- React 19 + Vite.
+
+Infra y tooling:
+
+- Docker + Docker Compose.
+- pnpm (workspace).
+- Vitest para tests.
+
+## Arquitectura (v1)
+
+Componentes y responsabilidades:
+
+- `apps/api`: API Fastify con validacion de contratos, persistencia, prompts, dominio y ejecucion de agentes.
+- `apps/web`: UI de demo para crear, responder y reanudar sesiones.
+- `infra/n8n/workflows`: exports versionados de los workflows n8n.
+- `db/migrations`: migraciones SQL versionadas.
+- `contracts/schemas`: source of truth de request/response y artefactos internos.
+- `prompts/v1`: prompts versionados del agente.
+
+Flujo principal (alto nivel):
+
+1. `proposal_start_v1` recibe la propuesta (texto o PDF base64).
+2. n8n llama a la API para preparar el contexto y ejecutar el agente.
+3. La API normaliza, valida, persiste y llama a Ollama.
+4. Se guarda `structured_brief`, se crea el primer turno y se responde con una pregunta.
+5. `proposal_reply_v1` agrega respuestas del usuario y repite el ciclo hasta `agent_status = "done"`.
 
 ## Contratos principales
 
@@ -80,7 +110,7 @@ Salida:
 
 Los schemas canonicos viven en `contracts/schemas`.
 
-## Modelo de persistencia
+## Persistencia (modelo actual)
 
 Tablas principales:
 
@@ -92,16 +122,35 @@ Tablas principales:
 
 Patron:
 
-- `proposal_sessions` es el head mutable
-- `session_snapshots` y `session_events` son historial append-only
-- `agent_runs` guarda prompt/model/schema/raw output por ejecucion
-- `conversation_turns` modela la conversacion de una pregunta por turno
+- `proposal_sessions` es el head mutable.
+- `session_snapshots` y `session_events` son historial append-only.
+- `agent_runs` guarda prompt/model/schema/raw output por ejecucion.
+- `conversation_turns` modela la conversacion de una pregunta por turno.
 
-## Arranque local
+## Workflows n8n (versionados)
 
-### Ruta rapida para beta testers
+- `infra/n8n/workflows/proposal_start_v1.json`
+- `infra/n8n/workflows/proposal_reply_v1.json`
+- `infra/n8n/workflows/agent_problem_definition_v1.json`
 
-Para reducir el setup manual sin tocar el flujo de desarrollo existente, esta v1 incluye un bootstrap aislado para beta:
+Entrypoints:
+
+- `POST /webhook/proposal-start-v1`
+- `POST /webhook/proposal-reply-v1`
+
+## UI operativa
+
+La UI en `apps/web` permite:
+
+- crear una nueva propuesta,
+- pegar `document_text` o subir PDF base64,
+- responder turnos,
+- reanudar por `session_id`,
+- inspeccionar brief, gaps, warnings y trazabilidad.
+
+## Arranque local (resumen)
+
+Ruta rapida para beta testers:
 
 ```bash
 ./scripts/bootstrap-beta.sh
@@ -113,187 +162,22 @@ En Windows nativo:
 powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap-beta.ps1
 ```
 
-Que hace:
-
-- crea `.env.beta` a partir de `.env.example`
-- genera secretos locales si siguen en placeholder
-- arranca `Docker Desktop` si ya esta instalado pero no esta corriendo
-- levanta el stack beta con contenedores fijos `postgres`, `ollama`, `api`, `n8n` y `web`
-- usa volumenes Docker dedicados para `postgres`, `ollama` y `n8n`
-- espera a que `PostgreSQL`, `Ollama`, `API`, `n8n` y `web` esten listos
-- descarga el modelo configurado en `OLLAMA_MODEL` con reintentos; si ya esta cacheado, lo reutiliza
-- ejecuta migraciones
-- importa y activa los workflows de `n8n`
-- abre la UI principal en el navegador al terminar
-
-Requisitos de esta ruta:
-
-- `Docker Desktop` o un daemon Docker accesible
-- `curl` y shell tipo `bash` en macOS, Linux o WSL
-- `PowerShell` en Windows nativo
-
-Para esta ruta beta no hace falta instalar `Node.js` ni `pnpm` en host.
-
-Si el pull de Ollama falla con `no such host`, el stack beta ya fuerza DNS publicos en el contenedor de `ollama`. Si aun asi tu red bloquea la descarga, puedes:
-
-- reintentar el bootstrap;
-- cambiar `OLLAMA_MODEL` a otro modelo que ya tengas cacheado;
-- o lanzar `SOKRAI_BETA_SKIP_OLLAMA_PULL=1 ./scripts/bootstrap-beta.sh` si el modelo ya existe en el volumen de `ollama`.
-
-Comandos posteriores:
-
-```bash
-./scripts/start-beta.sh
-./scripts/stop-beta.sh
-```
-
-En Windows nativo:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\start-beta.ps1
-powershell -ExecutionPolicy Bypass -File .\scripts\stop-beta.ps1
-```
-
-La ruta beta usa `.env.beta` y un proyecto Docker separado, asi que no pisa el flujo manual existente.
-
-### 1. Preparar entorno
+Ruta manual resumida:
 
 ```bash
 cp .env.example .env
 pnpm install --store-dir ./.pnpm-store
-```
-
-### 2. Levantar dependencias
-
-```bash
-docker compose up -d postgres n8n ollama
-```
-
-`Ollama` no se expone al host por defecto en esta v1. La API le habla por la red interna de Docker Compose, lo que evita conflictos habituales con instalaciones locales de Ollama en `11434`.
-
-`n8n` guarda su estado en un volumen gestionado por Docker, no en una carpeta bind-mounted del repo. Con eso evitamos errores de permisos frecuentes en WSL al escribir `/home/node/.n8n`.
-
-Esta v1 usa `{{$env.INTERNAL_SHARED_SECRET}}` dentro de nodos `HTTP Request` de n8n. Por eso el `docker-compose.yml` fija `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`; si ese valor falta, los workflows fallan con `access to env vars denied`.
-
-### 3. Cargar un modelo en Ollama
-
-```bash
-docker exec -it $(docker ps -qf "ancestor=ollama/ollama:latest") ollama pull qwen2.5:3b-instruct
-```
-
-`qwen2.5:3b-instruct` es ahora el valor por defecto recomendado para esta v1 local. Si tu maquina tiene mas margen y quieres priorizar calidad sobre latencia, puedes volver a `qwen2.5:7b-instruct` manualmente en `.env`.
-
-### 4. Aplicar migraciones
-
-```bash
+docker compose up -d postgres ollama api n8n web
 pnpm migrate
 ```
 
-### 5. Levantar la API
+Luego importa los workflows y abre:
 
-```bash
-pnpm dev
-```
+- UI: `http://localhost:3000`
+- API: `http://localhost:3001/healthz`
+- n8n: `http://localhost:5678`
 
-La API queda en `http://localhost:3001`.
-
-### 5.b Levantar el frontend
-
-Modo recomendado fuera de Docker:
-
-```bash
-pnpm dev:web
-```
-
-La UI queda en `http://localhost:3000`.
-
-Usa el proxy de Vite para hablar con:
-
-- `http://localhost:5678/webhook/*`
-- `http://localhost:3001/api/*`
-
-La UI tiene budgets de espera mas altos para el flujo real:
-
-- `VITE_START_SESSION_TIMEOUT_MS=960000`
-- `VITE_REPLY_SESSION_TIMEOUT_MS=540000`
-- `VITE_SESSION_AUDIT_TIMEOUT_MS=10000`
-- `VITE_REQUEST_STATUS_TIMEOUT_MS=10000`
-- `VITE_REQUEST_RECOVERY_TIMEOUT_MS=960000`
-
-No se recomienda quitar el timeout por completo. El primer diagnostico puede tardar mas porque encadena la extraccion del brief y la primera ejecucion del agente, pero si Ollama queda colgado la UI debe terminar mostrando un error controlado.
-
-La API tambien deja `OLLAMA_KEEP_ALIVE=30m` por defecto para que el modelo permanezca cargado entre la extraccion inicial y la primera pregunta, reduciendo cargas frias repetidas.
-
-Ademas, la extraccion inicial del brief usa un excerpt acotado por `BRIEF_EXTRACTION_MAX_CHARS=10000`. El texto completo se sigue persistiendo, pero no se manda entero al primer prompt de Ollama para evitar timeouts innecesarios en local.
-
-Ademas, la UI envia un `request_id` por cada start/reply y, si el navegador agota la espera inicial, consulta `GET /api/v1/requests/:requestId` para intentar recuperar el resultado final del workflow. Si detecta que la ejecucion quedo a medias, tambien puede disparar `POST /api/v1/requests/:requestId/recover` para completar el turno directamente desde la API usando el estado persistido.
-
-Si prefieres levantar toda la superficie de demo en Docker, añade `web` al `docker compose up`.
-
-### 6. Importar workflows n8n
-
-Archivos:
-
-- `infra/n8n/workflows/proposal_start_v1.json`
-- `infra/n8n/workflows/proposal_reply_v1.json`
-- `infra/n8n/workflows/agent_problem_definition_v1.json`
-
-Abre `http://localhost:5678`, importa los tres workflows y asegúrate de que `INTERNAL_SHARED_SECRET` coincide entre `.env`, la API y `n8n`.
-
-Los exports de workflow de esta version eliminan reintentos sincronos en nodos `HTTP Request` y propagan `statusCode + body` de la API al webhook para que un `ollama_timeout` o cualquier error controlado llegue a la UI como JSON consistente. Si reimportas los workflows, activa la nueva version exportada del repo.
-
-Si ejecutas `web` o `api` en Docker Compose, recuerda reconstruir esas imagenes tras cambiar el codigo; si ejecutas con Vite/tsx en local, reinicia ambos procesos para que se carguen los nuevos budgets y la recuperacion por `request_id`.
-
-No cambies `N8N_ENCRYPTION_KEY` una vez que `n8n` haya inicializado su volumen persistido. Si la clave del `.env` ya no coincide con la guardada en `/home/node/.n8n/config`, `n8n` no arrancara hasta que vuelvas a poner la clave original o resetees el volumen de `n8n`.
-
-## Endpoints y workflows
-
-### Webhooks n8n
-
-- `POST /webhook/proposal-start-v1`
-- `POST /webhook/proposal-reply-v1`
-
-### Endpoint interno reutilizable
-
-- `POST /webhook/agent-problem-definition-v1`
-
-### API interna para n8n
-
-- `POST /internal/sessions/start-context`
-- `POST /internal/sessions/append-reply`
-- `POST /internal/agents/problem-definition/run`
-
-### API de inspeccion
-
-- `GET /api/v1/sessions/:sessionId`
-- `GET /api/v1/requests/:requestId`
-- `POST /api/v1/requests/:requestId/recover`
-- `GET /healthz`
-
-### UI operativa
-
-- `http://localhost:3000`
-- Crear nueva propuesta
-- Pegar `document_text`
-- Subir PDF en base64
-- Reanudar por `session_id`
-- Inspeccionar `brief`, `gaps`, `warnings`, timeline y trazabilidad
-
-## Ejemplos
-
-Payloads listos para prueba:
-
-- `examples/proposal-start.payload.json`
-- `examples/proposal-reply.payload.json`
-
-El flujo normal es:
-
-1. `proposal_start_v1`
-2. guardar `session_id`
-3. responder con `proposal_reply_v1`
-4. repetir hasta `agent_status = "done"`
-
-## Tests
+## Tests disponibles
 
 ```bash
 pnpm test:contracts
