@@ -28,6 +28,8 @@ export class ProposalStartService {
   async execute(command: StartContextCommand): Promise<StartContextResponse> {
     const payload = assertProposalStartRequest(command.payload);
     const requestId = command.context.requestId;
+    // payload.specialty takes precedence; command.specialty is the fallback from the n8n envelope.
+    const specialty = payload.specialty ?? command.specialty;
 
     if (requestId) {
       const existingSession = await this.sessionStore.findSessionByStartRequestId(requestId);
@@ -104,6 +106,7 @@ export class ProposalStartService {
           metadata: payload.metadata ?? {},
           structuredBrief: briefResult.output,
           initialProblemDefinition,
+          specialty,
         });
 
         await this.sessionStore.insertEvent(client, {
@@ -172,6 +175,7 @@ export class ProposalStartService {
               detected_gaps: detectedGaps,
             }),
           ),
+          specialty,
         });
 
         await this.sessionStore.insertEvent(client, {

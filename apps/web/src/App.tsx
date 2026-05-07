@@ -8,6 +8,7 @@ import {
   fetchSessionAudit,
   replySession,
   startSession,
+  switchSessionSpecialty,
 } from './lib/api';
 import { mapApiError } from './lib/feedback';
 import { deriveSessionPresentation } from './lib/session-view';
@@ -208,6 +209,7 @@ export function App() {
   const [isSubmittingStart, setIsSubmittingStart] = useState(false);
   const [isLoadingSession, setIsLoadingSession] = useState(false);
   const [isReplying, setIsReplying] = useState(false);
+  const [isSwitchingSpecialty, setIsSwitchingSpecialty] = useState(false);
   const [banner, setBanner] = useState<BannerState | null>(null);
 
   useEffect(() => {
@@ -489,6 +491,28 @@ export function App() {
     }
   }
 
+  async function handleSwitchSpecialty(specialty: 'default' | 'legal') {
+    if (!activeAudit) return;
+
+    setIsSwitchingSpecialty(true);
+    setBanner({
+      tone: 'info',
+      text: `Cambiando agente a ${specialty === 'legal' ? 'Legal' : 'Planificador'}…`,
+    });
+
+    try {
+      await switchSessionSpecialty(activeAudit.session.id, specialty);
+      await loadSession(activeAudit.session.id, {
+        successMessage: `Agente cambiado a ${specialty === 'legal' ? 'Legal' : 'Planificador'}. El contexto se ha reiniciado.`,
+        skipBannerOnStart: true,
+      });
+    } catch (error) {
+      setBanner({ tone: 'error', text: mapApiError(error) });
+    } finally {
+      setIsSwitchingSpecialty(false);
+    }
+  }
+
   function handleStartFreshSession() {
     setActiveAudit(null);
     setBanner(null);
@@ -622,7 +646,9 @@ export function App() {
             <SessionWorkspace
               audit={activeAudit}
               isReplying={isReplying}
+              isSwitchingSpecialty={isSwitchingSpecialty}
               onReply={handleReply}
+              onSwitchSpecialty={handleSwitchSpecialty}
               presentation={presentation}
             />
           </section>

@@ -49,6 +49,7 @@ export interface ProposalStartRequest {
   document_text?: string;
   file?: ProposalStartFile;
   metadata?: Record<string, unknown>;
+  specialty?: 'default' | 'legal';
 }
 
 export interface ProposalStartResponse {
@@ -110,6 +111,8 @@ export interface SessionRecord {
   latest_snapshot_id: string | null;
   latest_successful_run_id: string | null;
   completion_reason: string | null;
+  specialty: 'default' | 'legal' | null;
+  current_specialty: 'default' | 'legal' | null;
 }
 
 export interface ConversationTurn {

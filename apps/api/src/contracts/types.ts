@@ -46,6 +46,7 @@ export interface ProposalStartRequest {
   document_text?: string;
   file?: ProposalStartFile;
   metadata?: Record<string, unknown>;
+  specialty?: 'default' | 'legal';
 }
 
 export interface ProposalStartResponse {

@@ -238,6 +238,25 @@ export async function fetchRequestExecution(requestId: string): Promise<RequestE
   });
 }
 
+const INTERNAL_SHARED_SECRET = (import.meta.env.VITE_INTERNAL_SHARED_SECRET as string | undefined) ?? '';
+
+export async function switchSessionSpecialty(
+  sessionId: string,
+  specialty: 'default' | 'legal',
+): Promise<{ session_id: string; current_specialty: string; context_reset_at: string }> {
+  return requestJson({
+    url: joinUrl(API_BASE_URL, '/internal/sessions/switch-specialty'),
+    method: 'POST',
+    payload: { session_id: sessionId, specialty },
+    headers: {
+      'x-internal-shared-secret': INTERNAL_SHARED_SECRET,
+    },
+    timeoutMs: SESSION_AUDIT_TIMEOUT_MS,
+    parse: (value) =>
+      value as { session_id: string; current_specialty: string; context_reset_at: string },
+  });
+}
+
 export async function recoverRequestExecution(requestId: string): Promise<RequestExecutionResponse> {
   return requestJson({
     url: joinUrl(API_BASE_URL, `/api/v1/requests/${encodeURIComponent(requestId)}/recover`),

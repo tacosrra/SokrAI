@@ -9,6 +9,7 @@ import type {
 } from '../contracts/types';
 import type { AppConfig } from '../config/env';
 import { enforceTurnGuardrails, evaluateCompletion } from '../domain/problem-definition';
+import type { RagModule } from '../rag';
 import type {
   AgentRunRecord,
   ConversationTurnRecord,
@@ -31,6 +32,7 @@ export class ProblemDefinitionService {
     private readonly logger: Logger,
     private readonly sessionStore: SessionStore,
     private readonly llmOrchestrator: LlmOrchestrator,
+    private readonly rag?: Pick<RagModule, 'retrieval' | 'buildSourcesBlock'>,
   ) {}
 
   async execute(command: RunProblemDefinitionCommand): Promise<ProblemDefinitionRunResponse> {
@@ -76,21 +78,44 @@ export class ProblemDefinitionService {
     }
 
     const recentTurns = (
-      await this.sessionStore.listRecentResolvedTurns(command.sessionId, 5)
+      await this.sessionStore.listRecentResolvedTurns(command.sessionId, 5, undefined, session.context_reset_at)
     ).map((turn) => ({
       question_text: turn.question_text,
       answer_text: turn.answer_text,
       diagnosis: turn.diagnosis_json,
     }));
 
+    const effectiveSpecialty = session.current_specialty ?? session.specialty ?? undefined;
+
+    let retrievalContext: string | undefined;
+    if (effectiveSpecialty === 'legal' && this.rag) {
+      try {
+        const ragResult = await this.rag.retrieval.retrieve({
+          requester: 'problem_definition_agent_legal',
+          requesterRef: command.sessionId,
+          query: openTurn?.answer_text ?? session.latest_structured_brief_json.problem_statement,
+          packs: ['legal'],
+          topK: 5,
+        });
+        retrievalContext = this.rag.buildSourcesBlock(ragResult.chunks);
+      } catch (ragError) {
+        this.logger.warn('legal_retrieval_failed', {
+          session_id: command.sessionId,
+          error_message: ragError instanceof Error ? ragError.message : 'unknown',
+        });
+      }
+    }
+
     try {
       const modelTurn = await this.llmOrchestrator.runProblemDefinition({
         structuredBrief: session.latest_structured_brief_json,
         recentTurns,
         latestAnswer: openTurn?.answer_text ?? undefined,
+        specialty: effectiveSpecialty,
+        retrievalContext,
       });
 
-      const guarded = this.prepareGuardedTurn(session.latest_structured_brief_json, modelTurn.output, openTurn?.answer_text ?? undefined);
+      const guarded = this.prepareGuardedTurn(session.latest_structured_brief_json, modelTurn.output, openTurn?.answer_text ?? undefined, effectiveSpecialty);
 
       if (
         guarded.turn.agent_status !== 'done' &&
@@ -163,6 +188,7 @@ export class ProblemDefinitionService {
             status: 'completed',
             repairAttempted: modelTurn.repairAttempted,
             metricsJson: modelTurn.metrics,
+            specialty: effectiveSpecialty,
           });
 
           await this.sessionStore.insertEvent(client, {
@@ -189,6 +215,7 @@ export class ProblemDefinitionService {
             runId: run.id,
             requestId,
             trigger: command.trigger,
+            specialty: effectiveSpecialty,
           });
         });
     } catch (error) {
@@ -214,8 +241,9 @@ export class ProblemDefinitionService {
     brief: StructuredBrief,
     turn: ProblemDefinitionTurn,
     latestAnswer?: string,
+    specialty?: 'default' | 'legal',
   ) {
-    return enforceTurnGuardrails(brief, turn, latestAnswer);
+    return enforceTurnGuardrails(brief, turn, latestAnswer, specialty);
   }
 
   private async findExistingResponse(
@@ -263,6 +291,7 @@ export class ProblemDefinitionService {
     runId: string;
     requestId: string;
     trigger: 'start' | 'reply';
+    specialty?: 'default' | 'legal';
   }): Promise<ProblemDefinitionRunResponse> {
     const nextStateVersion = params.session.state_version + 1;
     const sessionStatus =
@@ -331,6 +360,7 @@ export class ProblemDefinitionService {
           agent_status: params.guardedTurn.agent_status,
         }),
       ),
+      specialty: params.specialty,
     });
 
     await this.sessionStore.insertEvent(params.client, {

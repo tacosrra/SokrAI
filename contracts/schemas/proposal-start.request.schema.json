@@ -54,6 +54,10 @@
     },
     "metadata": {
       "type": "object"
+    },
+    "specialty": {
+      "type": "string",
+      "enum": ["default", "legal"]
     }
   },
   "required": [

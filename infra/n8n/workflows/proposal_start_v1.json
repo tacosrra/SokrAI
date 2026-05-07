@@ -64,7 +64,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { request_id: $json.request_id, workflow_version: $json.workflow_version, workflow_execution_id: $execution.id, payload: $node[\"Webhook_StartProposal\"].json.body } }}",
+        "jsonBody": "={{ { request_id: $json.request_id, workflow_version: $json.workflow_version, workflow_execution_id: $execution.id, specialty: $node[\"Webhook_StartProposal\"].json.body.specialty, payload: $node[\"Webhook_StartProposal\"].json.body } }}",
         "options": {
           "timeout": 450000,
           "response": {

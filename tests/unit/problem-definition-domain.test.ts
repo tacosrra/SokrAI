@@ -84,4 +84,79 @@ describe('problem definition domain rules', () => {
     expect(guarded.turn.next_question).toBe(buildFallbackQuestion(guarded.updatedProblemDefinition));
     expect(guarded.warnings.length).toBeGreaterThan(0);
   });
+
+  it('replaces a question containing "legal" for the default specialty', () => {
+    const turn: ProblemDefinitionTurn = {
+      agent_status: 'continue',
+      diagnosis: ['Falta el responsable'],
+      updated_problem_definition: {
+        problem_owner: '',
+        problem_statement: 'El triaje inicial se retrasa',
+        evidence_of_problem: '',
+        scope: '',
+        current_alternatives: '',
+        assumptions: [],
+        ambiguities_remaining: ['No esta claro quien responde hoy'],
+      },
+      next_question: '¿Qué marco legal aplica a este proyecto?',
+      completion_reason: '',
+    };
+
+    const guarded = enforceTurnGuardrails(baseBrief, turn, undefined, 'default');
+
+    expect(guarded.warnings).toContain(
+      'Model drifted into a forbidden topic; question was replaced with a fallback',
+    );
+    expect(guarded.turn.next_question).not.toContain('legal');
+  });
+
+  it('does NOT replace a question containing "legal" for the legal specialty', () => {
+    const turn: ProblemDefinitionTurn = {
+      agent_status: 'continue',
+      diagnosis: ['Falta el marco regulatorio'],
+      updated_problem_definition: {
+        problem_owner: '',
+        problem_statement: 'El triaje inicial se retrasa',
+        evidence_of_problem: '',
+        scope: '',
+        current_alternatives: '',
+        assumptions: [],
+        ambiguities_remaining: ['No esta claro el marco legal aplicable'],
+      },
+      next_question: '¿Qué marco legal o regulatorio aplica a este proyecto?',
+      completion_reason: '',
+    };
+
+    const guarded = enforceTurnGuardrails(baseBrief, turn, undefined, 'legal');
+
+    expect(guarded.warnings).not.toContain(
+      'Model drifted into a forbidden topic; question was replaced with a fallback',
+    );
+    expect(guarded.turn.next_question).toContain('legal');
+  });
+
+  it('still replaces a cost question for the legal specialty', () => {
+    const turn: ProblemDefinitionTurn = {
+      agent_status: 'continue',
+      diagnosis: ['Falta el responsable'],
+      updated_problem_definition: {
+        problem_owner: '',
+        problem_statement: 'El triaje inicial se retrasa',
+        evidence_of_problem: '',
+        scope: '',
+        current_alternatives: '',
+        assumptions: [],
+        ambiguities_remaining: ['No esta claro quien responde hoy'],
+      },
+      next_question: '¿Cuál es el cost estimado del proyecto?',
+      completion_reason: '',
+    };
+
+    const guarded = enforceTurnGuardrails(baseBrief, turn, undefined, 'legal');
+
+    expect(guarded.warnings).toContain(
+      'Model drifted into a forbidden topic; question was replaced with a fallback',
+    );
+    expect(guarded.turn.next_question).not.toContain('cost');
+  });
 });

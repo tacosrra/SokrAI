@@ -14,7 +14,19 @@ const PROMPT_FILES = {
   'extract-initial-brief': 'extract-initial-brief.md',
   'json-repair': 'json-repair.md',
   'problem-definition-agent': 'problem-definition-agent.md',
+  'problem-definition-agent-legal': 'problem-definition-agent-legal.md',
 } as const;
+
+export type Specialty = 'default' | 'legal';
+
+export function resolveProblemDefinitionPromptName(
+  specialty?: Specialty | null,
+): keyof typeof PROMPT_FILES {
+  if (specialty === 'legal') {
+    return 'problem-definition-agent-legal';
+  }
+  return 'problem-definition-agent';
+}
 
 export async function loadPrompt(
   name: keyof typeof PROMPT_FILES,

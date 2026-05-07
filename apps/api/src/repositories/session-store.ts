@@ -25,6 +25,9 @@ export interface SessionRecord {
   latest_snapshot_id: string | null;
   latest_successful_run_id: string | null;
   completion_reason: string | null;
+  specialty: 'default' | 'legal' | null;
+  current_specialty: 'default' | 'legal' | null;
+  context_reset_at: string | null;
 }
 
 export interface ConversationTurnRecord {
@@ -39,6 +42,7 @@ export interface ConversationTurnRecord {
   diagnosis_json: string[];
   updated_problem_definition_json: ProblemDefinitionState | null;
   completion_reason: string | null;
+  created_at: string;
 }
 
 export interface AgentRunRecord {
@@ -57,6 +61,7 @@ export interface AgentRunRecord {
   status: 'completed' | 'validation_failed' | 'repair_failed' | 'model_failed' | 'controlled_error';
   error_code?: string | null;
   error_message?: string | null;
+  specialty: 'default' | 'legal' | null;
 }
 
 export interface SnapshotRecord {
@@ -73,6 +78,7 @@ export interface SnapshotRecord {
   agent_status: 'continue' | 'done' | 'blocked';
   completion_reason: string | null;
   warnings_json: string[];
+  specialty: 'default' | 'legal' | null;
 }
 
 export interface RequestExecutionLookup {
@@ -184,6 +190,7 @@ export class SessionStore {
     sessionId: string,
     limit: number,
     executor?: SqlExecutor,
+    contextResetAt?: string | null,
   ): Promise<ConversationTurnRecord[]> {
     const queryable = executor ?? this.database;
     const result = await runQuery<ConversationTurnRecord>(
@@ -192,10 +199,11 @@ export class SessionStore {
         'SELECT *',
         'FROM conversation_turns',
         'WHERE session_id = $1 AND status = \'resolved\'',
+        'AND ($3::timestamptz IS NULL OR created_at > $3)',
         'ORDER BY turn_seq DESC',
         'LIMIT $2',
       ].join(' '),
-      [sessionId, limit],
+      [sessionId, limit, contextResetAt ?? null],
     );
 
     return result.rows;
@@ -215,6 +223,7 @@ export class SessionStore {
       metadata: Record<string, unknown>;
       structuredBrief: StructuredBrief;
       initialProblemDefinition: ProblemDefinitionState | Record<string, never>;
+      specialty?: 'default' | 'legal';
     },
   ): Promise<SessionRecord> {
     const result = await client.query<SessionRecord>(
@@ -222,8 +231,9 @@ export class SessionStore {
         'INSERT INTO proposal_sessions (',
         '  start_request_id, user_id, project_title, goal, raw_input_text, raw_input_file_name,',
         '  raw_input_file_sha256, normalized_text, metadata_json, status,',
-        '  latest_structured_brief_json, latest_problem_definition_json',
-        ') VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
+        '  latest_structured_brief_json, latest_problem_definition_json,',
+        '  specialty, current_specialty',
+        ') VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)',
         'RETURNING *',
       ].join(' '),
       [
@@ -239,6 +249,8 @@ export class SessionStore {
         'active',
         toJson(params.structuredBrief),
         toJson(params.initialProblemDefinition),
+        params.specialty ?? null,
+        params.specialty ?? null,
       ],
     );
 
@@ -274,6 +286,7 @@ export class SessionStore {
       errorMessage?: string;
       repairAttempted?: boolean;
       metricsJson?: Record<string, unknown>;
+      specialty?: 'default' | 'legal';
     },
   ): Promise<AgentRunRecord> {
     const result = await client.query<AgentRunRecord>(
@@ -282,9 +295,9 @@ export class SessionStore {
         '  session_id, turn_seq, parent_run_id, request_id, run_purpose, agent_name, workflow_name, workflow_version,',
         '  workflow_execution_id, attempt_no, prompt_name, prompt_version, prompt_sha256, model_name,',
         '  input_contract_name, input_contract_version, output_contract_name, output_contract_version,',
-        '  input_payload_json, raw_model_output, validated_output_json, status, error_code, error_message, repair_attempted, metrics_json, finished_at',
-        ') VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, NOW())',
-        'RETURNING id, session_id, turn_seq, request_id, run_purpose, agent_name, prompt_name, prompt_version, prompt_sha256, model_name, raw_model_output, validated_output_json, status',
+        '  input_payload_json, raw_model_output, validated_output_json, status, error_code, error_message, repair_attempted, metrics_json, specialty, finished_at',
+        ') VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, NOW())',
+        'RETURNING id, session_id, turn_seq, request_id, run_purpose, agent_name, prompt_name, prompt_version, prompt_sha256, model_name, raw_model_output, validated_output_json, status, specialty',
       ].join(' '),
       [
         params.sessionId,
@@ -313,6 +326,7 @@ export class SessionStore {
         params.errorMessage ?? null,
         params.repairAttempted ?? false,
         toJson(params.metricsJson ?? {}),
+        params.specialty ?? null,
       ],
     );
 
@@ -337,6 +351,7 @@ export class SessionStore {
       completionReason?: string;
       warnings: string[];
       snapshotHash: string;
+      specialty?: 'default' | 'legal';
     },
   ): Promise<SnapshotRecord> {
     const snapshotSeq = await this.getNextSnapshotSeq(client, params.sessionId);
@@ -345,9 +360,9 @@ export class SessionStore {
         'INSERT INTO session_snapshots (',
         '  session_id, snapshot_seq, state_version, based_on_snapshot_id, source_turn_seq, source_run_id, snapshot_kind,',
         '  current_stage, current_agent, session_status, structured_brief_json, current_problem_definition_json, detected_gaps_json,',
-        '  next_question_text, agent_status, completion_reason, warnings_json, snapshot_hash',
-        ') VALUES ($1, $2, $3, $4, $5, $6, $7, \'problem_definition\', \'problem_definition_agent\', $8, $9, $10, $11, $12, $13, $14, $15, $16)',
-        'RETURNING id, session_id, snapshot_seq, state_version, source_turn_seq, source_run_id, structured_brief_json, current_problem_definition_json, detected_gaps_json, next_question_text, agent_status, completion_reason, warnings_json',
+        '  next_question_text, agent_status, completion_reason, warnings_json, snapshot_hash, specialty',
+        ') VALUES ($1, $2, $3, $4, $5, $6, $7, \'problem_definition\', \'problem_definition_agent\', $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)',
+        'RETURNING id, session_id, snapshot_seq, state_version, source_turn_seq, source_run_id, structured_brief_json, current_problem_definition_json, detected_gaps_json, next_question_text, agent_status, completion_reason, warnings_json, specialty',
       ].join(' '),
       [
         params.sessionId,
@@ -366,6 +381,7 @@ export class SessionStore {
         params.completionReason ?? null,
         toJson(params.warnings),
         params.snapshotHash,
+        params.specialty ?? null,
       ],
     );
 
@@ -499,6 +515,26 @@ export class SessionStore {
         params.latestSuccessfulRunId ?? null,
         params.completionReason ?? null,
       ],
+    );
+
+    return result.rows[0];
+  }
+
+  async updateSessionSpecialty(
+    client: PoolClient,
+    params: {
+      sessionId: string;
+      specialty: 'default' | 'legal';
+    },
+  ): Promise<SessionRecord> {
+    const result = await client.query<SessionRecord>(
+      [
+        'UPDATE proposal_sessions',
+        'SET current_specialty = $2, context_reset_at = NOW()',
+        'WHERE id = $1',
+        'RETURNING *',
+      ].join(' '),
+      [params.sessionId, params.specialty],
     );
 
     return result.rows[0];

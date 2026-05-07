@@ -17,6 +17,7 @@ interface FormState {
   metadataText: string;
   file: ProposalStartRequest['file'];
   fileName: string;
+  specialty: 'default' | 'legal';
 }
 
 const initialState: FormState = {
@@ -28,6 +29,7 @@ const initialState: FormState = {
   metadataText: '',
   file: undefined,
   fileName: '',
+  specialty: 'default',
 };
 
 export function NewProposalPanel({
@@ -119,6 +121,7 @@ export function NewProposalPanel({
       file: form.file,
       user_id: userId || undefined,
       metadata,
+      specialty: form.specialty === 'default' ? undefined : form.specialty,
     });
   }
 
@@ -227,6 +230,34 @@ export function NewProposalPanel({
             />
           </label>
         </div>
+
+        <fieldset className="field field--radio-group" disabled={isSubmitting}>
+          <legend className="field__label">Especialidad del agente</legend>
+          <div className="radio-group">
+            <label className="radio-option">
+              <input
+                type="radio"
+                name="specialty"
+                value="default"
+                checked={form.specialty === 'default'}
+                onChange={() => updateField('specialty', 'default')}
+                disabled={isSubmitting}
+              />
+              <span>Definición de problema (por defecto)</span>
+            </label>
+            <label className="radio-option">
+              <input
+                type="radio"
+                name="specialty"
+                value="legal"
+                checked={form.specialty === 'legal'}
+                onChange={() => updateField('specialty', 'legal')}
+                disabled={isSubmitting}
+              />
+              <span>Clarificación legal</span>
+            </label>
+          </div>
+        </fieldset>
 
         {error ? <div className="feedback feedback--error">{error}</div> : null}
 

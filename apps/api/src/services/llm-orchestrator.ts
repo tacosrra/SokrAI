@@ -8,7 +8,7 @@ import type { ProblemDefinitionTurn, StructuredBrief } from '../contracts/types'
 import type { AppConfig } from '../config/env';
 import { ModelOutputError } from '../utils/errors';
 import type { LanguageModelClient, ModelCompletionResult } from './ollama-client';
-import { loadPrompt, type PromptAsset } from './prompt-service';
+import { loadPrompt, resolveProblemDefinitionPromptName, type PromptAsset, type Specialty } from './prompt-service';
 
 function safeJsonParse(input: string): unknown {
   return JSON.parse(input);
@@ -64,9 +64,13 @@ export class LlmOrchestrator {
     structuredBrief: StructuredBrief;
     recentTurns: Array<{ question_text: string; answer_text: string | null; diagnosis: string[] }>;
     latestAnswer?: string;
+    specialty?: Specialty | null;
+    retrievalContext?: string;
   }): Promise<GenerationResult<ProblemDefinitionTurn>> {
-    const prompt = await loadPrompt('problem-definition-agent');
-    const userPrompt = [
+    const promptName = resolveProblemDefinitionPromptName(input.specialty);
+    const prompt = await loadPrompt(promptName);
+
+    const userPromptParts = [
       'Return a single bounded problem-definition turn.',
       '',
       `Output schema id: ${schemaIds.problemDefinitionTurn}`,
@@ -81,7 +85,13 @@ export class LlmOrchestrator {
         null,
         2,
       ),
-    ].join('\n');
+    ];
+
+    if (input.retrievalContext) {
+      userPromptParts.push('', input.retrievalContext);
+    }
+
+    const userPrompt = userPromptParts.join('\n');
 
     return this.generateWithRepair<ProblemDefinitionTurn>({
       prompt,

@@ -7,14 +7,18 @@ import { StatusBadge, agentTone, sessionTone } from './StatusBadge';
 interface SessionWorkspaceProps {
   audit: SessionAuditView;
   isReplying: boolean;
+  isSwitchingSpecialty: boolean;
   onReply: (answer: string) => Promise<void>;
+  onSwitchSpecialty: (specialty: 'default' | 'legal') => Promise<void>;
   presentation: SessionPresentation;
 }
 
 export function SessionWorkspace({
   audit,
   isReplying,
+  isSwitchingSpecialty,
   onReply,
+  onSwitchSpecialty,
   presentation,
 }: SessionWorkspaceProps) {
   const [reply, setReply] = useState('');
@@ -52,6 +56,7 @@ export function SessionWorkspace({
     presentation.status === 'waiting_for_user' ||
     presentation.status === 'active';
   const resolvedTurns = audit.turns.filter((turn) => Boolean(turn.answer_text?.trim())).length;
+  const currentSpecialty = audit.session.current_specialty ?? audit.session.specialty ?? 'default';
 
   return (
     <section className="conversation-shell">
@@ -108,6 +113,31 @@ export function SessionWorkspace({
             <span>Snapshots</span>
             <strong>{presentation.snapshotCount}</strong>
           </article>
+        </div>
+
+        <div className="conversation-toolbar__specialty">
+          <span className="conversation-toolbar__specialty-label">Agente activo</span>
+          {currentSpecialty === 'legal' && (
+            <span className="specialty-badge specialty-badge--legal">Legal</span>
+          )}
+          <div className="specialty-toggle">
+            <button
+              className={`specialty-toggle__option ${currentSpecialty !== 'legal' ? 'specialty-toggle__option--active' : ''}`}
+              type="button"
+              onClick={() => void onSwitchSpecialty('default')}
+              disabled={isSwitchingSpecialty || isReplying || currentSpecialty !== 'legal'}
+            >
+              Planificador
+            </button>
+            <button
+              className={`specialty-toggle__option ${currentSpecialty === 'legal' ? 'specialty-toggle__option--active' : ''}`}
+              type="button"
+              onClick={() => void onSwitchSpecialty('legal')}
+              disabled={isSwitchingSpecialty || isReplying || currentSpecialty === 'legal'}
+            >
+              Legal
+            </button>
+          </div>
         </div>
       </section>
 

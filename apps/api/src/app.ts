@@ -33,12 +33,15 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const llmOrchestrator = new LlmOrchestrator(config, llmClient);
   const proposalStartService = new ProposalStartService(config, logger, sessionStore, llmOrchestrator);
   const proposalReplyService = new ProposalReplyService(config, logger, sessionStore);
-  const problemDefinitionService = new ProblemDefinitionService(config, logger, sessionStore, llmOrchestrator);
   const rag = buildRagModule({
     config,
     database,
     logger,
     embeddingClient: options.embeddingClient,
+  });
+  const problemDefinitionService = new ProblemDefinitionService(config, logger, sessionStore, llmOrchestrator, {
+    retrieval: rag.retrieval,
+    buildSourcesBlock: rag.buildSourcesBlock,
   });
 
   const app = Fastify({
@@ -120,6 +123,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       request_id?: string;
       workflow_version?: string;
       workflow_execution_id?: string;
+      specialty?: 'default' | 'legal';
       payload: unknown;
     };
 
@@ -130,6 +134,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
         workflowExecutionId: body.workflow_execution_id,
       },
       payload: body.payload as never,
+      specialty: body.specialty,
     });
 
     return reply.send(result);
@@ -200,6 +205,40 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
         });
 
     return reply.send(response);
+  });
+
+  app.post('/internal/sessions/switch-specialty', async (request, reply) => {
+    assertInternalSecret(request);
+
+    const body = request.body as {
+      session_id: string;
+      specialty: 'default' | 'legal';
+    };
+
+    const session = await sessionStore.getDatabase().withTransaction(async (client) => {
+      const locked = await sessionStore.getSessionForUpdate(body.session_id, client);
+
+      if (locked.status === 'completed' || locked.status === 'failed') {
+        throw new AppError(
+          409,
+          'session_not_switchable',
+          'Cannot switch specialty on a completed or failed session',
+          false,
+          body.session_id,
+        );
+      }
+
+      return sessionStore.updateSessionSpecialty(client, {
+        sessionId: body.session_id,
+        specialty: body.specialty,
+      });
+    });
+
+    return reply.send({
+      session_id: session.id,
+      current_specialty: session.current_specialty,
+      context_reset_at: session.context_reset_at,
+    });
   });
 
   return app;

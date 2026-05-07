@@ -30,6 +30,7 @@ export interface ProblemDefinitionRunResponse extends ProposalReplyResponse {
 export interface StartContextCommand {
   context: WorkflowContext;
   payload: ProposalStartRequest;
+  specialty?: 'default' | 'legal';
 }
 
 export interface ReplyContextCommand {

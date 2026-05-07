@@ -23,6 +23,13 @@ const FORBIDDEN_TOPIC_PATTERNS = [
   /\bimplement/i,
 ];
 
+// Patterns that are topic-appropriate for the legal specialty and must NOT be
+// treated as forbidden when specialty === 'legal'.
+const LEGAL_DOMAIN_PATTERNS: ReadonlySet<RegExp> = new Set([
+  FORBIDDEN_TOPIC_PATTERNS[0], // /\blegal\b/i
+  FORBIDDEN_TOPIC_PATTERNS[1], // /\bregulator/i
+]);
+
 function isBlank(value: string): boolean {
   return value.trim().length === 0;
 }
@@ -181,6 +188,7 @@ export function enforceTurnGuardrails(
   brief: StructuredBrief,
   turn: ProblemDefinitionTurn,
   latestAnswer?: string,
+  specialty?: 'default' | 'legal' | null,
 ): {
   turn: ProblemDefinitionTurn;
   warnings: string[];
@@ -204,7 +212,11 @@ export function enforceTurnGuardrails(
   } = applyTurnToBrief(brief, normalizedTurn);
 
   const latestAnswerIsVague = latestAnswer ? isVagueAnswer(latestAnswer) : false;
-  const nextQuestionContainsForbiddenTopic = FORBIDDEN_TOPIC_PATTERNS.some((pattern) =>
+  const effectiveForbiddenPatterns =
+    specialty === 'legal'
+      ? FORBIDDEN_TOPIC_PATTERNS.filter((p) => !LEGAL_DOMAIN_PATTERNS.has(p))
+      : FORBIDDEN_TOPIC_PATTERNS;
+  const nextQuestionContainsForbiddenTopic = effectiveForbiddenPatterns.some((pattern) =>
     pattern.test(nextQuestion),
   );
 
