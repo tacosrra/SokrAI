@@ -1,0 +1,14 @@
+name: general_glossary
+description: Glosario general del proyecto SokrAI con términos en castellano y catalán
+primary_language: es
+embedding:
+  provider: ollama
+  model: bge-m3
+  dimension: 1024
+chunking:
+  strategy: markdown_first
+  target_tokens: 600
+  overlap_tokens: 100
+metadata:
+  domain: general
+  audience: equipo de producto

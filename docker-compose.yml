@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -25,8 +25,11 @@ services:
       DATABASE_URL: postgresql://sokrai_app:localpass@postgres:5432/sokrai_app
       OLLAMA_BASE_URL: http://ollama:11434
       APP_PORT: 3001
+      RAG_PACKS_DIR: /app/context-packs
     ports:
       - "127.0.0.1:3001:3001"
+    volumes:
+      - ./context-packs:/app/context-packs:ro
     depends_on:
       postgres:
         condition: service_healthy

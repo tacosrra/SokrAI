@@ -1,0 +1,13 @@
+name: sample_pack
+description: Pack determinista para tests del módulo RAG
+primary_language: es
+embedding:
+  provider: ollama
+  model: fake-embedder
+  dimension: 1024
+chunking:
+  strategy: markdown_first
+  target_tokens: 200
+  overlap_tokens: 40
+metadata:
+  domain: tests

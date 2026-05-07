@@ -179,13 +179,29 @@ Luego importa los workflows y abre:
 
 ## Tests disponibles
 
+Los tests de **integración** abren Postgres. Si lanzas Vitest desde el host y usas Docker Compose tal como viene el proyecto, Postgres escucha en **127.0.0.1:5433**, no en `5432`; el valor por defecto del helper de tests apunta a `localhost:5432`, así que verás errores tipo `ECONNREFUSED` (p. ej. en `smoke.test.ts` al llegar a `buildTestApp`).
+
+**Opciones:**
+
 ```bash
+# A) Una sola vez: copiar el ejemplo de URL para el puerto correcto del host
+cp .env.test.example .env.test   # PowerShell: Copy-Item .env.test.example .env.test
+# Luego revisa/edita TEST_DATABASE_URL si hace falta.
+
 pnpm test:contracts
 pnpm test:unit
 pnpm test:web
-TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pnpm test:integration
-TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pnpm test:smoke
+pnpm test:integration
+pnpm test:smoke
 ```
+
+```bash
+# B) Sin archivo .env.test: exportar la variable en la sesión
+TEST_DATABASE_URL=postgresql://sokrai_app:localpass@127.0.0.1:5433/sokrai_app pnpm test:integration
+TEST_DATABASE_URL=postgresql://sokrai_app:localpass@127.0.0.1:5433/sokrai_app pnpm test:smoke
+```
+
+*(Si tu `.env` ya tiene un `DATABASE_URL` válido **desde el host** para el mismo usuario y base de datos, Vitest también lo usará tras cargar `.env`.)*
 
 ## Decisiones importantes de v1
 
@@ -195,6 +211,23 @@ TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pn
 - Si el modelo devuelve JSON invalido, se intenta reparar una sola vez.
 - Si la reparacion falla, se devuelve error controlado y se persiste `raw_model_output`.
 - La reanudacion y trazabilidad salen de SQL, no de estado en memoria.
+
+## Modulo RAG (v1.5)
+
+A partir de esta version la API incluye un modulo lateral de RAG basado en
+`pgvector` y `bge-m3` via Ollama. Permite indexar documentos por dominio
+(legal, costes, glosarios) y buscarlos por similitud semantica en
+castellano, catalan e ingles.
+
+- Ingesta por CLI: `pnpm rag:ingest --pack <pack_name>`
+- Busqueda por CLI: `pnpm rag:search --pack <pack_name> --query "..."`
+- Inspeccion HTTP: `GET /api/v1/rag/packs`, `GET /api/v1/rag/search`
+
+El modulo es **independiente** del lane `problem_definition_agent`. No
+modifica prompts, contratos, schemas, workflows ni frontend de la v1
+existente.
+
+Guia detallada: [docs/RAG.md](docs/RAG.md).
 
 ## Limitaciones conocidas
 

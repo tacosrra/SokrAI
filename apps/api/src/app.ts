@@ -3,14 +3,11 @@ import crypto from 'node:crypto';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 
 import { loadConfig, type AppConfig } from './config/env';
-import {
-  assertErrorResponse,
-  assertProposalReplyResponse,
-  assertProposalStartResponse,
-  assertRequestExecutionResponse,
-} from './contracts/schema-registry';
+import { assertErrorResponse, assertProposalReplyResponse, assertProposalStartResponse } from './contracts/schema-registry';
+import { buildRagModule, type EmbeddingClient as RagEmbeddingClient } from './rag';
 import { Database } from './repositories/database';
 import { SessionStore } from './repositories/session-store';
+import { registerRagInspectionRoutes } from './routes/rag-inspection';
 import { LlmOrchestrator } from './services/llm-orchestrator';
 import { OllamaClient, type LanguageModelClient } from './services/ollama-client';
 import { ProblemDefinitionService } from './services/problem-definition-service';
@@ -24,6 +21,7 @@ export interface BuildAppOptions {
   logger?: Logger;
   database?: Database;
   languageModelClient?: LanguageModelClient;
+  embeddingClient?: RagEmbeddingClient;
 }
 
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
@@ -36,6 +34,12 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const proposalStartService = new ProposalStartService(config, logger, sessionStore, llmOrchestrator);
   const proposalReplyService = new ProposalReplyService(config, logger, sessionStore);
   const problemDefinitionService = new ProblemDefinitionService(config, logger, sessionStore, llmOrchestrator);
+  const rag = buildRagModule({
+    config,
+    database,
+    logger,
+    embeddingClient: options.embeddingClient,
+  });
 
   const app = Fastify({
     logger: false,
@@ -51,6 +55,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     proposalStartService,
     proposalReplyService,
     problemDefinitionService,
+    rag,
   });
 
   app.addHook('onClose', async () => {
@@ -106,22 +111,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     return sessionStore.getAuditView(params.sessionId);
   });
 
-  app.get('/api/v1/requests/:requestId', async (request, reply) => {
-    const params = request.params as { requestId: string };
-    const status = await sessionStore.getRequestExecutionStatus(params.requestId);
-    return reply.send(assertRequestExecutionResponse(status));
-  });
-
-  app.post('/api/v1/requests/:requestId/recover', async (request, reply) => {
-    const params = request.params as { requestId: string };
-    const status = await recoverRequestExecution({
-      requestId: params.requestId,
-      problemDefinitionService,
-      sessionStore,
-    });
-
-    return reply.send(assertRequestExecutionResponse(status));
-  });
+  registerRagInspectionRoutes(app, rag);
 
   app.post('/internal/sessions/start-context', async (request, reply) => {
     assertInternalSecret(request);

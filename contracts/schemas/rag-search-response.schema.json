@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sokrai.local/contracts/schemas/rag-search-response.schema.json",
+  "title": "RagSearchResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "retrieval_id": { "type": "string", "minLength": 1 },
+    "embedding_provider": { "type": "string" },
+    "embedding_model": { "type": "string" },
+    "latency_ms": { "type": "integer", "minimum": 0 },
+    "chunks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "chunk_id": { "type": "string" },
+          "document_id": { "type": "string" },
+          "document_title": { "type": "string" },
+          "section_path": { "type": ["string", "null"] },
+          "content": { "type": "string" },
+          "score": { "type": "number" }
+        },
+        "required": [
+          "chunk_id",
+          "document_id",
+          "document_title",
+          "section_path",
+          "content",
+          "score"
+        ]
+      }
+    }
+  },
+  "required": [
+    "retrieval_id",
+    "embedding_provider",
+    "embedding_model",
+    "latency_ms",
+    "chunks"
+  ]
+}
