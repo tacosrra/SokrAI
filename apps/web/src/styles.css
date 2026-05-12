@@ -1490,6 +1490,128 @@ a {
   color: var(--primary-dark);
 }
 
+/* ─── Specialty radio group (NewProposalPanel) ──────────────────────────── */
+
+.field--radio-group {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: #fff;
+  cursor: pointer;
+  transition:
+    border-color 180ms ease,
+    background 180ms ease;
+  font-size: 0.94rem;
+  line-height: 1.4;
+}
+
+.radio-option:has(input:checked) {
+  border-color: rgba(8, 145, 178, 0.36);
+  background: rgba(8, 145, 178, 0.06);
+  color: var(--primary-dark);
+}
+
+.radio-option input[type='radio'] {
+  accent-color: var(--primary);
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+/* ─── Specialty toggle (SessionWorkspace toolbar) ───────────────────────── */
+
+.conversation-toolbar__specialty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.conversation-toolbar__specialty-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-weight: 800;
+  color: var(--muted-strong);
+}
+
+.specialty-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 800;
+  border: 1px solid transparent;
+}
+
+.specialty-badge--legal {
+  background: rgba(180, 83, 74, 0.1);
+  color: #8c3f38;
+  border-color: rgba(180, 83, 74, 0.18);
+}
+
+.specialty-toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: #fff;
+}
+
+.specialty-toggle__option {
+  min-height: 36px;
+  padding: 0 14px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted-strong);
+  font-size: 0.85rem;
+  font-weight: 700;
+  transition:
+    background 180ms ease,
+    color 180ms ease;
+}
+
+.specialty-toggle__option:hover:not(:disabled) {
+  background: rgba(8, 145, 178, 0.07);
+  color: var(--primary-dark);
+}
+
+.specialty-toggle__option--active {
+  background: var(--primary);
+  color: #fff;
+  cursor: default;
+}
+
+.specialty-toggle__option--active:hover:not(:disabled) {
+  background: var(--primary);
+  color: #fff;
+}
+
+.specialty-toggle__option:disabled:not(.specialty-toggle__option--active) {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 @keyframes workflow-pulse {
   0%,
   80%,

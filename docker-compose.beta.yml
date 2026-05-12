@@ -18,6 +18,10 @@ services:
 
   web:
     container_name: web
+    volumes:
+      - ./apps/web/src:/app/apps/web/src:ro
+      - ./apps/web/index.html:/app/apps/web/index.html:ro
+      - ./apps/web/vite.config.ts:/app/apps/web/vite.config.ts:ro
 
   n8n:
     container_name: n8n

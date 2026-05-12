@@ -256,6 +256,19 @@ function parseProblemDefinitionState(
   };
 }
 
+const SPECIALTIES = ['default', 'legal'] as const;
+
+function parseNullableSpecialty(
+  value: unknown,
+  label: string,
+): 'default' | 'legal' | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  return expectEnum(value, label, SPECIALTIES);
+}
+
 function parseSessionRecord(value: unknown): SessionRecord {
   const record = expectRecord(value, 'session');
 
@@ -284,6 +297,8 @@ function parseSessionRecord(value: unknown): SessionRecord {
       'session.latest_successful_run_id',
     ),
     completion_reason: expectNullableString(record.completion_reason, 'session.completion_reason'),
+    specialty: parseNullableSpecialty(record.specialty, 'session.specialty'),
+    current_specialty: parseNullableSpecialty(record.current_specialty, 'session.current_specialty'),
   };
 }
 
