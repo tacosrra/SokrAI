@@ -6,6 +6,7 @@ import { readLastSessionId, readRecentSessions, persistRecentSession } from './l
 import { deriveSessionPresentation } from './lib/session-view';
 import { ContinueSessionPanel } from './components/ContinueSessionPanel';
 import { NewProposalPanel } from './components/NewProposalPanel';
+import { RagInspectorPanel } from './components/RagInspectorPanel';
 import { SessionWorkspace } from './components/SessionWorkspace';
 
 type BannerTone = 'info' | 'success' | 'error';
@@ -61,6 +62,31 @@ export function App() {
   const [isLoadingSession, setIsLoadingSession] = useState(false);
   const [isReplying, setIsReplying] = useState(false);
   const [banner, setBanner] = useState<BannerState | null>(null);
+
+  const [ragInspectorOpen, setRagInspectorOpen] = useState(
+    () => typeof window !== 'undefined' && window.location.hash === '#rag',
+  );
+
+  function openRagInspector() {
+    window.location.hash = 'rag';
+  }
+
+  function closeRagInspector() {
+    setRagInspectorOpen(false);
+    if (window.location.hash === '#rag') {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`);
+    }
+  }
+
+  useEffect(() => {
+    const syncHash = (): void => {
+      setRagInspectorOpen(window.location.hash === '#rag');
+    };
+
+    syncHash();
+    window.addEventListener('hashchange', syncHash);
+    return () => window.removeEventListener('hashchange', syncHash);
+  }, []);
 
   useEffect(() => {
     const recent = readRecentSessions();
@@ -173,6 +199,10 @@ export function App() {
     <div className="app-shell">
       <div className="app-shell__ambient" />
 
+      {ragInspectorOpen ? (
+        <RagInspectorPanel onClose={closeRagInspector} />
+      ) : (
+        <>
       <header className="hero">
         <div className="hero__copy">
           <div className="hero__kicker">SokrAI v1</div>
@@ -182,6 +212,12 @@ export function App() {
             structured brief, responder la siguiente pregunta socrática y
             retomar sesiones persistidas sin salir del flujo real de la v1.
           </p>
+          <div className="hero__tools">
+            <button type="button" className="button button--ghost" onClick={openRagInspector}>
+              Explorador RAG — ver texto recuperado de los documentos indexados
+            </button>
+            <span className="hero__tools-hint">Tab directo: añade <code>#rag</code> a la URL.</span>
+          </div>
         </div>
 
         <div className="hero__rail">
@@ -239,6 +275,8 @@ export function App() {
         <span>Demo local recomendada con `pnpm --filter @sokrai/web dev` o `docker compose up web`.</span>
         <span>Servicios esperados: `localhost:3000`, `localhost:3001`, `localhost:5678`.</span>
       </footer>
+        </>
+      )}
     </div>
   );
 }

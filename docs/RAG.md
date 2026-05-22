@@ -144,6 +144,20 @@ docker compose exec -T api node -e "fetch('http://ollama:11434/api/embed',{metho
 - Las busquedas filtran por defecto `status = 'active'`. Auditoria a traves
   de `rag_retrievals.retrieved_chunks_json`.
 
+## Comprobar a ojo (navegador)
+
+La SPA (`apps/web`) incluye **Explorador RAG**, que llama a los mismos endpoints
+solo-lectura que el CLI (`GET /api/v1/rag/packs` y `GET /api/v1/rag/search`).
+
+Arranque con proxy a la API (por ejemplo `pnpm --filter @sokrai/web dev` con
+`API_PROXY_TARGET` apuntando a tu Fastify). En portada hay el botón
+**Explorador RAG**, o puede abrirse directamente con la URL `http://localhost:3000/#rag`.
+
+Ahi ves el modelo de embedding usado, la latencia, el `retrieval_id` y los
+fragmentos recuperados tal como salen del vector store. Si el texto de un resultado
+ coincide con lo que tienes en `context-packs/.../sources/`, **está** funcionando contra
+ tus documentos reales.
+
 ## Comandos utiles
 
 ```bash

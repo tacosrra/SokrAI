@@ -307,11 +307,11 @@ castellano, catalan e ingles.
 
 - Ingesta por CLI: `pnpm rag:ingest --pack <pack_name>`
 - Busqueda por CLI: `pnpm rag:search --pack <pack_name> --query "..."`
-- Inspeccion HTTP: `GET /api/v1/rag/packs`, `GET /api/v1/rag/search`
+- Interfaz web opcional: en la SPA, botón «Explorador RAG» o URL `/#rag`
+  (usa el mismo proxy `/api/v1/rag/*` que la API).
 
 El modulo es **independiente** del lane `problem_definition_agent`. No
-modifica prompts, contratos, schemas, workflows ni frontend de la v1
-existente.
+modifica ese flujo, sus prompts, los contratos, los schemas ni los workflows.
 
 Guia detallada: [docs/RAG.md](docs/RAG.md).
 
