@@ -342,6 +342,32 @@ function Test-WebReady {
   return (Test-HttpEndpoint -Uri 'http://localhost:3000')
 }
 
+function Get-WorkflowId {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string] $WorkflowFile
+  )
+
+  $workflow = Get-Content -LiteralPath $WorkflowFile -Raw | ConvertFrom-Json
+  $workflowId = [string]$workflow.id
+
+  if ([string]::IsNullOrWhiteSpace($workflowId)) {
+    Fail "Workflow file $([System.IO.Path]::GetFileName($WorkflowFile)) is missing a top-level id"
+  }
+
+  return $workflowId
+}
+
+function Publish-Workflow {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string] $WorkflowFile
+  )
+
+  $workflowId = Get-WorkflowId -WorkflowFile $WorkflowFile
+  Invoke-DockerCompose exec -T -u node n8n n8n publish:workflow "--id=$workflowId"
+}
+
 function Invoke-OllamaModelPull {
   $model = Read-EnvValue -Path $script:BetaEnvFile -Key 'OLLAMA_MODEL'
   $retryCount = if ($env:SOKRAI_BETA_OLLAMA_PULL_RETRIES) { [int]$env:SOKRAI_BETA_OLLAMA_PULL_RETRIES } else { 3 }
@@ -394,18 +420,26 @@ function New-WorkflowMarker {
 }
 
 function Invoke-WorkflowBootstrap {
+  $workflowFiles = @(
+    'proposal_start_v1.json',
+    'proposal_reply_v1.json',
+    'agent_problem_definition_v1.json'
+  )
+
   if (Test-WorkflowMarker) {
     Write-Step 'Skipping workflow import: already bootstrapped in this beta environment'
     return
   }
 
   Write-Step 'Importing n8n workflows'
-  Invoke-DockerCompose exec -T -u node n8n n8n import:workflow --input=/workflows/proposal_start_v1.json
-  Invoke-DockerCompose exec -T -u node n8n n8n import:workflow --input=/workflows/proposal_reply_v1.json
-  Invoke-DockerCompose exec -T -u node n8n n8n import:workflow --input=/workflows/agent_problem_definition_v1.json
+  foreach ($workflowFile in $workflowFiles) {
+    Invoke-DockerCompose exec -T -u node n8n n8n import:workflow "--input=/workflows/$workflowFile"
+  }
 
-  Write-Step 'Activating imported workflows'
-  Invoke-DockerCompose exec -T -u node n8n n8n update:workflow --all --active=true
+  Write-Step 'Publishing imported workflows'
+  foreach ($workflowFile in $workflowFiles) {
+    Publish-Workflow -WorkflowFile (Join-Path $script:RepoRoot "infra/n8n/workflows/$workflowFile")
+  }
   New-WorkflowMarker
 
   Write-Step 'Restarting n8n so active workflow state is applied'

@@ -38,8 +38,8 @@ Necesitas instalado localmente:
 
 - `Docker`
 - `Docker Compose` via `docker compose`
-- `Node.js 24+`
-- `pnpm`
+- `Node.js 24+` para desarrollo en host
+- `pnpm` para desarrollo en host
 
 ## 2.b Ruta rapida para beta testers
 
@@ -723,17 +723,35 @@ docker compose up -d postgres
 ### 16.2 Ejecutar verificaciones individuales
 
 ```bash
+pnpm install --store-dir ./.pnpm-store
+pnpm build
 pnpm test:contracts
 pnpm test:unit
-TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pnpm test:integration
-TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pnpm test:smoke
+pnpm test:integration
+pnpm test:smoke
 pnpm test:web
 ```
+
+La configuracion de test usa `postgresql://sokrai_app:localpass@localhost:5433/sokrai_app` por defecto para alinearse con Docker Compose. Si usas otro Postgres, sobreescribe `TEST_DATABASE_URL`.
 
 ### 16.3 Ejecutar todo de una vez
 
 ```bash
-TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pnpm verify
+pnpm verify
+```
+
+### 16.4 Smoke contra stack vivo
+
+Con `postgres`, `ollama`, `api` y `n8n` arriba, y los workflows importados/publicados:
+
+```bash
+bash scripts/smoke-core.sh
+```
+
+En Windows nativo:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\smoke-core.ps1
 ```
 
 ## 17. Orden exacto recomendado para una primera prueba limpia
@@ -752,12 +770,13 @@ curl -i http://localhost:3001/healthz
 Luego:
 
 1. abre `http://localhost:5678`
-2. importa y activa los 3 workflows
+2. importa y publica los 3 workflows
 3. abre `http://localhost:3000`
 4. crea una propuesta nueva desde la UI
 5. guarda `session_id`
 6. responde el siguiente turno desde la UI o por webhook
 7. consulta `GET /api/v1/sessions/:sessionId`
+8. ejecuta `bash scripts/smoke-core.sh`
 
 ## 18. Prueba minima esperada de negocio
 
@@ -1191,18 +1210,19 @@ Considera que la inicializacion esta bien hecha si puedes marcar todo esto:
 - `curl http://localhost:3001/healthz` devuelve `{"status":"ok"}`
 - `docker compose exec ollama ollama list` muestra el modelo configurado
 - `docker compose exec api pnpm migrate` termina sin error
-- has importado y activado los 3 workflows
+- has importado y publicado los 3 workflows
 - `POST /webhook/proposal-start-v1` devuelve `session_id`
 - `POST /webhook/proposal-reply-v1` reutiliza ese `session_id`
 - `GET /api/v1/sessions/:sessionId` devuelve sesiones, turnos, runs y snapshots
 - `pnpm verify` pasa completo
+- `bash scripts/smoke-core.sh` pasa contra el stack vivo
 
 ## 23. Documento complementario
 
 Resumen corto del proyecto:
 
-- [README.md](/home/tacosrra/PAE/README.md)
+- [README.md](../README.md)
 
 Plan de implementacion ejecutado:
 
-- [PLAN.md](/home/tacosrra/PAE/PLAN.md)
+- [PLAN.md](../PLAN.md)

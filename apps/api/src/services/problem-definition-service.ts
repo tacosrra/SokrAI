@@ -24,6 +24,7 @@ import type {
   ProblemDefinitionRunResponse,
   RunProblemDefinitionCommand,
 } from './service-types';
+import { loadPrompt } from './prompt-service';
 
 export class ProblemDefinitionService {
   constructor(
@@ -66,13 +67,16 @@ export class ProblemDefinitionService {
     }
 
     if (session.current_turn_seq >= this.config.maxTurnsPerSession && command.trigger === 'reply') {
-      throw new AppError(
+      const error = new AppError(
         409,
         'maximum_turns_reached',
         'The maximum number of turns has already been reached',
         false,
         command.sessionId,
       );
+
+      await this.persistFailure(command, session, openTurn, error);
+      throw error;
     }
 
     const recentTurns = (
@@ -403,6 +407,8 @@ export class ProblemDefinitionService {
     error: AppError,
   ): Promise<void> {
     try {
+      const prompt = await loadPrompt('problem-definition-agent');
+
       await this.sessionStore
         .getDatabase()
         .withTransaction(async (client) => {
@@ -416,9 +422,9 @@ export class ProblemDefinitionService {
             workflowName: 'agent_problem_definition_v1',
             workflowVersion: command.context.workflowVersion,
             workflowExecutionId: command.context.workflowExecutionId,
-            promptName: 'problem-definition-agent',
-            promptVersion: 'v1',
-            promptSha256: '',
+            promptName: prompt.name,
+            promptVersion: prompt.version,
+            promptSha256: prompt.hash,
             modelName: this.config.ollamaModel,
             inputContractName: 'problem-definition-agent.input',
             inputContractVersion: 'v1',
@@ -426,6 +432,8 @@ export class ProblemDefinitionService {
             outputContractVersion: 'v1',
             inputPayloadJson: {
               session_id: lockedSession.id,
+              trigger: command.trigger,
+              current_turn_seq: lockedSession.current_turn_seq,
             },
             rawModelOutput: error instanceof ModelOutputError ? error.rawOutput : undefined,
             status:
@@ -452,6 +460,14 @@ export class ProblemDefinitionService {
               error_code: error.errorCode,
             },
           });
+
+          if (command.trigger === 'reply' && openTurn?.status === 'processing') {
+            await this.sessionStore.markTurnFailed(client, {
+              sessionId: lockedSession.id,
+              turnSeq: openTurn.turn_seq,
+              completionReason: error.safeMessage,
+            });
+          }
 
           await this.sessionStore.insertEvent(client, {
             sessionId: lockedSession.id,

@@ -125,8 +125,13 @@ describe('problem-definition invalid JSON handling', () => {
       'SELECT COUNT(*)::text AS count FROM conversation_turns WHERE session_id = $1',
       [sessionId],
     );
-    const failedRun = await app.services.database.query<{ status: string; raw_model_output: string | null }>(
-      'SELECT status, raw_model_output FROM agent_runs WHERE request_id = $1',
+    const failedRun = await app.services.database.query<{
+      status: string;
+      raw_model_output: string | null;
+      prompt_name: string;
+      prompt_sha256: string;
+    }>(
+      'SELECT status, raw_model_output, prompt_name, prompt_sha256 FROM agent_runs WHERE request_id = $1',
       ['req-unrepairable-agent'],
     );
 
@@ -134,6 +139,8 @@ describe('problem-definition invalid JSON handling', () => {
     expect(turns.rows[0]?.count).toBe('0');
     expect(failedRun.rows[0]?.status).toBe('repair_failed');
     expect(failedRun.rows[0]?.raw_model_output).toContain('not json');
+    expect(failedRun.rows[0]?.prompt_name).toBe('problem-definition-agent');
+    expect(failedRun.rows[0]?.prompt_sha256).toMatch(/^[a-f0-9]{64}$/);
   });
 
   it('returns a controlled ollama timeout error and blocks the session for inspection', async () => {
@@ -210,5 +217,142 @@ describe('problem-definition invalid JSON handling', () => {
       error_code: 'ollama_timeout',
       session_id: sessionId,
     });
+  });
+
+  it('marks max-turn pre-agent rejection as failed and recoverable through request status', async () => {
+    const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
+    const strongProposal = await readFixture('start', 'strong-proposal.json');
+    const strongAnswer = await readFixture('reply', 'strong-answer.json');
+    const startTurn = {
+      agent_status: 'continue',
+      diagnosis: ['Falta identificar con precision quien responde hoy por el problema'],
+      updated_problem_definition: {
+        problem_owner: '',
+        problem_statement: structuredBrief.problem_statement,
+        evidence_of_problem: structuredBrief.evidence_of_problem,
+        scope: structuredBrief.scope,
+        current_alternatives: structuredBrief.current_alternatives,
+        assumptions: structuredBrief.assumptions,
+        ambiguities_remaining: structuredBrief.ambiguities,
+      },
+      next_question: '¿Qué equipo o responsable responde hoy por este problema en urgencias?',
+      completion_reason: '',
+    };
+
+    ({ app } = await buildTestApp(
+      new QueueLanguageModelClient([
+        JSON.stringify(structuredBrief),
+        JSON.stringify(startTurn),
+      ]),
+      {
+        config: {
+          maxTurnsPerSession: 1,
+        },
+      },
+    ));
+
+    const startContextResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/sessions/start-context',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        request_id: 'req-max-turn-start',
+        workflow_version: 'proposal_start_v1',
+        payload: strongProposal,
+      },
+    });
+    const sessionId = startContextResponse.json().session_id;
+
+    const startAgentResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/agents/problem-definition/run',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        request_id: 'req-max-turn-start',
+        workflow_version: 'agent_problem_definition_v1',
+        session_id: sessionId,
+        trigger: 'start',
+      },
+    });
+    expect(startAgentResponse.statusCode).toBe(200);
+
+    const appendReplyResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/sessions/append-reply',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        request_id: 'req-max-turn-reply',
+        workflow_version: 'proposal_reply_v1',
+        payload: {
+          session_id: sessionId,
+          answer: strongAnswer.answer,
+        },
+      },
+    });
+    expect(appendReplyResponse.statusCode).toBe(200);
+
+    const agentResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/agents/problem-definition/run',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        request_id: 'req-max-turn-reply',
+        workflow_version: 'agent_problem_definition_v1',
+        session_id: sessionId,
+        trigger: 'reply',
+      },
+    });
+
+    expect(agentResponse.statusCode).toBe(409);
+    expect(agentResponse.json().error_code).toBe('maximum_turns_reached');
+
+    const turn = await app.services.database.query<{ status: string; completion_reason: string | null }>(
+      'SELECT status, completion_reason FROM conversation_turns WHERE answer_request_id = $1',
+      ['req-max-turn-reply'],
+    );
+    const failedRun = await app.services.database.query<{
+      status: string;
+      error_code: string | null;
+      prompt_sha256: string;
+    }>(
+      'SELECT status, error_code, prompt_sha256 FROM agent_runs WHERE request_id = $1 AND run_purpose = $2',
+      ['req-max-turn-reply', 'problem_definition'],
+    );
+    const requestStatus = await app.inject({
+      method: 'GET',
+      url: '/api/v1/requests/req-max-turn-reply',
+    });
+    const recoveryStatus = await app.inject({
+      method: 'POST',
+      url: '/api/v1/requests/req-max-turn-reply/recover',
+    });
+
+    expect(turn.rows[0]).toMatchObject({
+      status: 'failed',
+      completion_reason: 'The maximum number of turns has already been reached',
+    });
+    expect(failedRun.rows[0]).toMatchObject({
+      status: 'controlled_error',
+      error_code: 'maximum_turns_reached',
+    });
+    expect(failedRun.rows[0]?.prompt_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(requestStatus.statusCode).toBe(200);
+    expect(requestStatus.json()).toMatchObject({
+      request_id: 'req-max-turn-reply',
+      request_kind: 'proposal_reply',
+      status: 'failed',
+      error_code: 'maximum_turns_reached',
+      session_id: sessionId,
+    });
+    expect(recoveryStatus.statusCode).toBe(200);
+    expect(recoveryStatus.json().status).toBe('failed');
   });
 });

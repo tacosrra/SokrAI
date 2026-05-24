@@ -99,10 +99,16 @@ describe('contract schemas', () => {
   });
 
   it('bootstraps n8n workflows with supported per-workflow publish commands', async () => {
-    const scriptPath = path.resolve(process.cwd(), '../../scripts/common-beta.sh');
-    const script = await readFile(scriptPath, 'utf8');
+    const bashScriptPath = path.resolve(process.cwd(), '../../scripts/common-beta.sh');
+    const powershellScriptPath = path.resolve(process.cwd(), '../../scripts/common-beta.ps1');
+    const [bashScript, powershellScript] = await Promise.all([
+      readFile(bashScriptPath, 'utf8'),
+      readFile(powershellScriptPath, 'utf8'),
+    ]);
 
-    expect(script).toContain('n8n publish:workflow --id="$workflow_id"');
-    expect(script).not.toContain('n8n update:workflow --all --active=true');
+    expect(bashScript).toContain('n8n publish:workflow --id="$workflow_id"');
+    expect(bashScript).not.toContain('n8n update:workflow --all --active=true');
+    expect(powershellScript).toContain('n8n publish:workflow "--id=$workflowId"');
+    expect(powershellScript).not.toContain('n8n update:workflow --all --active=true');
   });
 });

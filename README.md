@@ -6,7 +6,7 @@ Middleware de maduracion de propuestas antes de comite, orientado a demostrar un
 
 Guia detallada de arranque y prueba:
 
-- [docs/INICIALIZACION_V1.md](/home/tacosrra/PAE/docs/INICIALIZACION_V1.md)
+- [docs/INICIALIZACION_V1.md](docs/INICIALIZACION_V1.md)
 
 ## Alcance de esta v1
 
@@ -156,6 +156,28 @@ powershell -ExecutionPolicy Bypass -File .\scripts\stop-beta.ps1
 
 La ruta beta usa `.env.beta` y un proyecto Docker separado, asi que no pisa el flujo manual existente.
 
+### Ruta recomendada para validar workflows sin editar exports
+
+Los workflows versionados llaman a la API como `http://api:3001`, que es el nombre del servicio dentro de Docker Compose. Para probar `n8n` con los exports sin cambios, levanta la API en Docker:
+
+```bash
+cp .env.example .env
+pnpm install --store-dir ./.pnpm-store
+docker compose up -d postgres ollama api n8n
+docker compose exec ollama ollama pull qwen2.5:3b-instruct
+docker compose exec api pnpm migrate
+# Importa y publica los workflows de infra/n8n/workflows en http://localhost:5678.
+bash scripts/smoke-core.sh
+```
+
+En Windows nativo, el smoke equivalente es:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\smoke-core.ps1
+```
+
+Si prefieres ejecutar la API en host con `pnpm dev`, edita manualmente en n8n los nodos `HTTP Request` que apuntan a `http://api:3001/...` para usar una URL alcanzable desde el contenedor de `n8n`.
+
 ### 1. Preparar entorno
 
 ```bash
@@ -196,6 +218,8 @@ pnpm dev
 ```
 
 La API queda en `http://localhost:3001`.
+
+Este modo host es util para desarrollo de API, pero los workflows exportados no podran llamar a `http://api:3001` salvo que ejecutes tambien la API en Docker o ajustes esas URLs en n8n.
 
 ### 5.b Levantar el frontend
 
@@ -296,12 +320,27 @@ El flujo normal es:
 ## Tests
 
 ```bash
+pnpm install --store-dir ./.pnpm-store
+pnpm build
 pnpm test:contracts
 pnpm test:unit
 pnpm test:web
 TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pnpm test:integration
 TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pnpm test:smoke
+TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pnpm verify
 ```
+
+`tests/helpers/test-environment.ts` usa `localhost:5433` por defecto para alinearse con Docker Compose. Puedes seguir sobreescribiendo `TEST_DATABASE_URL` si tu Postgres de pruebas vive en otro puerto.
+
+## Smoke local contra stack vivo
+
+Con `postgres`, `ollama`, `api` y `n8n` arriba, ejecuta:
+
+```bash
+bash scripts/smoke-core.sh
+```
+
+El script usa solo payloads ficticios de `examples/`, valida `healthz`, start/reply via webhooks de `n8n`, auditoria de sesion, estado por `request_id` y recuperacion activa de una solicitud parcialmente persistida. No valida texto exacto del modelo.
 
 ## Decisiones importantes de v1
 
@@ -315,5 +354,6 @@ TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pn
 ## Limitaciones conocidas
 
 - El soporte PDF es para documentos con texto extraible, no OCR.
-- Los workflows n8n se importan manualmente.
+- Los workflows n8n se importan manualmente en la ruta de desarrollo; `bootstrap-beta` los importa y publica automaticamente.
+- La recuperacion no puede reconstruir solicitudes que nunca llegaron a persistirse en la API.
 - Esta v1 no debe usarse con PHI real si `ALLOW_SENSITIVE_HEALTH_DATA=false`.
