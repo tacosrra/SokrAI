@@ -1,6 +1,7 @@
 import Ajv2020, { type ValidateFunction } from 'ajv/dist/2020';
 import addFormats from 'ajv-formats';
 
+import auditRefSchema from '../../../../contracts/schemas/audit-ref.schema.json';
 import alphaGapSchema from '../../../../contracts/schemas/alpha-gap.schema.json';
 import alphaProposalSchema from '../../../../contracts/schemas/alpha-proposal.schema.json';
 import basicAlphaReportSchema from '../../../../contracts/schemas/basic-alpha-report.schema.json';
@@ -46,6 +47,7 @@ addFormats(ajv);
 
 ajv.addSchema(structuredBriefSchema, structuredBriefSchema.$id);
 ajv.addSchema(proposalSourceSchema, proposalSourceSchema.$id);
+ajv.addSchema(auditRefSchema, auditRefSchema.$id);
 ajv.addSchema(proposalDocumentSchema, proposalDocumentSchema.$id);
 ajv.addSchema(alphaGapSchema, alphaGapSchema.$id);
 ajv.addSchema(chatTurnSchema, chatTurnSchema.$id);
@@ -71,7 +73,9 @@ export function assertSchema<T>(schemaId: string, payload: unknown, errorCode = 
   const validate = ajv.getSchema(schemaId);
 
   if (!validate) {
-    throw new Error(`Schema not registered: ${schemaId}`);
+    throw new AppError(500, 'schema_not_registered', `Schema not registered: ${schemaId}`, false, undefined, {
+      schemaId,
+    });
   }
 
   const valid = validate(payload);
@@ -87,6 +91,7 @@ export function assertSchema<T>(schemaId: string, payload: unknown, errorCode = 
 }
 
 export const schemaIds = {
+  auditRef: auditRefSchema.$id,
   alphaGap: alphaGapSchema.$id,
   alphaProposal: alphaProposalSchema.$id,
   basicAlphaReport: basicAlphaReportSchema.$id,
@@ -106,6 +111,7 @@ export const schemaIds = {
 } as const;
 
 export const schemaDocuments = {
+  auditRef: auditRefSchema,
   alphaGap: alphaGapSchema,
   alphaProposal: alphaProposalSchema,
   basicAlphaReport: basicAlphaReportSchema,

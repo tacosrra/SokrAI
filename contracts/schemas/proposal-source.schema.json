@@ -66,5 +66,83 @@
     "source_kind",
     "label",
     "created_at"
+  ],
+  "oneOf": [
+    {
+      "properties": {
+        "source_kind": {
+          "enum": [
+            "pasted_text",
+            "uploaded_file",
+            "extracted_text"
+          ]
+        }
+      },
+      "required": [
+        "document_id"
+      ],
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "turn_id"
+            ]
+          },
+          {
+            "required": [
+              "section_id"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "properties": {
+        "source_kind": {
+          "const": "user_answer"
+        }
+      },
+      "required": [
+        "turn_id"
+      ],
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "document_id"
+            ]
+          },
+          {
+            "required": [
+              "section_id"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "properties": {
+        "source_kind": {
+          "const": "generated_section"
+        }
+      },
+      "required": [
+        "section_id"
+      ],
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "document_id"
+            ]
+          },
+          {
+            "required": [
+              "turn_id"
+            ]
+          }
+        ]
+      }
+    }
   ]
 }

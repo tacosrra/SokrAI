@@ -516,7 +516,7 @@ export class ProblemDefinitionService {
           });
         });
     } catch (persistError) {
-      if (!isUniqueViolation(persistError)) {
+      if (!isUniqueViolationForConstraint(persistError, 'uq_agent_runs_request_purpose')) {
         throw persistError;
       }
     }
@@ -572,6 +572,17 @@ export class ProblemDefinitionService {
       response,
     };
   }
+}
+
+function isUniqueViolationForConstraint(error: unknown, constraintName: string): error is { code: string; constraint: string } {
+  return Boolean(
+    error &&
+    typeof error === 'object' &&
+    'code' in error &&
+    'constraint' in error &&
+    (error as { code?: unknown }).code === '23505' &&
+    (error as { constraint?: unknown }).constraint === constraintName,
+  );
 }
 
 function isUniqueViolation(error: unknown): error is { code: string } {

@@ -89,6 +89,15 @@ Tablas principales:
 - `agent_runs`
 - `session_snapshots`
 - `session_events`
+- `proposals`
+- `proposal_documents`
+- `proposal_sources`
+- `alpha_gaps`
+- `module_chats`
+- `chat_turns`
+- `generated_sections`
+- `basic_reports`
+- `audit_events`
 
 Patron:
 
@@ -96,6 +105,8 @@ Patron:
 - `session_snapshots` y `session_events` son historial append-only
 - `agent_runs` guarda prompt/model/schema/raw output por ejecucion
 - `conversation_turns` modela la conversacion de una pregunta por turno
+- `proposals` reutiliza el `session_id` como `proposal_id` en Alpha v1 para mantener compatibilidad de resume
+- `audit_events` es append-only por trigger y audita los artefactos Alpha sin reemplazar `session_events`
 
 ## Arranque local
 

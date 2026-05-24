@@ -115,6 +115,7 @@ Estos son los paths importantes para arrancar y probar la v1:
 - `.env.example`
 - `apps/web/`
 - `db/migrations/001_initial.sql`
+- `db/migrations/002_alpha_data_model.sql`
 - `infra/n8n/workflows/proposal_start_v1.json`
 - `infra/n8n/workflows/proposal_reply_v1.json`
 - `infra/n8n/workflows/agent_problem_definition_v1.json`
@@ -171,7 +172,9 @@ LOG_LEVEL=info
 APP_PORT=3001
 APP_BASE_URL=http://localhost:3001
 
-DATABASE_URL=postgresql://sokrai_app:localpass@postgres:5432/sokrai_app
+# Host-side commands use the Compose-published Postgres port.
+DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app
+TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app
 DATABASE_POOL_MAX=10
 DATABASE_STATEMENT_TIMEOUT_MS=5000
 
@@ -204,11 +207,19 @@ VITE_REQUEST_RECOVERY_TIMEOUT_MS=960000
 VITE_ACTIVE_RECOVERY_AFTER_MS=60000
 ```
 
-### 5.3 Que valores dejar tal cual
+### 5.3 URLs de Postgres: host vs Docker
+
+Hay dos formas validas de apuntar a Postgres:
+
+- desde el host, `pnpm migrate`, `pnpm test:integration` y `pnpm verify` usan `localhost:5433`;
+- dentro de Docker Compose, los servicios se conectan por red interna a `postgres:5432`.
+
+`docker-compose.yml` sobreescribe `DATABASE_URL` para el contenedor `api` con `postgres:5432`, asi que no cambies el `.env` host-side a `postgres:5432` salvo que tambien ejecutes el comando dentro de un contenedor.
+
+### 5.4 Que valores dejar tal cual
 
 Si vas a usar el modo recomendado con todo en Docker, puedes dejar tal cual:
 
-- `DATABASE_URL`
 - `OLLAMA_BASE_URL`
 
 Porque los servicios se comunican entre si por nombre de servicio de Compose:
@@ -402,9 +413,10 @@ Con la configuracion por defecto del repo, Vite proxya:
 4. responde desde el panel de sesion activa
 5. recarga o pega el `session_id` en el carril de continuacion para demostrar persistencia
 
-La migracion de la v1 esta en:
+Las migraciones de la v1 estan en:
 
 - `db/migrations/001_initial.sql`
+- `db/migrations/002_alpha_data_model.sql`
 
 ### 9.1 Ejecutarlas desde el contenedor `api`
 
@@ -420,13 +432,25 @@ docker compose run --rm api pnpm migrate
 
 ### 9.2 Que deberia crear
 
-Estas tablas:
+Tablas legacy de sesion y replay:
 
 - `proposal_sessions`
 - `conversation_turns`
 - `agent_runs`
 - `session_snapshots`
 - `session_events`
+
+Tablas Alpha de propuesta, fuentes, conversacion de problema, reportes y auditoria:
+
+- `proposals`
+- `proposal_documents`
+- `proposal_sources`
+- `alpha_gaps`
+- `module_chats`
+- `chat_turns`
+- `generated_sections`
+- `basic_reports`
+- `audit_events`
 
 ### 9.3 Verificacion opcional en Postgres
 
@@ -930,7 +954,7 @@ Si ves algo como:
 
 - `ports are not available`
 - `exposing port TCP 127.0.0.1:11434`
-- `exposing port TCP 127.0.0.1:5432`
+- `exposing port TCP 127.0.0.1:5433`
 
 el problema es un conflicto de puertos en tu maquina, no del flujo de negocio.
 
@@ -939,7 +963,7 @@ En esta v1 actual:
 - `Ollama` ya no se expone al host por defecto
 - `api` usa `3001`
 - `n8n` usa `5678`
-- `postgres` usa `5432`
+- `postgres` usa `5433` en el host y `5432` dentro de la red Docker
 
 Si el conflicto es de `11434`, actualiza el repo y vuelve a lanzar:
 
@@ -947,7 +971,7 @@ Si el conflicto es de `11434`, actualiza el repo y vuelve a lanzar:
 docker compose up -d postgres ollama api n8n
 ```
 
-Si el conflicto es de `5432`, hay otro Postgres usando ese puerto. Compruebalo con:
+Si el conflicto es de `5433`, hay otro Postgres o contenedor usando ese puerto host. Compruebalo con:
 
 ```bash
 docker ps --format '{{.Names}}\t{{.Ports}}'

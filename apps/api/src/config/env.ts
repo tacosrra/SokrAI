@@ -65,7 +65,7 @@ export function loadConfig(): AppConfig {
     appEnv: getString('APP_ENV', 'local'),
     appPort: getNumber('APP_PORT', 3001),
     logLevel: getString('LOG_LEVEL', 'info') as AppConfig['logLevel'],
-    databaseUrl: getString('DATABASE_URL', 'postgresql://sokrai_app:localpass@localhost:5432/sokrai_app'),
+    databaseUrl: getString('DATABASE_URL', 'postgresql://sokrai_app:localpass@localhost:5433/sokrai_app'),
     databasePoolMax: getNumber('DATABASE_POOL_MAX', 10),
     databaseStatementTimeoutMs: getNumber('DATABASE_STATEMENT_TIMEOUT_MS', 5000),
     ollamaBaseUrl: getString('OLLAMA_BASE_URL', 'http://localhost:11434'),

@@ -1,5 +1,6 @@
 import type { AppConfig } from '../config/env';
 import type { Database } from '../repositories/database';
+import type { AlphaStore } from '../repositories/alpha-store';
 import type { SessionStore } from '../repositories/session-store';
 import type { LlmOrchestrator } from '../services/llm-orchestrator';
 import type { LanguageModelClient } from '../services/ollama-client';
@@ -15,6 +16,7 @@ declare module 'fastify' {
       logger: Logger;
       database: Database;
       sessionStore: SessionStore;
+      alphaStore: AlphaStore;
       llmClient: LanguageModelClient;
       llmOrchestrator: LlmOrchestrator;
       proposalStartService: ProposalStartService;

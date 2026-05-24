@@ -219,6 +219,63 @@ describe('problem-definition invalid JSON handling', () => {
     });
   });
 
+  it('does not swallow unrelated unique violations while persisting failures', async () => {
+    const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
+    const requestId = 'req-failure-persist-unique';
+
+    ({ app } = await buildTestApp(
+      new QueueLanguageModelClient([
+        JSON.stringify(structuredBrief),
+        new AppError(504, 'ollama_timeout', 'The local model exceeded the configured timeout', true),
+      ]),
+    ));
+
+    const strongProposal = await readFixture('start', 'strong-proposal.json');
+
+    const startContextResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/sessions/start-context',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        request_id: 'req-failure-persist-unique-start',
+        workflow_version: 'proposal_start_v1',
+        payload: strongProposal,
+      },
+    });
+    const sessionId = startContextResponse.json().session_id;
+
+    await installFailingSessionEventTrigger(app.services.database);
+
+    try {
+      const agentResponse = await app.inject({
+        method: 'POST',
+        url: '/internal/agents/problem-definition/run',
+        headers: {
+          'x-internal-shared-secret': 'test-secret',
+        },
+        payload: {
+          request_id: requestId,
+          workflow_version: 'agent_problem_definition_v1',
+          session_id: sessionId,
+          trigger: 'start',
+        },
+      });
+
+      expect(agentResponse.statusCode).toBe(500);
+      expect(agentResponse.json().error_code).toBe('internal_error');
+
+      const failedRuns = await app.services.database.query<{ count: string }>(
+        'SELECT COUNT(*)::text AS count FROM agent_runs WHERE request_id = $1 AND run_purpose = $2',
+        [requestId, 'problem_definition'],
+      );
+      expect(failedRuns.rows[0]?.count).toBe('0');
+    } finally {
+      await removeFailingSessionEventTrigger(app.services.database);
+    }
+  });
+
   it('marks max-turn pre-agent rejection as failed and recoverable through request status', async () => {
     const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
     const strongProposal = await readFixture('start', 'strong-proposal.json');
@@ -351,6 +408,10 @@ describe('problem-definition invalid JSON handling', () => {
       'SELECT COUNT(*)::text AS count FROM session_events WHERE session_id = $1 AND event_type = $2',
       [sessionId, 'session_blocked'],
     );
+    const failedRuns = await app.services.database.query<{ count: string }>(
+      'SELECT COUNT(*)::text AS count FROM agent_runs WHERE request_id = $1 AND run_purpose = $2',
+      ['req-max-turn-reply', 'problem_definition'],
+    );
     const requestStatus = await app.inject({
       method: 'GET',
       url: '/api/v1/requests/req-max-turn-reply',
@@ -370,6 +431,7 @@ describe('problem-definition invalid JSON handling', () => {
       error_code: 'maximum_turns_reached',
     });
     expect(failedRun.rows[0]?.prompt_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(failedRuns.rows[0]?.count).toBe('1');
     expect(blockedEvents.rows[0]?.count).toBe('1');
     expect(requestStatus.statusCode).toBe(200);
     expect(requestStatus.json()).toMatchObject({
@@ -383,3 +445,31 @@ describe('problem-definition invalid JSON handling', () => {
     expect(recoveryStatus.json().status).toBe('failed');
   });
 });
+
+async function installFailingSessionEventTrigger(database: FastifyInstance['services']['database']): Promise<void> {
+  await removeFailingSessionEventTrigger(database);
+  await database.query(
+    [
+      'CREATE OR REPLACE FUNCTION test_raise_session_event_unique_failure()',
+      'RETURNS trigger AS $$',
+      'BEGIN',
+      '  RAISE EXCEPTION \'forced session event unique violation\'',
+      '    USING ERRCODE = \'23505\', CONSTRAINT = \'test_session_events_unique\';',
+      'END;',
+      '$$ LANGUAGE plpgsql',
+    ].join('\n'),
+  );
+  await database.query(
+    [
+      'CREATE TRIGGER test_raise_session_event_unique_failure',
+      'BEFORE INSERT ON session_events',
+      'FOR EACH ROW',
+      'EXECUTE FUNCTION test_raise_session_event_unique_failure()',
+    ].join('\n'),
+  );
+}
+
+async function removeFailingSessionEventTrigger(database: FastifyInstance['services']['database']): Promise<void> {
+  await database.query('DROP TRIGGER IF EXISTS test_raise_session_event_unique_failure ON session_events');
+  await database.query('DROP FUNCTION IF EXISTS test_raise_session_event_unique_failure()');
+}

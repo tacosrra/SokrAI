@@ -12,7 +12,7 @@
     "test": "vitest run && tsc -p tsconfig.contract-types.json --noEmit",
     "test:contracts": "vitest run ../../tests/contracts && tsc -p tsconfig.contract-types.json --noEmit",
     "test:unit": "vitest run ../../tests/unit",
-    "test:integration": "vitest run ../../tests/integration/proposal-flow.test.ts ../../tests/integration/problem-definition-error-paths.test.ts",
+    "test:integration": "vitest run ../../tests/integration",
     "test:smoke": "vitest run ../../tests/integration/smoke.test.ts"
   },
   "dependencies": {
