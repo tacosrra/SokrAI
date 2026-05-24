@@ -1,0 +1,31 @@
+{
+  "proposal_id": "proposal-1",
+  "proposal_status": "active",
+  "project_title": "AI intake readiness assistant",
+  "goal": "Reduce manual reconciliation before clinical AI project review.",
+  "structured_brief": {
+    "project_title": "AI intake readiness assistant",
+    "goal": "Reduce manual reconciliation before clinical AI project review.",
+    "target_user": "Clinical innovation project leads",
+    "problem_owner": "Innovation intake team",
+    "problem_statement": "Project leads submit fragmented descriptions that delay review readiness checks.",
+    "evidence_of_problem": "Three service leads reported recurring reconciliation delays in the last intake cycle.",
+    "current_alternatives": "Manual review meetings and spreadsheet notes.",
+    "scope": "Early Alpha intake for problem and solution definition only.",
+    "constraints_known": [],
+    "assumptions": [],
+    "ambiguities": [],
+    "missing_information": []
+  },
+  "documents": [],
+  "sources": [],
+  "gaps": [],
+  "module_chats": [],
+  "generated_sections": [],
+  "audit_refs": [],
+  "warnings": [],
+  "schema_version": "alpha-model.v1",
+  "created_at": "2026-05-24T14:00:00.000Z",
+  "updated_at": "2026-05-24T14:20:00.000Z",
+  "pdf_url": "https://example.invalid/report.pdf"
+}

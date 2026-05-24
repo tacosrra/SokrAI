@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sokrai.local/contracts/schemas/basic-alpha-report.schema.json",
+  "title": "BasicAlphaReport",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "report_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "proposal_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "report_status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "ready",
+        "needs_revision"
+      ]
+    },
+    "schema_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "structured_brief": {
+      "$ref": "https://sokrai.local/contracts/schemas/structured-brief.schema.json"
+    },
+    "current_gaps": {
+      "type": "array",
+      "items": {
+        "$ref": "https://sokrai.local/contracts/schemas/alpha-gap.schema.json"
+      }
+    },
+    "problem_section": {
+      "$ref": "https://sokrai.local/contracts/schemas/generated-section.schema.json"
+    },
+    "solution_section": {
+      "$ref": "https://sokrai.local/contracts/schemas/generated-section.schema.json"
+    },
+    "internal_sources": {
+      "type": "array",
+      "items": {
+        "$ref": "https://sokrai.local/contracts/schemas/proposal-source.schema.json"
+      }
+    },
+    "audit_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/audit_ref"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "report_id",
+    "proposal_id",
+    "report_status",
+    "schema_version",
+    "structured_brief",
+    "current_gaps",
+    "problem_section",
+    "solution_section",
+    "internal_sources",
+    "audit_refs",
+    "warnings",
+    "generated_at"
+  ],
+  "$defs": {
+    "audit_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "agent_run",
+            "audit_event",
+            "snapshot",
+            "chat_turn"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ]
+    }
+  }
+}

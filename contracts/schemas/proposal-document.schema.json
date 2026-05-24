@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sokrai.local/contracts/schemas/proposal-document.schema.json",
+  "title": "ProposalDocument",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "document_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "proposal_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_kind": {
+      "type": "string",
+      "enum": [
+        "pasted_text",
+        "uploaded_file",
+        "extracted_text"
+      ]
+    },
+    "document_status": {
+      "type": "string",
+      "enum": [
+        "received",
+        "normalized",
+        "unsupported",
+        "failed"
+      ]
+    },
+    "file_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "mime_type": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sha256": {
+      "type": "string",
+      "minLength": 64,
+      "maxLength": 64
+    },
+    "pasted_text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "normalized_text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "https://sokrai.local/contracts/schemas/proposal-source.schema.json"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "metadata": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "document_id",
+    "proposal_id",
+    "source_kind",
+    "document_status",
+    "warnings",
+    "created_at"
+  ]
+}

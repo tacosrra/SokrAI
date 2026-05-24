@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sokrai.local/contracts/schemas/chat-turn.schema.json",
+  "title": "ChatTurn",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "turn_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "chat_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "proposal_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "module": {
+      "type": "string",
+      "enum": [
+        "problem",
+        "solution"
+      ]
+    },
+    "turn_seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "question_text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "answer_text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "turn_status": {
+      "type": "string",
+      "enum": [
+        "awaiting_user",
+        "processing",
+        "resolved",
+        "failed",
+        "skipped"
+      ]
+    },
+    "agent_status": {
+      "type": "string",
+      "enum": [
+        "continue",
+        "done",
+        "blocked"
+      ]
+    },
+    "diagnosis": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "string"
+      }
+    },
+    "source_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "https://sokrai.local/contracts/schemas/proposal-source.schema.json"
+      }
+    },
+    "gap_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "audit_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/audit_ref"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "turn_id",
+    "chat_id",
+    "proposal_id",
+    "module",
+    "turn_seq",
+    "question_text",
+    "turn_status",
+    "diagnosis",
+    "source_refs",
+    "gap_refs",
+    "audit_refs",
+    "warnings",
+    "created_at"
+  ],
+  "$defs": {
+    "audit_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "agent_run",
+            "audit_event",
+            "snapshot",
+            "chat_turn"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ]
+    }
+  }
+}

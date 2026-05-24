@@ -1,19 +1,35 @@
 import Ajv2020, { type ValidateFunction } from 'ajv/dist/2020';
 import addFormats from 'ajv-formats';
 
+import alphaGapSchema from '../../../../contracts/schemas/alpha-gap.schema.json';
+import alphaProposalSchema from '../../../../contracts/schemas/alpha-proposal.schema.json';
+import basicAlphaReportSchema from '../../../../contracts/schemas/basic-alpha-report.schema.json';
+import chatTurnSchema from '../../../../contracts/schemas/chat-turn.schema.json';
 import errorResponseSchema from '../../../../contracts/schemas/error-response.schema.json';
+import generatedSectionSchema from '../../../../contracts/schemas/generated-section.schema.json';
+import moduleChatSchema from '../../../../contracts/schemas/module-chat.schema.json';
 import problemDefinitionTurnSchema from '../../../../contracts/schemas/problem-definition-turn.schema.json';
+import proposalDocumentSchema from '../../../../contracts/schemas/proposal-document.schema.json';
 import proposalReplyRequestSchema from '../../../../contracts/schemas/proposal-reply.request.schema.json';
 import proposalReplyResponseSchema from '../../../../contracts/schemas/proposal-reply.response.schema.json';
+import proposalSourceSchema from '../../../../contracts/schemas/proposal-source.schema.json';
 import proposalStartRequestSchema from '../../../../contracts/schemas/proposal-start.request.schema.json';
 import proposalStartResponseSchema from '../../../../contracts/schemas/proposal-start.response.schema.json';
 import requestExecutionResponseSchema from '../../../../contracts/schemas/request-execution.response.schema.json';
 import structuredBriefSchema from '../../../../contracts/schemas/structured-brief.schema.json';
 import type {
+  AlphaGap,
+  AlphaProposal,
+  BasicAlphaReport,
+  ChatTurn,
   ErrorResponse,
+  GeneratedSection,
+  ModuleChat,
   ProblemDefinitionTurn,
+  ProposalDocument,
   ProposalReplyRequest,
   ProposalReplyResponse,
+  ProposalSource,
   ProposalStartRequest,
   ProposalStartResponse,
   RequestExecutionResponse,
@@ -29,6 +45,14 @@ const ajv = new Ajv2020({
 addFormats(ajv);
 
 ajv.addSchema(structuredBriefSchema, structuredBriefSchema.$id);
+ajv.addSchema(proposalSourceSchema, proposalSourceSchema.$id);
+ajv.addSchema(proposalDocumentSchema, proposalDocumentSchema.$id);
+ajv.addSchema(alphaGapSchema, alphaGapSchema.$id);
+ajv.addSchema(chatTurnSchema, chatTurnSchema.$id);
+ajv.addSchema(moduleChatSchema, moduleChatSchema.$id);
+ajv.addSchema(generatedSectionSchema, generatedSectionSchema.$id);
+ajv.addSchema(alphaProposalSchema, alphaProposalSchema.$id);
+ajv.addSchema(basicAlphaReportSchema, basicAlphaReportSchema.$id);
 ajv.addSchema(problemDefinitionTurnSchema, problemDefinitionTurnSchema.$id);
 ajv.addSchema(proposalStartRequestSchema, proposalStartRequestSchema.$id);
 ajv.addSchema(proposalStartResponseSchema, proposalStartResponseSchema.$id);
@@ -63,10 +87,18 @@ export function assertSchema<T>(schemaId: string, payload: unknown, errorCode = 
 }
 
 export const schemaIds = {
+  alphaGap: alphaGapSchema.$id,
+  alphaProposal: alphaProposalSchema.$id,
+  basicAlphaReport: basicAlphaReportSchema.$id,
+  chatTurn: chatTurnSchema.$id,
   errorResponse: errorResponseSchema.$id,
+  generatedSection: generatedSectionSchema.$id,
+  moduleChat: moduleChatSchema.$id,
   problemDefinitionTurn: problemDefinitionTurnSchema.$id,
+  proposalDocument: proposalDocumentSchema.$id,
   proposalReplyRequest: proposalReplyRequestSchema.$id,
   proposalReplyResponse: proposalReplyResponseSchema.$id,
+  proposalSource: proposalSourceSchema.$id,
   proposalStartRequest: proposalStartRequestSchema.$id,
   proposalStartResponse: proposalStartResponseSchema.$id,
   requestExecutionResponse: requestExecutionResponseSchema.$id,
@@ -74,10 +106,18 @@ export const schemaIds = {
 } as const;
 
 export const schemaDocuments = {
+  alphaGap: alphaGapSchema,
+  alphaProposal: alphaProposalSchema,
+  basicAlphaReport: basicAlphaReportSchema,
+  chatTurn: chatTurnSchema,
   errorResponse: errorResponseSchema,
+  generatedSection: generatedSectionSchema,
+  moduleChat: moduleChatSchema,
   problemDefinitionTurn: problemDefinitionTurnSchema,
+  proposalDocument: proposalDocumentSchema,
   proposalReplyRequest: proposalReplyRequestSchema,
   proposalReplyResponse: proposalReplyResponseSchema,
+  proposalSource: proposalSourceSchema,
   proposalStartRequest: proposalStartRequestSchema,
   proposalStartResponse: proposalStartResponseSchema,
   requestExecutionResponse: requestExecutionResponseSchema,
@@ -102,6 +142,38 @@ export function assertProposalReplyResponse(payload: unknown): ProposalReplyResp
 
 export function assertStructuredBrief(payload: unknown): StructuredBrief {
   return assertSchema<StructuredBrief>(schemaIds.structuredBrief, payload, 'invalid_structured_brief');
+}
+
+export function assertProposalSource(payload: unknown): ProposalSource {
+  return assertSchema<ProposalSource>(schemaIds.proposalSource, payload, 'invalid_proposal_source');
+}
+
+export function assertProposalDocument(payload: unknown): ProposalDocument {
+  return assertSchema<ProposalDocument>(schemaIds.proposalDocument, payload, 'invalid_proposal_document');
+}
+
+export function assertAlphaGap(payload: unknown): AlphaGap {
+  return assertSchema<AlphaGap>(schemaIds.alphaGap, payload, 'invalid_alpha_gap');
+}
+
+export function assertChatTurn(payload: unknown): ChatTurn {
+  return assertSchema<ChatTurn>(schemaIds.chatTurn, payload, 'invalid_chat_turn');
+}
+
+export function assertModuleChat(payload: unknown): ModuleChat {
+  return assertSchema<ModuleChat>(schemaIds.moduleChat, payload, 'invalid_module_chat');
+}
+
+export function assertGeneratedSection(payload: unknown): GeneratedSection {
+  return assertSchema<GeneratedSection>(schemaIds.generatedSection, payload, 'invalid_generated_section');
+}
+
+export function assertAlphaProposal(payload: unknown): AlphaProposal {
+  return assertSchema<AlphaProposal>(schemaIds.alphaProposal, payload, 'invalid_alpha_proposal');
+}
+
+export function assertBasicAlphaReport(payload: unknown): BasicAlphaReport {
+  return assertSchema<BasicAlphaReport>(schemaIds.basicAlphaReport, payload, 'invalid_basic_alpha_report');
 }
 
 export function assertProblemDefinitionTurn(payload: unknown): ProblemDefinitionTurn {

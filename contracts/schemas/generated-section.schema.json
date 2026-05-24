@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sokrai.local/contracts/schemas/generated-section.schema.json",
+  "title": "GeneratedSection",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "section_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "proposal_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "section_kind": {
+      "type": "string",
+      "enum": [
+        "problem",
+        "solution"
+      ]
+    },
+    "section_status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "generated",
+        "accepted",
+        "needs_revision",
+        "superseded"
+      ]
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "content_markdown": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "https://sokrai.local/contracts/schemas/proposal-source.schema.json"
+      }
+    },
+    "gap_refs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "generated_by_run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "supersedes_section_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "section_id",
+    "proposal_id",
+    "section_kind",
+    "section_status",
+    "title",
+    "content_markdown",
+    "source_refs",
+    "gap_refs",
+    "warnings",
+    "created_at"
+  ]
+}

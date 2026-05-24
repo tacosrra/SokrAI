@@ -1,0 +1,21 @@
+{
+  "turn_id": "turn-1",
+  "chat_id": "chat-1",
+  "proposal_id": "proposal-1",
+  "module": "problem",
+  "turn_seq": 1,
+  "question_text": "What evidence shows this delay happens often enough to prioritize?",
+  "turn_status": "resolved",
+  "agent_status": "continue",
+  "diagnosis": [
+    "First diagnosis",
+    "Second diagnosis",
+    "Third diagnosis",
+    "Fourth diagnosis"
+  ],
+  "source_refs": [],
+  "gap_refs": [],
+  "audit_refs": [],
+  "warnings": [],
+  "created_at": "2026-05-24T14:10:00.000Z"
+}
