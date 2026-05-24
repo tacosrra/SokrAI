@@ -85,6 +85,8 @@ Los schemas canonicos viven en `contracts/schemas`.
 Tablas principales:
 
 - `proposal_sessions`
+- `proposal_documents`
+- `proposal_sources`
 - `conversation_turns`
 - `agent_runs`
 - `session_snapshots`
@@ -102,6 +104,8 @@ Tablas principales:
 Patron:
 
 - `proposal_sessions` es el head mutable
+- `proposal_documents` guarda texto pegado, documentos subidos, estado de extraccion, hash SHA-256 y metadatos
+- `proposal_sources` guarda las fuentes internas trazables con etiquetas y spans sobre el texto normalizado
 - `session_snapshots` y `session_events` son historial append-only
 - `agent_runs` guarda prompt/provider/model/schema/raw output por ejecucion
 - `conversation_turns` modela la conversacion de una pregunta por turno
@@ -319,9 +323,11 @@ No cambies `N8N_ENCRYPTION_KEY` una vez que `n8n` haya inicializado su volumen p
 - `http://localhost:3000`
 - Crear nueva propuesta
 - Pegar `document_text`
-- Subir PDF en base64
+- Subir un PDF con texto extraible; no hay OCR ni documentos escaneados en esta v1
 - Reanudar por `session_id`
-- Inspeccionar `brief`, `gaps`, `warnings`, timeline y trazabilidad
+- Inspeccionar `brief`, `gaps`, `warnings`, timeline, documentos y fuentes internas
+
+La UI muestra un aviso operativo: no incluyas datos reales de pacientes. Para MVP Alpha usa datos ficticios o anonimizados.
 
 ## Ejemplos
 
@@ -374,6 +380,7 @@ El script usa solo payloads ficticios de `examples/`, valida `healthz`, start/re
 ## Limitaciones conocidas
 
 - El soporte PDF es para documentos con texto extraible, no OCR.
+- Los documentos subidos se guardan como fuentes internas de la propuesta con hash de bytes decodificados y metadatos de extraccion.
 - Los workflows n8n se importan manualmente en la ruta de desarrollo; `bootstrap-beta` los importa y publica automaticamente.
 - La recuperacion no puede reconstruir solicitudes que nunca llegaron a persistirse en la API.
 - Esta v1 no debe usarse con PHI real si `ALLOW_SENSITIVE_HEALTH_DATA=false`.

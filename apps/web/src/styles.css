@@ -616,6 +616,12 @@ a {
   border: 1px solid rgba(180, 83, 74, 0.18);
 }
 
+.feedback--warning {
+  background: rgba(183, 121, 31, 0.1);
+  color: #825312;
+  border: 1px solid rgba(183, 121, 31, 0.2);
+}
+
 .form-actions {
   display: flex;
   justify-content: space-between;
@@ -1424,6 +1430,39 @@ a {
 .source-pill--missing {
   border-color: rgba(183, 121, 31, 0.22);
   color: var(--warning);
+}
+
+.source-summary,
+.source-row {
+  display: grid;
+  gap: 12px;
+}
+
+.source-row {
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+
+.source-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.source-row strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.source-row span,
+.source-row__warnings {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.source-chip-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .insight-card--warning {

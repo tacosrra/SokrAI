@@ -2,9 +2,14 @@ import type {
   AgentRun,
   AgentStatus,
   ConversationTurn,
+  DocumentStatus,
   ErrorResponse,
   ProblemDefinitionState,
+  ProposalDocument,
+  ProposalDocumentSourceKind,
   ProposalReplyResponse,
+  ProposalSource,
+  ProposalSourceKind,
   ProposalStartResponse,
   RequestExecutionResponse,
   SessionAuditView,
@@ -20,6 +25,19 @@ type JsonRecord = Record<string, unknown>;
 const WRAPPER_KEYS = ['body', 'data', 'payload', 'result', 'response', 'output', 'json'] as const;
 
 const AGENT_STATUSES: AgentStatus[] = ['continue', 'done', 'blocked'];
+const PROPOSAL_SOURCE_KINDS: ProposalSourceKind[] = [
+  'pasted_text',
+  'uploaded_file',
+  'extracted_text',
+  'user_answer',
+  'generated_section',
+];
+const PROPOSAL_DOCUMENT_SOURCE_KINDS: ProposalDocumentSourceKind[] = [
+  'pasted_text',
+  'uploaded_file',
+  'extracted_text',
+];
+const DOCUMENT_STATUSES: DocumentStatus[] = ['received', 'normalized', 'unsupported', 'failed'];
 const SESSION_STATUSES: SessionStatus[] = [
   'active',
   'waiting_for_user',
@@ -287,6 +305,87 @@ function parseSessionRecord(value: unknown): SessionRecord {
   };
 }
 
+function parseProposalSource(value: unknown, label: string): ProposalSource {
+  const record = expectRecord(value, label);
+  const span =
+    record.span === null || record.span === undefined
+      ? undefined
+      : expectRecord(record.span, `${label}.span`);
+
+  return {
+    source_id: expectString(record.source_id, `${label}.source_id`),
+    source_kind: expectEnum(record.source_kind, `${label}.source_kind`, PROPOSAL_SOURCE_KINDS),
+    label: expectString(record.label, `${label}.label`),
+    document_id:
+      record.document_id === null || record.document_id === undefined
+        ? undefined
+        : expectString(record.document_id, `${label}.document_id`),
+    turn_id:
+      record.turn_id === null || record.turn_id === undefined
+        ? undefined
+        : expectString(record.turn_id, `${label}.turn_id`),
+    section_id:
+      record.section_id === null || record.section_id === undefined
+        ? undefined
+        : expectString(record.section_id, `${label}.section_id`),
+    span: span
+      ? {
+          start_char: expectNumber(span.start_char, `${label}.span.start_char`),
+          end_char: expectNumber(span.end_char, `${label}.span.end_char`),
+        }
+      : undefined,
+    created_at: expectString(record.created_at, `${label}.created_at`),
+    metadata:
+      record.metadata === null || record.metadata === undefined
+        ? undefined
+        : expectRecord(record.metadata, `${label}.metadata`),
+  };
+}
+
+function parseProposalDocument(value: unknown, label: string): ProposalDocument {
+  const record = expectRecord(value, label);
+
+  return {
+    document_id: expectString(record.document_id, `${label}.document_id`),
+    proposal_id: expectString(record.proposal_id, `${label}.proposal_id`),
+    source_kind: expectEnum(
+      record.source_kind,
+      `${label}.source_kind`,
+      PROPOSAL_DOCUMENT_SOURCE_KINDS,
+    ),
+    document_status: expectEnum(record.document_status, `${label}.document_status`, DOCUMENT_STATUSES),
+    file_name:
+      record.file_name === null || record.file_name === undefined
+        ? undefined
+        : expectString(record.file_name, `${label}.file_name`),
+    mime_type:
+      record.mime_type === null || record.mime_type === undefined
+        ? undefined
+        : expectString(record.mime_type, `${label}.mime_type`),
+    sha256:
+      record.sha256 === null || record.sha256 === undefined
+        ? undefined
+        : expectString(record.sha256, `${label}.sha256`),
+    pasted_text:
+      record.pasted_text === null || record.pasted_text === undefined
+        ? undefined
+        : expectString(record.pasted_text, `${label}.pasted_text`),
+    normalized_text:
+      record.normalized_text === null || record.normalized_text === undefined
+        ? undefined
+        : expectString(record.normalized_text, `${label}.normalized_text`),
+    source_refs: expectOptionalArray(record.source_refs, [], `${label}.source_refs`).map((item, index) =>
+      parseProposalSource(item, `${label}.source_refs[${index}]`),
+    ),
+    warnings: expectOptionalStringArray(record.warnings, [], `${label}.warnings`),
+    created_at: expectString(record.created_at, `${label}.created_at`),
+    metadata:
+      record.metadata === null || record.metadata === undefined
+        ? undefined
+        : expectRecord(record.metadata, `${label}.metadata`),
+  };
+}
+
 function parseConversationTurn(value: unknown, label: string): ConversationTurn {
   const record = expectRecord(value, label);
 
@@ -525,6 +624,12 @@ export function parseSessionAuditView(value: unknown): SessionAuditView {
 
   return {
     session: parseSessionRecord(record.session),
+    documents: expectOptionalArray(record.documents, [], 'session audit view.documents').map((item, index) =>
+      parseProposalDocument(item, `session audit view.documents[${index}]`),
+    ),
+    sources: expectOptionalArray(record.sources, [], 'session audit view.sources').map((item, index) =>
+      parseProposalSource(item, `session audit view.sources[${index}]`),
+    ),
     turns: expectOptionalArray(record.turns, [], 'session audit view.turns').map((item, index) =>
       parseConversationTurn(item, `session audit view.turns[${index}]`),
     ),

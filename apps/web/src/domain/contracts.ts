@@ -357,6 +357,8 @@ export interface SessionEvent {
 
 export interface SessionAuditView {
   session: SessionRecord;
+  documents: ProposalDocument[];
+  sources: ProposalSource[];
   turns: ConversationTurn[];
   runs: AgentRun[];
   snapshots: Snapshot[];

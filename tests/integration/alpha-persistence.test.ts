@@ -690,14 +690,14 @@ describe('alpha persistence integration', () => {
 
     expect(documents.rows).toEqual([
       {
-        source_kind: 'extracted_text',
+        source_kind: 'pasted_text',
         normalized_text: 'Text extracted from the proposal document.',
-        pasted_text: null,
+        pasted_text: 'Text extracted from the proposal document.',
       },
     ]);
     expect(sources.rows[0]).toMatchObject({
-      source_kind: 'extracted_text',
-      label: 'Extracted proposal text',
+      source_kind: 'pasted_text',
+      label: 'Pasted supporting text',
       span_json: { end_char: 'Text extracted from the proposal document.'.length },
     });
   });

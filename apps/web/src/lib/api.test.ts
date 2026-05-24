@@ -31,14 +31,35 @@ const START_RESPONSE = {
   warnings: [],
 };
 
+const originalFetch = globalThis.fetch;
+const originalWindow = (globalThis as { window?: unknown }).window;
+
+function stubGlobal(name: string, value: unknown): void {
+  Object.defineProperty(globalThis, name, {
+    value,
+    configurable: true,
+    writable: true,
+  });
+}
+
 describe('requestJson transport options', () => {
   beforeEach(() => {
-    vi.stubGlobal('window', globalThis);
+    stubGlobal('window', globalThis);
   });
 
   afterEach(() => {
-    vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    Object.defineProperty(globalThis, 'fetch', {
+      value: originalFetch,
+      configurable: true,
+      writable: true,
+    });
+
+    if (originalWindow === undefined) {
+      delete (globalThis as { window?: unknown }).window;
+    } else {
+      stubGlobal('window', originalWindow);
+    }
   });
 
   it('omits content-type and body when active recovery posts without a payload', async () => {
@@ -50,7 +71,7 @@ describe('requestJson transport options', () => {
         },
       }),
     );
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobal('fetch', fetchMock);
 
     await recoverRequestExecution('web-start-1');
 
@@ -73,7 +94,7 @@ describe('requestJson transport options', () => {
         },
       }),
     );
-    vi.stubGlobal('fetch', fetchMock);
+    stubGlobal('fetch', fetchMock);
 
     await startSession({
       request_id: 'web-start-1',

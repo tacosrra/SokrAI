@@ -58,6 +58,28 @@ describe('mapApiError', () => {
 
     expect(mapApiError(error)).toContain('no encontró ningún rastro persistido');
   });
+
+  it('explains text-only PDF extraction failures', () => {
+    const error = new ApiError(
+      'The PDF could not be parsed',
+      400,
+      'pdf_extraction_failed',
+      false,
+    );
+
+    expect(mapApiError(error)).toContain('solo soporta PDFs con texto');
+  });
+
+  it('explains empty PDF extraction results', () => {
+    const error = new ApiError(
+      'The PDF did not contain extractable text',
+      400,
+      'empty_document',
+      false,
+    );
+
+    expect(mapApiError(error)).toContain('no contiene texto extraíble');
+  });
 });
 
 describe('getWorkflowLoadingCopy', () => {

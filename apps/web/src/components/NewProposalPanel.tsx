@@ -134,6 +134,10 @@ export function NewProposalPanel({
       </div>
 
       <form className="proposal-form" onSubmit={handleSubmit}>
+        <div className="feedback feedback--warning">
+          No incluyas datos reales de pacientes. Usa datos ficticios o anonimizados para MVP Alpha.
+        </div>
+
         <label className="field">
           <span className="field__label">Título del proyecto</span>
           <input

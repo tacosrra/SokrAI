@@ -83,8 +83,14 @@ export function mapApiError(error: unknown): string {
     case 'internal_error':
       return 'La API devolvió un error inesperado. Revisa los logs de Fastify, n8n y Ollama.';
     case 'invalid_pdf_file':
+    case 'unsupported_document_type':
+      return 'El tipo de documento no está soportado en esta v1. Usa un PDF con texto extraíble o pega el texto de apoyo.';
     case 'invalid_pdf_payload':
       return 'El PDF no es válido para la v1. Usa un PDF con texto extraíble.';
+    case 'empty_document':
+      return 'El PDF no contiene texto extraíble para esta v1.';
+    case 'pdf_extraction_failed':
+      return 'No se pudo extraer texto del PDF. Esta v1 solo soporta PDFs con texto, no documentos escaneados u OCR.';
     default:
       return error.message;
   }
