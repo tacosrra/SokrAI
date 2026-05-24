@@ -1,0 +1,15 @@
+# Project-scoped Archon config
+# Inherits defaults from ~/.archon/config.yaml.
+# Reference: https://archon.diy/reference/configuration/
+#
+# Examples:
+#   assistants:
+#     claude:
+#       model: sonnet
+#   docs:
+#     path: docs
+assistants:
+  codex:
+    codexBinaryPath: /home/tacosrra/.local/bin/codex-clean
+    model: gpt-5.5
+    modelReasoningEffort: high
