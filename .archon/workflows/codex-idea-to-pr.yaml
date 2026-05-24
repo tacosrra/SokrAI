@@ -1,0 +1,207 @@
+name: codex-idea-to-pr
+description: |
+  Use when: You have a feature idea or description and want end-to-end development.
+  Input: Feature description in natural language, or path to a PRD file
+  Output: PR ready for merge with comprehensive review completed.
+
+  Codex-only variant of the idea-to-PR workflow.
+
+nodes:
+  # ═══════════════════════════════════════════════════════════════════
+  # PHASE 0: CREATE PLAN
+  # ═══════════════════════════════════════════════════════════════════
+
+  - id: create-plan
+    command: archon-create-plan
+    provider: codex
+    model: gpt-5.5
+    context: fresh
+
+  # ═══════════════════════════════════════════════════════════════════
+  # PHASE 1: SETUP
+  # ═══════════════════════════════════════════════════════════════════
+
+  - id: plan-setup
+    command: archon-plan-setup
+    provider: codex
+    model: gpt-5.5
+    depends_on: [create-plan]
+    context: fresh
+
+  # ═══════════════════════════════════════════════════════════════════
+  # PHASE 2: CONFIRM PLAN
+  # ═══════════════════════════════════════════════════════════════════
+
+  - id: confirm-plan
+    command: archon-confirm-plan
+    provider: codex
+    model: gpt-5.5
+    depends_on: [plan-setup]
+    context: fresh
+
+  # ═══════════════════════════════════════════════════════════════════
+  # PHASE 3: IMPLEMENT
+  # ═══════════════════════════════════════════════════════════════════
+
+  - id: implement-tasks
+    command: archon-implement-tasks
+    provider: codex
+    model: gpt-5.5
+    depends_on: [confirm-plan]
+    context: fresh
+
+  # ═══════════════════════════════════════════════════════════════════
+  # PHASE 4: VALIDATE
+  # ═══════════════════════════════════════════════════════════════════
+
+  - id: validate
+    command: archon-validate
+    provider: codex
+    model: gpt-5.5
+    depends_on: [implement-tasks]
+    context: fresh
+
+  # ═══════════════════════════════════════════════════════════════════
+  # PHASE 5: FINALIZE PR
+  # ═══════════════════════════════════════════════════════════════════
+
+  - id: finalize-pr
+    command: archon-finalize-pr
+    provider: codex
+    model: gpt-5.5
+    depends_on: [validate]
+    context: fresh
+
+  # ═══════════════════════════════════════════════════════════════════
+  # PHASE 6: VERIFY PR BASE
+  # ═══════════════════════════════════════════════════════════════════
+
+  - id: verify-pr-base
+    bash: |
+      set -euo pipefail
+
+      unset GH_TOKEN
+      unset GITHUB_TOKEN
+
+      REPO="tacosrra/wealth-map"
+      EXPECTED="${BASE_BRANCH:-main}"
+
+      PR_NUMBER=""
+      if [ -f ".pr-number" ]; then
+        PR_NUMBER="$(cat .pr-number | tr -d '[:space:]')"
+      fi
+
+      if [ -z "$PR_NUMBER" ]; then
+        CURRENT_BRANCH="$(git branch --show-current)"
+        PR_NUMBER="$(gh pr list \
+          --repo "$REPO" \
+          --head "$CURRENT_BRANCH" \
+          --json number \
+          --jq '.[0].number')"
+      fi
+
+      if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
+        echo "No PR found for current branch. Skipping PR base verification." >&2
+        exit 0
+      fi
+
+      ACTUAL="$(gh pr view "$PR_NUMBER" --repo "$REPO" --json baseRefName --jq '.baseRefName')"
+
+      if [ "$ACTUAL" != "$EXPECTED" ]; then
+        echo "Base mismatch on PR #$PR_NUMBER: expected=$EXPECTED actual=$ACTUAL — re-targeting" >&2
+        gh pr edit "$PR_NUMBER" --repo "$REPO" --base "$EXPECTED"
+      else
+        echo "PR base verified: $EXPECTED"
+      fi
+    depends_on: [finalize-pr]
+
+  # ═══════════════════════════════════════════════════════════════════
+  # PHASE 7: REVIEW SCOPE
+  # ═══════════════════════════════════════════════════════════════════
+
+  - id: review-scope
+    command: archon-pr-review-scope
+    provider: codex
+    model: gpt-5.5
+    depends_on: [verify-pr-base]
+    context: fresh
+
+  - id: sync
+    command: archon-sync-pr-with-main
+    provider: codex
+    model: gpt-5.5
+    depends_on: [review-scope]
+    context: fresh
+
+  # ═══════════════════════════════════════════════════════════════════
+  # PHASE 8: PARALLEL REVIEW AGENTS
+  # ═══════════════════════════════════════════════════════════════════
+
+  - id: code-review
+    command: archon-code-review-agent
+    provider: codex
+    model: gpt-5.5
+    depends_on: [sync]
+    context: fresh
+
+  - id: error-handling
+    command: archon-error-handling-agent
+    provider: codex
+    model: gpt-5.5
+    depends_on: [sync]
+    context: fresh
+
+  - id: test-coverage
+    command: archon-test-coverage-agent
+    provider: codex
+    model: gpt-5.5
+    depends_on: [sync]
+    context: fresh
+
+  - id: comment-quality
+    command: archon-comment-quality-agent
+    provider: codex
+    model: gpt-5.5
+    depends_on: [sync]
+    context: fresh
+
+  - id: docs-impact
+    command: archon-docs-impact-agent
+    provider: codex
+    model: gpt-5.5
+    depends_on: [sync]
+    context: fresh
+
+  # ═══════════════════════════════════════════════════════════════════
+  # PHASE 9: SYNTHESIZE REVIEW
+  # ═══════════════════════════════════════════════════════════════════
+
+  - id: synthesize
+    command: archon-synthesize-review
+    provider: codex
+    model: gpt-5.5
+    depends_on: [code-review, error-handling, test-coverage, comment-quality, docs-impact]
+    trigger_rule: one_success
+    context: fresh
+
+  # ═══════════════════════════════════════════════════════════════════
+  # PHASE 10: FIX REVIEW ISSUES
+  # ═══════════════════════════════════════════════════════════════════
+
+  - id: implement-fixes
+    command: archon-implement-review-fixes
+    provider: codex
+    model: gpt-5.5
+    depends_on: [synthesize]
+    context: fresh
+
+  # ═══════════════════════════════════════════════════════════════════
+  # PHASE 11: FINAL SUMMARY
+  # ═══════════════════════════════════════════════════════════════════
+
+  - id: workflow-summary
+    command: archon-workflow-summary
+    provider: codex
+    model: gpt-5.5
+    depends_on: [implement-fixes]
+    context: fresh
