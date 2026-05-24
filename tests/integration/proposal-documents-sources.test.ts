@@ -151,26 +151,47 @@ describe('proposal document and source persistence', () => {
     expect(auditBody.events.map((event) => event.event_type)).toContain('document_extracted');
   });
 
-  it('does not duplicate documents or sources on idempotent start retry', async () => {
+  it('does not duplicate documents or sources and replays warnings on idempotent start retry', async () => {
     const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
 
     ({ app } = await buildTestApp(
       new QueueLanguageModelClient([JSON.stringify(structuredBrief)]),
+      { config: { maxProposalChars: 90 } },
     ));
 
     const payload = {
       project_title: 'Triage IA en Urgencias',
       goal: 'Definir mejor el problema',
-      proposal_text: 'El triaje se retrasa en horas punta.',
-      document_text: 'Registro interno: esperas de 20 a 35 minutos.',
+      proposal_text: 'El triaje se retrasa en horas punta y admision acumula pacientes.',
+      document_text: 'Registro interno: esperas de 20 a 35 minutos durante los lunes.',
     };
 
     const first = await startContext(app, 'req-docs-idempotent', payload);
+    expect(first.statusCode).toBe(200);
+    const { session_id: sessionId } = first.json() as { session_id: string };
+
+    await app.services.database.query(
+      [
+        'UPDATE proposal_documents',
+        'SET warnings_json = $2::jsonb',
+        'WHERE proposal_id = (SELECT id FROM proposals WHERE session_id = $1 LIMIT 1)',
+        '  AND source_kind = \'pasted_text\'',
+        '  AND normalized_text LIKE \'Registro interno:%\'',
+      ].join(' '),
+      [sessionId, JSON.stringify(['Persisted document warning'])],
+    );
+
     const second = await startContext(app, 'req-docs-idempotent', payload);
 
-    expect(first.statusCode).toBe(200);
     expect(second.statusCode).toBe(200);
-    expect(second.json().session_id).toBe(first.json().session_id);
+    expect(second.json().session_id).toBe(sessionId);
+    expect(second.json().warnings).toEqual(
+      expect.arrayContaining([
+        'Do not submit real patient data in MVP Alpha.',
+        'Input was truncated to 90 characters',
+        'Persisted document warning',
+      ]),
+    );
 
     const counts = await app.services.database.query<{
       documents: string;
@@ -178,9 +199,10 @@ describe('proposal document and source persistence', () => {
     }>(
       [
         'SELECT',
-        '  (SELECT COUNT(*)::text FROM proposal_documents) AS documents,',
-        '  (SELECT COUNT(*)::text FROM proposal_sources) AS sources',
+        '  (SELECT COUNT(*)::text FROM proposal_documents WHERE proposal_id = $1) AS documents,',
+        '  (SELECT COUNT(*)::text FROM proposal_sources WHERE proposal_id = $1) AS sources',
       ].join(' '),
+      [sessionId],
     );
 
     expect(counts.rows[0]).toEqual({ documents: '2', sources: '2' });

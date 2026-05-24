@@ -148,6 +148,22 @@ export class SessionStore {
     return result.rows[0] ?? null;
   }
 
+  async findLatestSnapshot(sessionId: string): Promise<SnapshotRecord | null> {
+    const result = await this.database.query<SnapshotRecord>(
+      [
+        'SELECT id, session_id, snapshot_seq, state_version, source_turn_seq, source_run_id, structured_brief_json,',
+        '       current_problem_definition_json, detected_gaps_json, next_question_text, agent_status, completion_reason, warnings_json',
+        'FROM session_snapshots',
+        'WHERE session_id = $1',
+        'ORDER BY snapshot_seq DESC',
+        'LIMIT 1',
+      ].join(' '),
+      [sessionId],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
   async findTurnByAnswerRequestId(requestId: string): Promise<ConversationTurnRecord | null> {
     const result = await this.database.query<ConversationTurnRecord>(
       'SELECT * FROM conversation_turns WHERE answer_request_id = $1 LIMIT 1',

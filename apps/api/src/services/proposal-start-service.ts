@@ -41,12 +41,14 @@ export class ProposalStartService {
       const existingSession = await this.sessionStore.findSessionByStartRequestId(requestId);
 
       if (existingSession) {
+        const warnings = await this.rehydrateStartWarnings(existingSession.id);
+
         return {
           session_id: existingSession.id,
           stage: 'problem_definition',
           structured_brief: existingSession.latest_structured_brief_json,
           detected_gaps: deriveDetectedGaps(existingSession.latest_structured_brief_json),
-          warnings: [],
+          warnings,
         };
       }
     }
@@ -90,8 +92,9 @@ export class ProposalStartService {
       sourceText.normalizedText,
       this.config.briefExtractionMaxChars,
     );
+    const documentWarnings = sourceText.documents.flatMap((document) => document.warnings);
     const workflowWarnings = Array.from(
-      new Set([...sourceText.warnings, ...briefExtractionInput.warnings]),
+      new Set([...sourceText.warnings, ...documentWarnings, ...briefExtractionInput.warnings]),
     );
 
     const briefResult = await this.llmOrchestrator.extractStructuredBrief({
@@ -346,6 +349,9 @@ export class ProposalStartService {
     }
 
     for (const source of params.sources) {
+      // These initial Alpha source rows use merged normalized-session spans.
+      // Document-local spans, when added for richer extraction metadata, must
+      // stay separate because the two coordinate systems are not interchangeable.
       await this.alphaStore.createSource(client, {
         proposalId: params.sessionId,
         sourceKind: source.sourceKind,
@@ -374,5 +380,19 @@ export class ProposalStartService {
         workflow_version: params.workflowVersion,
       },
     });
+  }
+
+  private async rehydrateStartWarnings(sessionId: string): Promise<string[]> {
+    const [latestSnapshot, documents] = await Promise.all([
+      this.sessionStore.findLatestSnapshot(sessionId),
+      this.sessionStore.listProposalDocuments(sessionId),
+    ]);
+
+    return Array.from(
+      new Set([
+        ...(latestSnapshot?.warnings_json ?? []),
+        ...documents.flatMap((document) => document.warnings),
+      ]),
+    );
   }
 }
