@@ -364,3 +364,10 @@ El script usa solo payloads ficticios de `examples/`, valida `healthz`, start/re
 - Los workflows n8n se importan manualmente en la ruta de desarrollo; `bootstrap-beta` los importa y publica automaticamente.
 - La recuperacion no puede reconstruir solicitudes que nunca llegaron a persistirse en la API.
 - Esta v1 no debe usarse con PHI real si `ALLOW_SENSITIVE_HEALTH_DATA=false`.
+
+# DESPUES DE CADA PR
+
+pnpm install
+pnpm build
+pnpm test
+pnpm verify
