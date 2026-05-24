@@ -26,7 +26,7 @@
           "string": [
             {
               "name": "request_id",
-              "value": "={{ $json.body.request_id || $execution.id }}"
+              "value": "={{ $node[\"Webhook_AgentProblemDefinition\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_AgentProblemDefinition\"].json.body?.request_id || $execution.id }}"
             },
             {
               "name": "workflow_version",
@@ -58,13 +58,13 @@
             },
             {
               "name": "x-request-id",
-              "value": "={{ $json.request_id }}"
+              "value": "={{ $node[\"Webhook_AgentProblemDefinition\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_AgentProblemDefinition\"].json.body?.request_id || $execution.id }}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { request_id: $json.request_id, workflow_version: $json.workflow_version, workflow_execution_id: $execution.id, session_id: $node[\"Webhook_AgentProblemDefinition\"].json.body.session_id, trigger: $node[\"Webhook_AgentProblemDefinition\"].json.body.trigger } }}",
+        "jsonBody": "={{ { request_id: ($node[\"Webhook_AgentProblemDefinition\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_AgentProblemDefinition\"].json.body?.request_id || $execution.id), workflow_version: $json.workflow_version, workflow_execution_id: $execution.id, session_id: $node[\"Webhook_AgentProblemDefinition\"].json.body.session_id, trigger: $node[\"Webhook_AgentProblemDefinition\"].json.body.trigger } }}",
         "options": {
           "timeout": 450000,
           "response": {

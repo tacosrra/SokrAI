@@ -19,7 +19,7 @@ export function createTestConfig(): AppConfig {
     databaseUrl:
       process.env.TEST_DATABASE_URL ??
       process.env.DATABASE_URL ??
-      'postgresql://sokrai_app:localpass@localhost:5432/sokrai_app',
+      'postgresql://sokrai_app:localpass@localhost:5433/sokrai_app',
     databasePoolMax: 5,
     databaseStatementTimeoutMs: 5000,
     ollamaBaseUrl: 'http://localhost:11434',
@@ -74,12 +74,15 @@ export async function buildTestApp(languageModelClient: LanguageModelClient): Pr
 }>;
 export async function buildTestApp(
   languageModelClient: LanguageModelClient,
-  options?: { resetDatabase?: boolean; database?: Database },
+  options?: { resetDatabase?: boolean; database?: Database; config?: Partial<AppConfig> },
 ): Promise<{
   app: FastifyInstance;
   database: Database;
 }> {
-  const config = createTestConfig();
+  const config = {
+    ...createTestConfig(),
+    ...(options?.config ?? {}),
+  };
   const database = options?.database ?? new Database(config);
   await applyMigrations(database);
 

@@ -465,6 +465,33 @@ export class SessionStore {
     return turn;
   }
 
+  async markTurnFailed(
+    client: PoolClient,
+    params: {
+      sessionId: string;
+      turnSeq: number;
+      completionReason: string;
+    },
+  ): Promise<ConversationTurnRecord> {
+    const result = await client.query<ConversationTurnRecord>(
+      [
+        'UPDATE conversation_turns',
+        'SET agent_status = \'blocked\', completion_reason = $3, status = \'failed\', resolved_at = NOW()',
+        'WHERE session_id = $1 AND turn_seq = $2',
+        'RETURNING *',
+      ].join(' '),
+      [params.sessionId, params.turnSeq, params.completionReason],
+    );
+
+    const turn = result.rows[0];
+
+    if (!turn) {
+      throw new AppError(409, 'turn_not_found', 'The turn could not be marked failed', false, params.sessionId);
+    }
+
+    return turn;
+  }
+
   async updateSessionHead(
     client: PoolClient,
     params: {

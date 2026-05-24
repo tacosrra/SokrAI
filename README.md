@@ -6,7 +6,7 @@ Middleware de maduracion de propuestas antes de comite, orientado a demostrar un
 
 Guia detallada de arranque y prueba:
 
-- [docs/INICIALIZACION_V1.md](/home/tacosrra/PAE/docs/INICIALIZACION_V1.md)
+- [docs/INICIALIZACION_V1.md](docs/INICIALIZACION_V1.md)
 
 ## Alcance de esta v1
 
@@ -123,7 +123,7 @@ Que hace:
 - espera a que `PostgreSQL`, `Ollama`, `API`, `n8n` y `web` esten listos
 - descarga el modelo configurado en `OLLAMA_MODEL` con reintentos; si ya esta cacheado, lo reutiliza
 - ejecuta migraciones
-- importa y activa los workflows de `n8n`
+- importa y publica los workflows de `n8n`
 - abre la UI principal en el navegador al terminar
 
 Requisitos de esta ruta:
@@ -155,6 +155,35 @@ powershell -ExecutionPolicy Bypass -File .\scripts\stop-beta.ps1
 ```
 
 La ruta beta usa `.env.beta` y un proyecto Docker separado, asi que no pisa el flujo manual existente.
+
+### Ruta recomendada para validar workflows sin editar exports
+
+Los workflows versionados llaman a la API como `http://api:3001`, que es el nombre del servicio dentro de Docker Compose. Para probar `n8n` con los exports sin cambios, levanta la API en Docker:
+
+```bash
+cp .env.example .env
+pnpm install --store-dir ./.pnpm-store
+docker compose up -d postgres ollama api n8n
+docker compose exec ollama ollama pull qwen2.5:3b-instruct
+docker compose exec api pnpm migrate
+for workflow in proposal_start_v1.json proposal_reply_v1.json agent_problem_definition_v1.json; do
+  docker compose exec -T -u node n8n n8n import:workflow --input="/workflows/${workflow}"
+done
+for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json; do
+  workflow_id="$(awk -F'"' '/^[[:space:]]*"id":[[:space:]]*"/ { print $4; exit }' "$workflow_path")"
+  docker compose exec -T -u node n8n n8n publish:workflow --id="$workflow_id"
+done
+docker compose restart n8n
+bash scripts/smoke-core.sh
+```
+
+En Windows nativo, el smoke equivalente es:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\smoke-core.ps1
+```
+
+Si prefieres ejecutar la API en host con `pnpm dev`, edita manualmente en n8n los nodos `HTTP Request` que apuntan a `http://api:3001/...` para usar una URL alcanzable desde el contenedor de `n8n`.
 
 ### 1. Preparar entorno
 
@@ -197,6 +226,8 @@ pnpm dev
 
 La API queda en `http://localhost:3001`.
 
+Este modo host es util para desarrollo de API, pero los workflows exportados no podran llamar a `http://api:3001` salvo que ejecutes tambien la API en Docker o ajustes esas URLs en n8n.
+
 ### 5.b Levantar el frontend
 
 Modo recomendado fuera de Docker:
@@ -238,9 +269,9 @@ Archivos:
 - `infra/n8n/workflows/proposal_reply_v1.json`
 - `infra/n8n/workflows/agent_problem_definition_v1.json`
 
-Abre `http://localhost:5678`, importa los tres workflows y asegúrate de que `INTERNAL_SHARED_SECRET` coincide entre `.env`, la API y `n8n`.
+Abre `http://localhost:5678`, importa y publica los tres workflows, y asegúrate de que `INTERNAL_SHARED_SECRET` coincide entre `.env`, la API y `n8n`.
 
-Los exports de workflow de esta version eliminan reintentos sincronos en nodos `HTTP Request` y propagan `statusCode + body` de la API al webhook para que un `ollama_timeout` o cualquier error controlado llegue a la UI como JSON consistente. Si reimportas los workflows, activa la nueva version exportada del repo.
+Los exports de workflow de esta version eliminan reintentos sincronos en nodos `HTTP Request` y propagan `statusCode + body` de la API al webhook para que un `ollama_timeout` o cualquier error controlado llegue a la UI como JSON consistente. Si reimportas los workflows, publica la nueva version exportada del repo.
 
 Si ejecutas `web` o `api` en Docker Compose, recuerda reconstruir esas imagenes tras cambiar el codigo; si ejecutas con Vite/tsx en local, reinicia ambos procesos para que se carguen los nuevos budgets y la recuperacion por `request_id`.
 
@@ -296,12 +327,27 @@ El flujo normal es:
 ## Tests
 
 ```bash
+pnpm install --store-dir ./.pnpm-store
+pnpm build
 pnpm test:contracts
 pnpm test:unit
 pnpm test:web
 TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pnpm test:integration
 TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pnpm test:smoke
+TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pnpm verify
 ```
+
+`tests/helpers/test-environment.ts` usa `localhost:5433` por defecto para alinearse con Docker Compose. Puedes seguir sobreescribiendo `TEST_DATABASE_URL` si tu Postgres de pruebas vive en otro puerto.
+
+## Smoke local contra stack vivo
+
+Con `postgres`, `ollama`, `api` y `n8n` arriba, ejecuta:
+
+```bash
+bash scripts/smoke-core.sh
+```
+
+El script usa solo payloads ficticios de `examples/`, valida `healthz`, start/reply via webhooks de `n8n`, auditoria de sesion, estado por `request_id` y recuperacion activa de una solicitud parcialmente persistida. No valida texto exacto del modelo.
 
 ## Decisiones importantes de v1
 
@@ -315,5 +361,6 @@ TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pn
 ## Limitaciones conocidas
 
 - El soporte PDF es para documentos con texto extraible, no OCR.
-- Los workflows n8n se importan manualmente.
+- Los workflows n8n se importan manualmente en la ruta de desarrollo; `bootstrap-beta` los importa y publica automaticamente.
+- La recuperacion no puede reconstruir solicitudes que nunca llegaron a persistirse en la API.
 - Esta v1 no debe usarse con PHI real si `ALLOW_SENSITIVE_HEALTH_DATA=false`.

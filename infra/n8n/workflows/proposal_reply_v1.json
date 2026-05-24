@@ -26,7 +26,7 @@
           "string": [
             {
               "name": "request_id",
-              "value": "={{ $json.body.request_id || $execution.id }}"
+              "value": "={{ $node[\"Webhook_ProposalReply\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_ProposalReply\"].json.body?.request_id || $execution.id }}"
             },
             {
               "name": "workflow_version",
@@ -58,13 +58,13 @@
             },
             {
               "name": "x-request-id",
-              "value": "={{ $json.request_id }}"
+              "value": "={{ $node[\"Webhook_ProposalReply\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_ProposalReply\"].json.body?.request_id || $execution.id }}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { request_id: $json.request_id, workflow_version: $json.workflow_version, workflow_execution_id: $execution.id, payload: $node[\"Webhook_ProposalReply\"].json.body } }}",
+        "jsonBody": "={{ { request_id: ($node[\"Webhook_ProposalReply\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_ProposalReply\"].json.body?.request_id || $execution.id), workflow_version: $json.workflow_version, workflow_execution_id: $execution.id, payload: $node[\"Webhook_ProposalReply\"].json.body } }}",
         "options": {
           "timeout": 120000,
           "response": {
@@ -132,13 +132,13 @@
             },
             {
               "name": "x-request-id",
-              "value": "={{ $node[\"Set_ReplyPayload\"].json.request_id }}"
+              "value": "={{ $node[\"Webhook_ProposalReply\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_ProposalReply\"].json.body?.request_id || $execution.id }}"
             }
           ]
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ { request_id: $node[\"Set_ReplyPayload\"].json.request_id, workflow_version: \"agent_problem_definition_v1\", workflow_execution_id: $execution.id, session_id: $node[\"HTTP_AppendReply\"].json.body.session_id, trigger: \"reply\" } }}",
+        "jsonBody": "={{ { request_id: ($node[\"Webhook_ProposalReply\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_ProposalReply\"].json.body?.request_id || $execution.id), workflow_version: \"agent_problem_definition_v1\", workflow_execution_id: $execution.id, session_id: $node[\"HTTP_AppendReply\"].json.body.session_id, trigger: \"reply\" } }}",
         "options": {
           "timeout": 450000,
           "response": {
