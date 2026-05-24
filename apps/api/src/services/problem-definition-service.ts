@@ -2,13 +2,24 @@ import type { PoolClient } from 'pg';
 
 import { schemaIds } from '../contracts/schema-registry';
 import type {
+  AlphaGap,
+  ChatTurn,
   ProblemDefinitionState,
   ProblemDefinitionTurn,
+  ProposalSource,
   ProposalReplyResponse,
   StructuredBrief,
 } from '../contracts/types';
 import type { AppConfig } from '../config/env';
-import { enforceTurnGuardrails, evaluateCompletion } from '../domain/problem-definition';
+import {
+  buildProblemSectionSourceRefs,
+  classifyProblemGapStatuses,
+  enforceTurnGuardrails,
+  evaluateCompletion,
+  renderProblemSection,
+  selectProblemGapRefs,
+} from '../domain/problem-definition';
+import type { AlphaStore } from '../repositories/alpha-store';
 import type {
   AgentRunRecord,
   ConversationTurnRecord,
@@ -31,6 +42,7 @@ export class ProblemDefinitionService {
     private readonly config: AppConfig,
     private readonly logger: Logger,
     private readonly sessionStore: SessionStore,
+    private readonly alphaStore: AlphaStore,
     private readonly llmOrchestrator: LlmOrchestrator,
   ) {}
 
@@ -304,6 +316,7 @@ export class ProblemDefinitionService {
           : 'waiting_for_user';
 
     let currentTurnSeq = params.session.current_turn_seq;
+    let openedTurn: ConversationTurnRecord | null = null;
 
     if (params.trigger === 'reply' && params.activeTurn) {
       await this.sessionStore.resolveTurn(params.client, {
@@ -319,7 +332,7 @@ export class ProblemDefinitionService {
     if (params.guardedTurn.agent_status === 'continue') {
       currentTurnSeq = params.trigger === 'start' ? params.session.current_turn_seq + 1 : (params.activeTurn?.turn_seq ?? params.session.current_turn_seq) + 1;
 
-      const openTurn = await this.sessionStore.createOpenTurn(params.client, {
+      openedTurn = await this.sessionStore.createOpenTurn(params.client, {
         sessionId: params.session.id,
         turnSeq: currentTurnSeq,
         questionText: params.guardedTurn.next_question,
@@ -327,16 +340,29 @@ export class ProblemDefinitionService {
 
       await this.sessionStore.insertEvent(params.client, {
         sessionId: params.session.id,
-        turnSeq: openTurn.turn_seq,
+        turnSeq: openedTurn.turn_seq,
         runId: params.runId,
         eventType: 'turn_opened',
         actorType: 'agent',
         requestId: params.requestId,
         payloadJson: {
-          question_text: openTurn.question_text,
+          question_text: openedTurn.question_text,
         },
       });
     }
+
+    await this.persistAlphaArtifacts({
+      client: params.client,
+      session: params.session,
+      activeTurn: params.activeTurn,
+      openedTurn,
+      guardedTurn: params.guardedTurn,
+      updatedProblemDefinition: params.updatedProblemDefinition,
+      warnings: params.warnings,
+      runId: params.runId,
+      requestId: params.requestId,
+      trigger: params.trigger,
+    });
 
     const snapshot = await this.sessionStore.createSnapshot(params.client, {
       sessionId: params.session.id,
@@ -425,6 +451,364 @@ export class ProblemDefinitionService {
       run_id: params.runId,
       snapshot_id: snapshot.id,
     };
+  }
+
+  private async persistAlphaArtifacts(params: {
+    client: PoolClient;
+    session: SessionRecord;
+    activeTurn: ConversationTurnRecord | null;
+    openedTurn: ConversationTurnRecord | null;
+    guardedTurn: ProblemDefinitionTurn;
+    updatedProblemDefinition: ProblemDefinitionState;
+    warnings: string[];
+    runId: string;
+    requestId: string;
+    trigger: 'start' | 'reply';
+  }): Promise<void> {
+    const chat = await this.alphaStore.findModuleChatByProposalAndModule(
+      params.session.id,
+      'problem',
+      params.client,
+    );
+
+    if (!chat) {
+      throw new AppError(
+        409,
+        'alpha_chat_state_conflict',
+        'The Alpha problem chat is missing for this session',
+        false,
+        params.session.id,
+      );
+    }
+
+    const existingGaps = await this.alphaStore.listGaps(params.session.id, params.client);
+
+    if (params.trigger === 'start') {
+      if (params.openedTurn) {
+        await this.openAlphaQuestion({
+          ...params,
+          chatId: chat.chat_id,
+          turnSeq: params.openedTurn.turn_seq,
+          questionText: params.openedTurn.question_text,
+          gaps: existingGaps,
+          sourceRefs: [],
+        });
+        return;
+      }
+
+      await this.closeAlphaChatForTerminalTurn({
+        ...params,
+        chatId: chat.chat_id,
+        gaps: existingGaps,
+      });
+      return;
+    }
+
+    if (!params.activeTurn) {
+      throw new AppError(
+        409,
+        'alpha_chat_state_conflict',
+        'The legacy problem turn is missing while updating Alpha chat state',
+        false,
+        params.session.id,
+      );
+    }
+
+    const activeAlphaTurn = this.findActiveAlphaTurn(chat.turns, chat.active_turn_id, params.activeTurn.turn_seq);
+
+    if (!activeAlphaTurn) {
+      throw new AppError(
+        409,
+        'alpha_chat_state_conflict',
+        'The Alpha problem chat active turn is missing or out of sync',
+        false,
+        params.session.id,
+      );
+    }
+
+    if (!params.activeTurn.answer_text) {
+      throw new AppError(
+        409,
+        'alpha_chat_state_conflict',
+        'The legacy problem turn has no user answer to mirror into Alpha state',
+        false,
+        params.session.id,
+      );
+    }
+
+    const answerSource = await this.alphaStore.createSource(params.client, {
+      proposalId: params.session.id,
+      sourceKind: 'user_answer',
+      label: `Problem answer turn ${params.activeTurn.turn_seq}`,
+      turnId: activeAlphaTurn.turn_id,
+      metadata: {
+        request_id: params.requestId,
+        legacy_turn_seq: params.activeTurn.turn_seq,
+      },
+    });
+
+    await this.alphaStore.updateChatTurnAnswer(params.client, {
+      turnId: activeAlphaTurn.turn_id,
+      answerText: params.activeTurn.answer_text,
+    });
+
+    const shouldResolveGaps = !params.warnings.some((warning) => warning.toLocaleLowerCase().includes('vague'));
+    const gapStatusChanges = shouldResolveGaps
+      ? classifyProblemGapStatuses(
+          existingGaps,
+          params.updatedProblemDefinition,
+          activeAlphaTurn.turn_id,
+        )
+      : [];
+    const resolvedGapRefs: string[] = [];
+
+    for (const change of gapStatusChanges) {
+      await this.alphaStore.updateGapStatus(params.client, {
+        gapId: change.gapId,
+        gapStatus: change.gapStatus,
+        resolvedByTurnId: change.resolvedByTurnId,
+      });
+
+      if (change.gapStatus === 'resolved') {
+        resolvedGapRefs.push(change.gapId);
+      }
+    }
+
+    const resolvedGapRefSet = new Set([...activeAlphaTurn.gap_refs, ...resolvedGapRefs]);
+    const resolvedTurn = await this.alphaStore.resolveChatTurn(params.client, {
+      turnId: activeAlphaTurn.turn_id,
+      agentStatus: params.guardedTurn.agent_status,
+      diagnosis: params.guardedTurn.diagnosis,
+      sourceRefs: [answerSource],
+      gapRefs: Array.from(resolvedGapRefSet),
+      auditRefs: [{ kind: 'agent_run', id: params.runId }],
+      warnings: params.warnings,
+    });
+
+    await this.alphaStore.appendAuditEvent(params.client, {
+      proposalId: params.session.id,
+      sessionId: params.session.id,
+      runId: params.runId,
+      turnId: resolvedTurn.turn_id,
+      eventType: 'problem_answer_resolved',
+      actorType: 'system',
+      requestId: params.requestId,
+      payloadJson: {
+        legacy_turn_seq: params.activeTurn.turn_seq,
+        source_id: answerSource.source_id,
+        gap_refs: Array.from(resolvedGapRefSet),
+      },
+    });
+
+    const updatedGaps = await this.alphaStore.listGaps(params.session.id, params.client);
+
+    if (params.openedTurn) {
+      await this.openAlphaQuestion({
+        ...params,
+        chatId: chat.chat_id,
+        turnSeq: params.openedTurn.turn_seq,
+        questionText: params.openedTurn.question_text,
+        gaps: updatedGaps,
+        sourceRefs: [answerSource],
+      });
+      return;
+    }
+
+    await this.closeAlphaChatForTerminalTurn({
+      ...params,
+      chatId: chat.chat_id,
+      gaps: updatedGaps,
+    });
+  }
+
+  private async openAlphaQuestion(params: {
+    client: PoolClient;
+    session: SessionRecord;
+    guardedTurn: ProblemDefinitionTurn;
+    updatedProblemDefinition: ProblemDefinitionState;
+    warnings: string[];
+    runId: string;
+    requestId: string;
+    chatId: string;
+    turnSeq: number;
+    questionText: string;
+    gaps: AlphaGap[];
+    sourceRefs: ProposalSource[];
+  }): Promise<ChatTurn> {
+    const gapRefs = selectProblemGapRefs(params.gaps, params.updatedProblemDefinition);
+    const alphaTurn = await this.alphaStore.createChatTurn(params.client, {
+      chatId: params.chatId,
+      proposalId: params.session.id,
+      module: 'problem',
+      turnSeq: params.turnSeq,
+      questionText: params.questionText,
+      turnStatus: 'awaiting_user',
+      agentStatus: 'continue',
+      diagnosis: params.guardedTurn.diagnosis,
+      sourceRefs: params.sourceRefs,
+      gapRefs,
+      auditRefs: [{ kind: 'agent_run', id: params.runId }],
+      warnings: params.warnings,
+    });
+
+    const inProgressRefs = new Set(gapRefs);
+
+    for (const gap of params.gaps) {
+      if (inProgressRefs.has(gap.gap_id) && gap.gap_status === 'open') {
+        await this.alphaStore.updateGapStatus(params.client, {
+          gapId: gap.gap_id,
+          gapStatus: 'in_progress',
+        });
+      }
+    }
+
+    await this.alphaStore.updateModuleChatStatus(params.client, {
+      chatId: params.chatId,
+      chatStatus: 'waiting_for_user',
+      activeTurnId: alphaTurn.turn_id,
+    });
+
+    await this.alphaStore.appendAuditEvent(params.client, {
+      proposalId: params.session.id,
+      sessionId: params.session.id,
+      runId: params.runId,
+      turnId: alphaTurn.turn_id,
+      eventType: 'problem_question_opened',
+      actorType: 'agent',
+      requestId: params.requestId,
+      payloadJson: {
+        legacy_turn_seq: params.turnSeq,
+        question_text: params.questionText,
+        gap_refs: gapRefs,
+      },
+    });
+
+    return alphaTurn;
+  }
+
+  private async closeAlphaChatForTerminalTurn(params: {
+    client: PoolClient;
+    session: SessionRecord;
+    guardedTurn: ProblemDefinitionTurn;
+    updatedProblemDefinition: ProblemDefinitionState;
+    warnings: string[];
+    runId: string;
+    requestId: string;
+    chatId: string;
+    gaps: AlphaGap[];
+  }): Promise<void> {
+    if (params.guardedTurn.agent_status === 'done') {
+      await this.alphaStore.updateModuleChatStatus(params.client, {
+        chatId: params.chatId,
+        chatStatus: 'ready_to_generate',
+        activeTurnId: null,
+      });
+
+      await this.generateProblemSection(params);
+
+      await this.alphaStore.updateModuleChatStatus(params.client, {
+        chatId: params.chatId,
+        chatStatus: 'completed',
+        activeTurnId: null,
+      });
+      return;
+    }
+
+    if (params.guardedTurn.agent_status === 'blocked') {
+      await this.alphaStore.updateModuleChatStatus(params.client, {
+        chatId: params.chatId,
+        chatStatus: 'blocked',
+        activeTurnId: null,
+      });
+    }
+  }
+
+  private async generateProblemSection(params: {
+    client: PoolClient;
+    session: SessionRecord;
+    updatedProblemDefinition: ProblemDefinitionState;
+    warnings: string[];
+    runId: string;
+    requestId: string;
+  }): Promise<void> {
+    const sources = await this.alphaStore.listSources(params.session.id, params.client);
+    const sourceRefs = buildProblemSectionSourceRefs(
+      sources.filter((source) =>
+        source.source_kind === 'pasted_text' ||
+        source.source_kind === 'uploaded_file' ||
+        source.source_kind === 'extracted_text',
+      ),
+      sources.filter((source) => source.source_kind === 'user_answer'),
+    );
+    const gaps = await this.alphaStore.listGaps(params.session.id, params.client);
+    const gapRefs = gaps
+      .filter((gap) => gap.module === 'problem' && gap.gap_status === 'resolved')
+      .map((gap) => gap.gap_id);
+    const renderedSection = renderProblemSection(params.updatedProblemDefinition, {
+      sourceCount: sourceRefs.length,
+      gapCount: gapRefs.length,
+    });
+    const currentSection = await this.alphaStore.findCurrentGeneratedSection(
+      params.session.id,
+      'problem',
+      params.client,
+    );
+
+    if (currentSection) {
+      await this.alphaStore.supersedeGeneratedSection(params.client, {
+        sectionId: currentSection.section_id,
+      });
+    }
+
+    const section = await this.alphaStore.createGeneratedSection(params.client, {
+      proposalId: params.session.id,
+      sectionKind: 'problem',
+      sectionStatus: 'generated',
+      title: renderedSection.title,
+      contentMarkdown: renderedSection.contentMarkdown,
+      sourceRefs,
+      gapRefs,
+      generatedByRunId: params.runId,
+      supersedesSectionId: currentSection?.section_id,
+      warnings: Array.from(new Set([...params.warnings, ...renderedSection.warnings])),
+    });
+
+    const generatedSource = await this.alphaStore.createSource(params.client, {
+      proposalId: params.session.id,
+      sourceKind: 'generated_section',
+      label: `Problem section v${section.section_version}`,
+      sectionId: section.section_id,
+      metadata: {
+        request_id: params.requestId,
+        generated_by_run_id: params.runId,
+      },
+    });
+
+    await this.alphaStore.appendAuditEvent(params.client, {
+      proposalId: params.session.id,
+      sessionId: params.session.id,
+      runId: params.runId,
+      eventType: 'problem_section_generated',
+      actorType: 'system',
+      requestId: params.requestId,
+      payloadJson: {
+        section_id: section.section_id,
+        section_version: section.section_version,
+        generated_source_id: generatedSource.source_id,
+        source_refs: sourceRefs.map((source) => source.source_id),
+        gap_refs: gapRefs,
+      },
+    });
+  }
+
+  private findActiveAlphaTurn(
+    turns: ChatTurn[],
+    activeTurnId: string | undefined,
+    legacyTurnSeq: number,
+  ): ChatTurn | null {
+    return turns.find((turn) => turn.turn_id === activeTurnId) ??
+      turns.find((turn) => turn.turn_seq === legacyTurnSeq && turn.turn_status !== 'resolved') ??
+      null;
   }
 
   private async persistFailure(

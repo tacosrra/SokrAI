@@ -139,6 +139,7 @@ export interface GeneratedSectionRecord {
   proposal_id: string;
   section_kind: SectionKind;
   section_status: SectionStatus;
+  section_version: number;
   title: string;
   content_markdown: string;
   source_refs_json: ProposalSource[];
@@ -501,6 +502,26 @@ export class AlphaStore {
     return mapModuleChat(chat, await this.listChatTurns(chat.id, queryable));
   }
 
+  async findModuleChatByProposalAndModule(
+    proposalId: string,
+    module: AlphaModule,
+    executor?: SqlExecutor,
+  ): Promise<ModuleChat | null> {
+    const queryable = executor ?? this.database;
+    const result = await runQuery<ModuleChatRecord>(
+      queryable,
+      'SELECT * FROM module_chats WHERE proposal_id = $1 AND module = $2 LIMIT 1',
+      [proposalId, module],
+    );
+    const chat = result.rows[0];
+
+    if (!chat) {
+      return null;
+    }
+
+    return mapModuleChat(chat, await this.listChatTurns(chat.id, queryable));
+  }
+
   async updateModuleChatStatus(
     executor: SqlExecutor,
     params: { chatId: string; chatStatus: ChatStatus; activeTurnId?: string | null },
@@ -669,33 +690,52 @@ export class AlphaStore {
       gapRefs?: string[];
       generatedByRunId?: string;
       supersedesSectionId?: string;
+      sectionVersion?: number;
       warnings?: string[];
     },
   ): Promise<GeneratedSection> {
-    const result = await runQuery<GeneratedSectionRecord>(
-      executor,
-      [
-        'INSERT INTO generated_sections (',
-        '  proposal_id, section_kind, section_status, title, content_markdown, source_refs_json,',
-        '  gap_refs_json, generated_by_run_id, supersedes_section_id, warnings_json',
-        ') VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-        'RETURNING *',
-      ].join(' '),
-      [
-        params.proposalId,
-        params.sectionKind,
-        params.sectionStatus,
-        params.title,
-        params.contentMarkdown,
-        toJson(params.sourceRefs ?? []),
-        toJson(params.gapRefs ?? []),
-        params.generatedByRunId ?? null,
-        params.supersedesSectionId ?? null,
-        toJson(params.warnings ?? []),
-      ],
-    );
+    try {
+      const sectionVersion =
+        params.sectionVersion ?? await this.getNextSectionVersion(executor, params.proposalId, params.sectionKind);
+      const result = await runQuery<GeneratedSectionRecord>(
+        executor,
+        [
+          'INSERT INTO generated_sections (',
+          '  proposal_id, section_kind, section_status, section_version, title, content_markdown, source_refs_json,',
+          '  gap_refs_json, generated_by_run_id, supersedes_section_id, warnings_json',
+          ') VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
+          'RETURNING *',
+        ].join(' '),
+        [
+          params.proposalId,
+          params.sectionKind,
+          params.sectionStatus,
+          sectionVersion,
+          params.title,
+          params.contentMarkdown,
+          toJson(params.sourceRefs ?? []),
+          toJson(params.gapRefs ?? []),
+          params.generatedByRunId ?? null,
+          params.supersedesSectionId ?? null,
+          toJson(params.warnings ?? []),
+        ],
+      );
 
-    return mapGeneratedSection(result.rows[0]);
+      return mapGeneratedSection(result.rows[0]);
+    } catch (error) {
+      throw toAlphaPersistenceError(error, params.proposalId, {
+        uq_generated_sections_proposal_kind_version: [
+          409,
+          'alpha_section_version_conflict',
+          'The generated section version already exists',
+        ],
+        uq_generated_sections_current: [
+          409,
+          'alpha_current_section_conflict',
+          'A current generated section already exists',
+        ],
+      });
+    }
   }
 
   async supersedeGeneratedSection(
@@ -720,11 +760,34 @@ export class AlphaStore {
     const queryable = executor ?? this.database;
     const result = await runQuery<GeneratedSectionRecord>(
       queryable,
-      'SELECT * FROM generated_sections WHERE proposal_id = $1 ORDER BY created_at ASC, id ASC',
+      'SELECT * FROM generated_sections WHERE proposal_id = $1 ORDER BY section_version ASC, created_at ASC, id ASC',
       [proposalId],
     );
 
     return result.rows.map(mapGeneratedSection);
+  }
+
+  async findCurrentGeneratedSection(
+    proposalId: string,
+    sectionKind: SectionKind,
+    executor?: SqlExecutor,
+  ): Promise<GeneratedSection | null> {
+    const queryable = executor ?? this.database;
+    const result = await runQuery<GeneratedSectionRecord>(
+      queryable,
+      [
+        'SELECT *',
+        'FROM generated_sections',
+        'WHERE proposal_id = $1',
+        '  AND section_kind = $2',
+        '  AND section_status IN (\'draft\', \'generated\', \'accepted\', \'needs_revision\')',
+        'ORDER BY section_version DESC, created_at DESC, id DESC',
+        'LIMIT 1',
+      ].join(' '),
+      [proposalId, sectionKind],
+    );
+
+    return result.rows[0] ? mapGeneratedSection(result.rows[0]) : null;
   }
 
   async createBasicReport(
@@ -951,6 +1014,24 @@ export class AlphaStore {
 
     return Number(result.rows[0]?.next_seq ?? 1);
   }
+
+  private async getNextSectionVersion(
+    executor: SqlExecutor,
+    proposalId: string,
+    sectionKind: SectionKind,
+  ): Promise<number> {
+    const result = await runQuery<{ next_version: string }>(
+      executor,
+      [
+        'SELECT COALESCE(MAX(section_version), 0) + 1 AS next_version',
+        'FROM generated_sections',
+        'WHERE proposal_id = $1 AND section_kind = $2',
+      ].join(' '),
+      [proposalId, sectionKind],
+    );
+
+    return Number(result.rows[0]?.next_version ?? 1);
+  }
 }
 
 async function runQuery<T extends QueryResultRow>(
@@ -1036,7 +1117,7 @@ export function mapGap(record: AlphaGapRecord): AlphaGap {
   });
 }
 
-function mapModuleChat(record: ModuleChatRecord, turns: ChatTurn[]): ModuleChat {
+export function mapModuleChat(record: ModuleChatRecord, turns: ChatTurn[]): ModuleChat {
   return assertModuleChat({
     chat_id: record.id,
     proposal_id: record.proposal_id,
@@ -1050,7 +1131,7 @@ function mapModuleChat(record: ModuleChatRecord, turns: ChatTurn[]): ModuleChat 
   });
 }
 
-function mapChatTurn(record: ChatTurnRecord): ChatTurn {
+export function mapChatTurn(record: ChatTurnRecord): ChatTurn {
   return assertChatTurn({
     turn_id: record.id,
     chat_id: record.chat_id,
@@ -1071,12 +1152,13 @@ function mapChatTurn(record: ChatTurnRecord): ChatTurn {
   });
 }
 
-function mapGeneratedSection(record: GeneratedSectionRecord): GeneratedSection {
+export function mapGeneratedSection(record: GeneratedSectionRecord): GeneratedSection {
   return assertGeneratedSection({
     section_id: record.id,
     proposal_id: record.proposal_id,
     section_kind: record.section_kind,
     section_status: record.section_status,
+    section_version: record.section_version,
     title: record.title,
     content_markdown: record.content_markdown,
     source_refs: record.source_refs_json,

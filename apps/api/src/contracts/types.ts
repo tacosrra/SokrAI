@@ -161,6 +161,7 @@ export interface GeneratedSection {
   proposal_id: string;
   section_kind: SectionKind;
   section_status: SectionStatus;
+  section_version: number;
   title: string;
   content_markdown: string;
   source_refs: ProposalSource[];

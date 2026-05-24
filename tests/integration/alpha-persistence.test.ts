@@ -245,6 +245,13 @@ describe('alpha persistence integration', () => {
       document_id: document.document_id,
       source_kind: 'pasted_text',
     });
+    expect(await store.findModuleChatByProposalAndModule(session.id, 'problem')).toMatchObject({
+      chat_id: chat.chat_id,
+    });
+    expect(await store.findCurrentGeneratedSection(session.id, 'problem')).toMatchObject({
+      section_id: problemSection.section_id,
+      section_version: 2,
+    });
     expect(await store.getBasicReport(session.id)).toEqual(report);
     expect(aggregate).toMatchObject({
       proposal_id: session.id,
@@ -253,8 +260,9 @@ describe('alpha persistence integration', () => {
       gaps: [{ gap_id: gap.gap_id, gap_status: 'resolved' }],
       module_chats: [{ chat_id: chat.chat_id, turns: [{ turn_id: turn.turn_id, turn_status: 'resolved' }] }],
       generated_sections: expect.arrayContaining([
-        expect.objectContaining({ section_id: oldProblemSection.section_id, section_status: 'superseded' }),
-        expect.objectContaining({ section_id: problemSection.section_id, section_status: 'accepted' }),
+        expect.objectContaining({ section_id: oldProblemSection.section_id, section_status: 'superseded', section_version: 1 }),
+        expect.objectContaining({ section_id: problemSection.section_id, section_status: 'accepted', section_version: 2 }),
+        expect.objectContaining({ section_id: solutionSection.section_id, section_status: 'generated', section_version: 1 }),
       ]),
       audit_refs: [{ kind: 'audit_event', id: auditEvent.id }],
     });
