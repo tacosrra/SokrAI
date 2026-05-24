@@ -69,6 +69,58 @@ describe('document source helpers', () => {
     expect(merged.sources.every((source) => source.span!.end_char <= merged.normalizedText.length)).toBe(true);
   });
 
+  it('clamps a partially retained section span when truncation cuts the section', () => {
+    const prepared = prepareInputSources({
+      proposalText: 'A'.repeat(20),
+      documentText: 'B'.repeat(80),
+      allowSensitiveHealthData: true,
+    });
+    const merged = mergePreparedSources(prepared, 70);
+
+    expect(merged.warnings).toContain('Input was truncated to 70 characters');
+    expect(merged.sources[0]?.span).toEqual({
+      start_char: 0,
+      end_char: 'Proposal text:\n'.length + 20,
+    });
+    expect(merged.sources[1]?.span).toEqual({
+      start_char: 'Proposal text:\n'.length + 20 + 2,
+      end_char: 70,
+    });
+  });
+
+  it('uses tracked offsets for duplicated section content', () => {
+    const prepared = prepareInputSources({
+      proposalText: 'Same duplicated body.',
+      documentText: 'Same duplicated body.',
+      allowSensitiveHealthData: true,
+    });
+    const merged = mergePreparedSources(prepared, 1000);
+    const expectedSecondStart = merged.normalizedText.indexOf('Pasted supporting text:');
+
+    expect(merged.sources[0]?.span).toEqual({
+      start_char: 0,
+      end_char: 'Proposal text:\nSame duplicated body.'.length,
+    });
+    expect(merged.sources[1]?.span?.start_char).toBe(expectedSecondStart);
+    expect(merged.sources[1]?.span?.end_char).toBe(merged.normalizedText.length);
+  });
+
+  it('keeps spans only for sources retained in merged text', () => {
+    const prepared = prepareInputSources({
+      proposalText: 'Short retained text.',
+      documentText: 'Text that is fully truncated before it can be retained.',
+      allowSensitiveHealthData: true,
+    });
+    const retainedLength = 'Proposal text:\nShort retained text.'.length;
+    const merged = mergePreparedSources(prepared, retainedLength);
+
+    expect(merged.sources[0]?.span).toEqual({
+      start_char: 0,
+      end_char: retainedLength,
+    });
+    expect(merged.sources[1]?.span).toBeUndefined();
+  });
+
   it('adds the MVP Alpha privacy warning when sensitive data is not allowed', () => {
     const prepared = prepareInputSources({
       proposalText: 'Texto ficticio.',
@@ -106,6 +158,7 @@ describe('document source helpers', () => {
       'Uploaded PDF: intake.pdf',
       'Extracted PDF text: intake.pdf',
     ]);
+    expect(merged.sources[0]?.span).toBeUndefined();
     expect(merged.sources[1]?.span).toBeDefined();
   });
 });

@@ -120,7 +120,7 @@ Estos son los paths importantes para arrancar y probar la v1:
 - `apps/web/`
 - `db/migrations/001_initial.sql`
 - `db/migrations/002_alpha_data_model.sql`
-- `db/migrations/002_documents_sources.sql`
+- `db/migrations/003_documents_sources.sql`
 - `infra/n8n/workflows/proposal_start_v1.json`
 - `infra/n8n/workflows/proposal_reply_v1.json`
 - `infra/n8n/workflows/agent_problem_definition_v1.json`
@@ -427,6 +427,7 @@ Las migraciones de la v1 estan en:
 
 - `db/migrations/001_initial.sql`
 - `db/migrations/002_alpha_data_model.sql`
+- `db/migrations/003_documents_sources.sql`
 
 ### 9.1 Ejecutarlas desde el contenedor `api`
 

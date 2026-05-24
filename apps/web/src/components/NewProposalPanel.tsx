@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import type { ProposalStartRequest } from '../domain/contracts';
 import { toProposalStartFile } from '../lib/file';
+import { buildProposalStartPayload } from '../lib/proposal-start-payload';
 
 interface NewProposalPanelProps {
   isSubmitting: boolean;
@@ -72,54 +73,14 @@ export function NewProposalPanel({
     event.preventDefault();
     setError('');
 
-    const projectTitle = form.projectTitle.trim();
-    const goal = form.goal.trim();
-    const proposalText = form.proposalText.trim();
-    const documentText = form.documentText.trim();
-    const userId = form.userId.trim();
-    const metadataText = form.metadataText.trim();
+    const result = buildProposalStartPayload(form);
 
-    if (!projectTitle) {
-      setError('`project_title` es obligatorio.');
+    if (!result.ok) {
+      setError(result.error);
       return;
     }
 
-    if (!goal) {
-      setError('`goal` es obligatorio.');
-      return;
-    }
-
-    if (!proposalText && !documentText && !form.file) {
-      setError('Debes aportar texto de propuesta, `document_text` o un PDF.');
-      return;
-    }
-
-    let metadata: Record<string, unknown> | undefined;
-
-    if (metadataText) {
-      try {
-        const parsed = JSON.parse(metadataText) as unknown;
-
-        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-          throw new Error();
-        }
-
-        metadata = parsed as Record<string, unknown>;
-      } catch {
-        setError('`metadata` debe ser un objeto JSON válido.');
-        return;
-      }
-    }
-
-    await onSubmit({
-      project_title: projectTitle,
-      goal,
-      proposal_text: proposalText || undefined,
-      document_text: documentText || undefined,
-      file: form.file,
-      user_id: userId || undefined,
-      metadata,
-    });
+    await onSubmit(result.payload);
   }
 
   return (

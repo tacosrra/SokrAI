@@ -84,13 +84,16 @@ Los schemas canonicos viven en `contracts/schemas`.
 
 Tablas principales:
 
+Sesion y replay:
+
 - `proposal_sessions`
-- `proposal_documents`
-- `proposal_sources`
 - `conversation_turns`
 - `agent_runs`
 - `session_snapshots`
 - `session_events`
+
+Alpha y fuentes internas:
+
 - `proposals`
 - `proposal_documents`
 - `proposal_sources`

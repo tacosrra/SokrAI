@@ -624,10 +624,10 @@ export function parseSessionAuditView(value: unknown): SessionAuditView {
 
   return {
     session: parseSessionRecord(record.session),
-    documents: expectOptionalArray(record.documents, [], 'session audit view.documents').map((item, index) =>
+    documents: expectArray(record.documents, 'session audit view.documents').map((item, index) =>
       parseProposalDocument(item, `session audit view.documents[${index}]`),
     ),
-    sources: expectOptionalArray(record.sources, [], 'session audit view.sources').map((item, index) =>
+    sources: expectArray(record.sources, 'session audit view.sources').map((item, index) =>
       parseProposalSource(item, `session audit view.sources[${index}]`),
     ),
     turns: expectOptionalArray(record.turns, [], 'session audit view.turns').map((item, index) =>

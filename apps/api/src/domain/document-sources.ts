@@ -80,6 +80,15 @@ export interface MergedPreparedSources {
   sources: PreparedProposalSource[];
 }
 
+interface MergeSection {
+  documentKey: string;
+  sourceKey?: string;
+  rawText: string;
+  normalizedText: string;
+  startChar: number;
+  endChar: number;
+}
+
 function cleanWhitespace(input: string): string {
   return input
     .replace(/\r\n/g, '\n')
@@ -243,17 +252,32 @@ export function mergePreparedSources(
 ): MergedPreparedSources {
   const warnings = [...prepared.warnings];
   const mergeableDocuments = prepared.documents.filter((document) => document.normalizedText?.trim());
-  const sections = mergeableDocuments.map((document) => {
+  const sectionsWithoutOffsets = mergeableDocuments.map((document) => {
     const source = prepared.sources.find((item) => item.documentKey === document.key && item.sourceKind !== 'uploaded_file');
     const label = source?.label ?? document.metadata.label ?? document.key;
     return {
       documentKey: document.key,
       sourceKey: source?.key,
       rawText: `${label}:\n${document.normalizedText!.trim()}`,
+      normalizedText: cleanWhitespace(`${label}:\n${document.normalizedText!.trim()}`),
     };
   });
+  const sections: MergeSection[] = [];
+  let cursor = 0;
+
+  for (const section of sectionsWithoutOffsets) {
+    const startChar = cursor;
+    const endChar = startChar + section.normalizedText.length;
+    sections.push({
+      ...section,
+      startChar,
+      endChar,
+    });
+    cursor = endChar + 2;
+  }
+
   const rawText = sections.map((section) => section.rawText).join('\n\n');
-  const normalizedBeforeTruncation = cleanWhitespace(rawText);
+  const normalizedBeforeTruncation = sections.map((section) => section.normalizedText).join('\n\n');
   const normalizedText =
     normalizedBeforeTruncation.length > maxChars
       ? normalizedBeforeTruncation.slice(0, maxChars)
@@ -263,6 +287,8 @@ export function mergePreparedSources(
     warnings.push(`Input was truncated to ${maxChars} characters`);
   }
 
+  const retainedLength = normalizedText.length;
+
   const sources = prepared.sources.map((source) => {
     const section = sections.find((item) => item.sourceKey === source.key);
 
@@ -270,19 +296,19 @@ export function mergePreparedSources(
       return source;
     }
 
-    const normalizedSection = cleanWhitespace(section.rawText);
-    const start = normalizedText.indexOf(normalizedSection);
-
-    if (start < 0) {
+    // Spans are coordinates in the merged normalized session text. Sources that
+    // are not represented in that text, such as uploaded-file metadata rows or
+    // fully truncated sections, intentionally have no span.
+    if (section.startChar >= retainedLength) {
       return source;
     }
 
-    const end = Math.min(start + normalizedSection.length, normalizedText.length);
+    const end = Math.min(section.endChar, retainedLength);
 
     return {
       ...source,
       span: {
-        start_char: start,
+        start_char: section.startChar,
         end_char: end,
       },
     };

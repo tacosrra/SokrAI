@@ -63,6 +63,8 @@ function createAuditView(runs: unknown[] = []) {
       latest_successful_run_id: null,
       completion_reason: null,
     },
+    documents: [],
+    sources: [],
     turns: [],
     runs,
     snapshots: [],
@@ -239,6 +241,8 @@ describe('parseSessionAuditView', () => {
         latest_successful_run_id: 'run-1',
         completion_reason: null,
       },
+      documents: [],
+      sources: [],
       turns: [],
       runs: [],
       snapshots: [
@@ -299,7 +303,7 @@ describe('parseSessionAuditView', () => {
     expect(audit.events[0]?.event_seq).toBe(1);
   });
 
-  it('unwraps enveloped payloads and tolerates omitted array sections', () => {
+  it('unwraps enveloped payloads and tolerates omitted non-source array sections', () => {
     const audit = parseSessionAuditView({
       payload: {
         session: {
@@ -330,6 +334,8 @@ describe('parseSessionAuditView', () => {
           latest_successful_run_id: null,
           completion_reason: null,
         },
+        documents: [],
+        sources: [],
       },
     });
 
@@ -338,6 +344,18 @@ describe('parseSessionAuditView', () => {
     expect(audit.runs).toEqual([]);
     expect(audit.snapshots).toEqual([]);
     expect(audit.events).toEqual([]);
+  });
+
+  it('rejects audit payloads missing documents', () => {
+    const { documents: _documents, ...payload } = createAuditView();
+
+    expect(() => parseSessionAuditView(payload)).toThrow(/session audit view\.documents/);
+  });
+
+  it('rejects audit payloads missing sources', () => {
+    const { sources: _sources, ...payload } = createAuditView();
+
+    expect(() => parseSessionAuditView(payload)).toThrow(/session audit view\.sources/);
   });
 
   it('parses document and source audit sections', () => {
