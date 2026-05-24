@@ -58,6 +58,15 @@ export async function truncateAll(database: Database): Promise<void> {
   await database.query(
     [
       'TRUNCATE TABLE',
+      'audit_events,',
+      'basic_reports,',
+      'proposal_sources,',
+      'alpha_gaps,',
+      'generated_sections,',
+      'chat_turns,',
+      'module_chats,',
+      'proposal_documents,',
+      'proposals,',
       'session_events,',
       'session_snapshots,',
       'conversation_turns,',

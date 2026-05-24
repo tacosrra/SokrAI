@@ -72,6 +72,21 @@ describe('proposal flow integration', () => {
     const snapshots = await app.services.database.query<{ count: string }>(
       'SELECT COUNT(*)::text AS count FROM session_snapshots',
     );
+    const alphaRows = await app.services.database.query<{
+      proposals_count: string;
+      documents_count: string;
+      sources_count: string;
+      problem_chats_count: string;
+    }>(
+      [
+        'SELECT',
+        '  (SELECT COUNT(*)::text FROM proposals WHERE id = $1) AS proposals_count,',
+        '  (SELECT COUNT(*)::text FROM proposal_documents WHERE proposal_id = $1) AS documents_count,',
+        '  (SELECT COUNT(*)::text FROM proposal_sources WHERE proposal_id = $1) AS sources_count,',
+        '  (SELECT COUNT(*)::text FROM module_chats WHERE proposal_id = $1 AND module = \'problem\') AS problem_chats_count',
+      ].join(' '),
+      [startResult.body.session_id],
+    );
 
     expect(sessions.rows[0]?.count).toBe('1');
     expect(turns.rows).toHaveLength(1);
@@ -80,6 +95,12 @@ describe('proposal flow integration', () => {
     expect(runs.rows).toHaveLength(3);
     expect(runs.rows.every((run) => run.prompt_version === 'v1')).toBe(true);
     expect(snapshots.rows[0]?.count).toBe('3');
+    expect(alphaRows.rows[0]).toEqual({
+      proposals_count: '1',
+      documents_count: '1',
+      sources_count: '1',
+      problem_chats_count: '1',
+    });
   });
 
   it('keeps the flow in continue for a vague proposal and asks a problem-focused question', async () => {

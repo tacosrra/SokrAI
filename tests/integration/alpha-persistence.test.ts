@@ -1,0 +1,343 @@
+import { afterEach, describe, expect, it } from 'vitest';
+
+import type { FastifyInstance } from 'fastify';
+
+import type { StructuredBrief } from '../../apps/api/src/contracts/types';
+import { AlphaStore } from '../../apps/api/src/repositories/alpha-store';
+import type { Database } from '../../apps/api/src/repositories/database';
+import type { SessionStore } from '../../apps/api/src/repositories/session-store';
+import { QueueLanguageModelClient } from '../helpers/fake-language-model-client';
+import { buildTestApp, readFixture } from '../helpers/test-environment';
+
+describe('alpha persistence integration', () => {
+  let app: FastifyInstance | undefined;
+
+  afterEach(async () => {
+    if (app) {
+      await app.close();
+      app = undefined;
+    }
+  });
+
+  it('applies the Alpha migration tables', async () => {
+    ({ app } = await buildTestApp(new QueueLanguageModelClient([])));
+
+    const result = await app.services.database.query<{ table_name: string }>(
+      [
+        'SELECT table_name',
+        'FROM information_schema.tables',
+        'WHERE table_schema = \'public\'',
+        '  AND table_name = ANY($1)',
+        'ORDER BY table_name ASC',
+      ].join(' '),
+      [
+        [
+          'alpha_gaps',
+          'audit_events',
+          'basic_reports',
+          'chat_turns',
+          'generated_sections',
+          'module_chats',
+          'proposal_documents',
+          'proposal_sources',
+          'proposals',
+        ],
+      ],
+    );
+
+    expect(result.rows.map((row) => row.table_name)).toEqual([
+      'alpha_gaps',
+      'audit_events',
+      'basic_reports',
+      'chat_turns',
+      'generated_sections',
+      'module_chats',
+      'proposal_documents',
+      'proposal_sources',
+      'proposals',
+    ]);
+  });
+
+  it('creates, updates, reads, and assembles the Alpha aggregate', async () => {
+    ({ app } = await buildTestApp(new QueueLanguageModelClient([])));
+    const structuredBrief = await readFixture<StructuredBrief>('expected', 'structured-brief.strong.json');
+    const session = await createLegacySession(app.services.database, app.services.sessionStore, structuredBrief);
+    const store = app.services.alphaStore;
+
+    await store.createProposal(app.services.database, {
+      proposalId: session.id,
+      sessionId: session.id,
+      userId: 'operator-1',
+      proposalStatus: 'active',
+      projectTitle: structuredBrief.project_title,
+      goal: structuredBrief.goal,
+      structuredBrief,
+      schemaVersion: 'alpha-model.v1',
+      metadata: {
+        test_case: 'aggregate',
+      },
+    });
+
+    const document = await store.createDocument(app.services.database, {
+      proposalId: session.id,
+      sourceKind: 'pasted_text',
+      documentStatus: 'normalized',
+      pastedText: 'Initial text',
+      normalizedText: 'Initial text',
+    });
+    const source = await store.createSource(app.services.database, {
+      proposalId: session.id,
+      sourceKind: 'pasted_text',
+      label: 'Initial proposal text',
+      documentId: document.document_id,
+      span: {
+        start_char: 0,
+        end_char: 12,
+      },
+    });
+    const gap = await store.createGap(app.services.database, {
+      proposalId: session.id,
+      module: 'problem',
+      gapKind: 'missing_information',
+      gapStatus: 'open',
+      field: 'evidence_of_problem',
+      description: 'Evidence needs a measurable baseline.',
+      sourceRefs: [source],
+    });
+    const chat = await store.createModuleChat(app.services.database, {
+      proposalId: session.id,
+      module: 'problem',
+      chatStatus: 'waiting_for_user',
+    });
+    const turn = await store.createChatTurn(app.services.database, {
+      chatId: chat.chat_id,
+      proposalId: session.id,
+      module: 'problem',
+      turnSeq: 1,
+      questionText: 'What evidence shows this problem is frequent?',
+      turnStatus: 'awaiting_user',
+      gapRefs: [gap.gap_id],
+    });
+
+    await expect(
+      store.createChatTurn(app.services.database, {
+        chatId: chat.chat_id,
+        proposalId: session.id,
+        module: 'problem',
+        turnSeq: 2,
+        questionText: 'A second open question should fail.',
+        turnStatus: 'awaiting_user',
+      }),
+    ).rejects.toThrow();
+
+    await store.updateModuleChatStatus(app.services.database, {
+      chatId: chat.chat_id,
+      chatStatus: 'waiting_for_user',
+      activeTurnId: turn.turn_id,
+    });
+    await store.updateChatTurnAnswer(app.services.database, {
+      turnId: turn.turn_id,
+      answerText: 'Three service leads reported the delay last month.',
+    });
+    const resolvedTurn = await store.resolveChatTurn(app.services.database, {
+      turnId: turn.turn_id,
+      agentStatus: 'continue',
+      diagnosis: ['Evidence now has a concrete source.'],
+      sourceRefs: [source],
+      gapRefs: [gap.gap_id],
+    });
+    const resolvedGap = await store.updateGapStatus(app.services.database, {
+      gapId: gap.gap_id,
+      gapStatus: 'resolved',
+      resolvedByTurnId: resolvedTurn.turn_id,
+    });
+    const oldProblemSection = await store.createGeneratedSection(app.services.database, {
+      proposalId: session.id,
+      sectionKind: 'problem',
+      sectionStatus: 'generated',
+      title: 'Problem definition',
+      contentMarkdown: 'Old problem definition.',
+      sourceRefs: [source],
+      gapRefs: [gap.gap_id],
+    });
+    await store.supersedeGeneratedSection(app.services.database, {
+      sectionId: oldProblemSection.section_id,
+    });
+    const problemSection = await store.createGeneratedSection(app.services.database, {
+      proposalId: session.id,
+      sectionKind: 'problem',
+      sectionStatus: 'accepted',
+      title: 'Problem definition',
+      contentMarkdown: 'Clinical intake review is delayed by fragmented submissions.',
+      sourceRefs: [source],
+      gapRefs: [gap.gap_id],
+      supersedesSectionId: oldProblemSection.section_id,
+    });
+    const solutionSection = await store.createGeneratedSection(app.services.database, {
+      proposalId: session.id,
+      sectionKind: 'solution',
+      sectionStatus: 'generated',
+      title: 'Solution definition',
+      contentMarkdown: 'A local assistant normalizes proposal text and guides clarification.',
+      sourceRefs: [source],
+    });
+    const auditEvent = await store.appendAuditEvent(app.services.database, {
+      proposalId: session.id,
+      sessionId: session.id,
+      turnId: resolvedTurn.turn_id,
+      eventType: 'gap_resolved',
+      actorType: 'system',
+      payloadJson: {
+        gap_id: resolvedGap.gap_id,
+      },
+    });
+    const report = await store.createBasicReport(app.services.database, {
+      proposalId: session.id,
+      reportStatus: 'ready',
+      schemaVersion: 'alpha-model.v1',
+      structuredBrief,
+      currentGaps: [resolvedGap],
+      problemSectionId: problemSection.section_id,
+      solutionSectionId: solutionSection.section_id,
+      internalSources: [source],
+      auditRefs: [{ kind: 'audit_event', id: auditEvent.id }],
+    });
+    const aggregate = await store.getAlphaProposalAggregate(session.id);
+
+    expect(await store.findProposalBySessionId(session.id)).toMatchObject({
+      proposal_id: session.id,
+      proposal_status: 'active',
+    });
+    expect(await store.getDocument(document.document_id)).toMatchObject({
+      document_id: document.document_id,
+      source_kind: 'pasted_text',
+    });
+    expect(await store.getBasicReport(session.id)).toEqual(report);
+    expect(aggregate).toMatchObject({
+      proposal_id: session.id,
+      documents: [{ document_id: document.document_id }],
+      sources: [{ source_id: source.source_id }],
+      gaps: [{ gap_id: gap.gap_id, gap_status: 'resolved' }],
+      module_chats: [{ chat_id: chat.chat_id, turns: [{ turn_id: turn.turn_id, turn_status: 'resolved' }] }],
+      generated_sections: expect.arrayContaining([
+        expect.objectContaining({ section_id: oldProblemSection.section_id, section_status: 'superseded' }),
+        expect.objectContaining({ section_id: problemSection.section_id, section_status: 'accepted' }),
+      ]),
+      audit_refs: [{ kind: 'audit_event', id: auditEvent.id }],
+    });
+  });
+
+  it('enforces append-only audit events and core enum constraints', async () => {
+    ({ app } = await buildTestApp(new QueueLanguageModelClient([])));
+    const structuredBrief = await readFixture<StructuredBrief>('expected', 'structured-brief.strong.json');
+    const session = await createLegacySession(app.services.database, app.services.sessionStore, structuredBrief);
+    const store = new AlphaStore(app.services.database);
+
+    await store.createProposal(app.services.database, {
+      proposalId: session.id,
+      sessionId: session.id,
+      proposalStatus: 'active',
+      projectTitle: structuredBrief.project_title,
+      goal: structuredBrief.goal,
+      structuredBrief,
+      schemaVersion: 'alpha-model.v1',
+    });
+    const event = await store.appendAuditEvent(app.services.database, {
+      proposalId: session.id,
+      sessionId: session.id,
+      eventType: 'proposal_created',
+      actorType: 'workflow',
+    });
+
+    await expect(app.services.database.query('UPDATE audit_events SET event_type = $2 WHERE id = $1', [event.id, 'changed']))
+      .rejects.toThrow();
+    await expect(app.services.database.query('DELETE FROM audit_events WHERE id = $1', [event.id])).rejects.toThrow();
+    await expect(
+      app.services.database.query(
+        'INSERT INTO proposals (id, proposal_status, project_title, goal, structured_brief_json, schema_version) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)',
+        ['reviewing', 'Invalid status', 'Goal', JSON.stringify(structuredBrief), 'alpha-model.v1'],
+      ),
+    ).rejects.toThrow();
+    await expect(
+      app.services.database.query('INSERT INTO module_chats (proposal_id, module, chat_status) VALUES ($1, $2, $3)', [
+        session.id,
+        'regulatory',
+        'active',
+      ]),
+    ).rejects.toThrow();
+    await expect(
+      app.services.database.query(
+        'INSERT INTO proposal_documents (proposal_id, source_kind, document_status) VALUES ($1, $2, $3)',
+        [session.id, 'generated_section', 'normalized'],
+      ),
+    ).rejects.toThrow();
+  });
+
+  it('creates initial Alpha rows during the existing start transaction', async () => {
+    const structuredBrief = await readFixture<StructuredBrief>('expected', 'structured-brief.strong.json');
+
+    ({ app } = await buildTestApp(new QueueLanguageModelClient([JSON.stringify(structuredBrief)])));
+
+    const proposal = await readFixture('start', 'strong-proposal.json');
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/sessions/start-context',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+        'x-request-id': 'req-alpha-start',
+      },
+      payload: {
+        request_id: 'req-alpha-start',
+        workflow_version: 'proposal_start_v1',
+        payload: proposal,
+      },
+    });
+    const body = response.json() as { session_id: string };
+
+    expect(response.statusCode).toBe(200);
+
+    const [proposals, documents, sources, chats, events] = await Promise.all([
+      app.services.database.query<{ count: string }>('SELECT COUNT(*)::text AS count FROM proposals WHERE id = $1', [
+        body.session_id,
+      ]),
+      app.services.database.query<{ count: string }>(
+        'SELECT COUNT(*)::text AS count FROM proposal_documents WHERE proposal_id = $1',
+        [body.session_id],
+      ),
+      app.services.database.query<{ count: string }>(
+        'SELECT COUNT(*)::text AS count FROM proposal_sources WHERE proposal_id = $1',
+        [body.session_id],
+      ),
+      app.services.database.query<{ count: string }>(
+        'SELECT COUNT(*)::text AS count FROM module_chats WHERE proposal_id = $1 AND module = \'problem\'',
+        [body.session_id],
+      ),
+      app.services.database.query<{ count: string }>(
+        'SELECT COUNT(*)::text AS count FROM audit_events WHERE proposal_id = $1 AND event_type = \'proposal_created\'',
+        [body.session_id],
+      ),
+    ]);
+
+    expect(proposals.rows[0]?.count).toBe('1');
+    expect(Number(documents.rows[0]?.count)).toBeGreaterThanOrEqual(1);
+    expect(Number(sources.rows[0]?.count)).toBeGreaterThanOrEqual(1);
+    expect(chats.rows[0]?.count).toBe('1');
+    expect(events.rows[0]?.count).toBe('1');
+  });
+});
+
+async function createLegacySession(database: Database, sessionStore: SessionStore, structuredBrief: StructuredBrief) {
+  return database.withTransaction((client) =>
+    sessionStore.createSession(client, {
+      startRequestId: `req-alpha-${crypto.randomUUID()}`,
+      userId: 'operator-1',
+      projectTitle: structuredBrief.project_title,
+      goal: structuredBrief.goal,
+      rawInputText: 'Initial proposal text',
+      normalizedText: 'Initial proposal text',
+      metadata: {},
+      structuredBrief,
+      initialProblemDefinition: {},
+    }),
+  );
+}
