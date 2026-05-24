@@ -338,7 +338,9 @@ function parseAgentRun(value: unknown, label: string): AgentRun {
     prompt_name: expectString(record.prompt_name, `${label}.prompt_name`),
     prompt_version: expectString(record.prompt_version, `${label}.prompt_version`),
     prompt_sha256: expectString(record.prompt_sha256, `${label}.prompt_sha256`),
+    model_provider: expectString(record.model_provider, `${label}.model_provider`),
     model_name: expectString(record.model_name, `${label}.model_name`),
+    model_params_json: expectRecord(record.model_params_json, `${label}.model_params_json`),
     raw_model_output: expectNullableString(
       record.raw_model_output,
       `${label}.raw_model_output`,

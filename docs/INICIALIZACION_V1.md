@@ -714,7 +714,7 @@ docker compose exec postgres \
 ```bash
 docker compose exec postgres \
   psql -U postgres -d sokrai_app \
-  -c "select session_id, run_purpose, status, prompt_version, model_name, repair_attempted from agent_runs order by started_at;"
+  -c "select session_id, run_purpose, status, prompt_version, model_provider, model_name, repair_attempted from agent_runs order by started_at;"
 ```
 
 #### Snapshots

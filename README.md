@@ -103,7 +103,7 @@ Patron:
 
 - `proposal_sessions` es el head mutable
 - `session_snapshots` y `session_events` son historial append-only
-- `agent_runs` guarda prompt/model/schema/raw output por ejecucion
+- `agent_runs` guarda prompt/provider/model/schema/raw output por ejecucion
 - `conversation_turns` modela la conversacion de una pregunta por turno
 - `proposals` reutiliza el `session_id` como `proposal_id` en Alpha v1 para mantener compatibilidad de resume
 - `audit_events` es append-only por trigger y audita los artefactos Alpha sin reemplazar `session_events`
@@ -265,6 +265,8 @@ La UI tiene budgets de espera mas altos para el flujo real:
 No se recomienda quitar el timeout por completo. El primer diagnostico puede tardar mas porque encadena la extraccion del brief y la primera ejecucion del agente, pero si Ollama queda colgado la UI debe terminar mostrando un error controlado.
 
 La API tambien deja `OLLAMA_KEEP_ALIVE=30m` por defecto para que el modelo permanezca cargado entre la extraccion inicial y la primera pregunta, reduciendo cargas frias repetidas.
+
+La abstraccion de proveedor IA sigue apuntando solo a Ollama en v1. `AI_PROVIDER=ollama` es el unico valor soportado y `AI_MODEL` puede usarse como alias opcional; si no se define, se usa `OLLAMA_MODEL`.
 
 Ademas, la extraccion inicial del brief usa un excerpt acotado por `BRIEF_EXTRACTION_MAX_CHARS=10000`. El texto completo se sigue persistiendo, pero no se manda entero al primer prompt de Ollama para evitar timeouts innecesarios en local.
 

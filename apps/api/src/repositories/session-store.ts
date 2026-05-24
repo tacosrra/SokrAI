@@ -51,7 +51,9 @@ export interface AgentRunRecord {
   prompt_name: string;
   prompt_version: string;
   prompt_sha256: string;
+  model_provider: string;
   model_name: string;
+  model_params_json: Record<string, unknown>;
   raw_model_output: string | null;
   validated_output_json: Record<string, unknown> | null;
   status: 'completed' | 'validation_failed' | 'repair_failed' | 'model_failed' | 'controlled_error';
@@ -261,7 +263,9 @@ export class SessionStore {
       promptName: string;
       promptVersion: string;
       promptSha256: string;
+      modelProvider?: string;
       modelName: string;
+      modelParamsJson?: Record<string, unknown>;
       inputContractName: string;
       inputContractVersion: string;
       outputContractName: string;
@@ -280,11 +284,11 @@ export class SessionStore {
       [
         'INSERT INTO agent_runs (',
         '  session_id, turn_seq, parent_run_id, request_id, run_purpose, agent_name, workflow_name, workflow_version,',
-        '  workflow_execution_id, attempt_no, prompt_name, prompt_version, prompt_sha256, model_name,',
+        '  workflow_execution_id, attempt_no, prompt_name, prompt_version, prompt_sha256, model_provider, model_name, model_params_json,',
         '  input_contract_name, input_contract_version, output_contract_name, output_contract_version,',
         '  input_payload_json, raw_model_output, validated_output_json, status, error_code, error_message, repair_attempted, metrics_json, finished_at',
-        ') VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, NOW())',
-        'RETURNING id, session_id, turn_seq, request_id, run_purpose, agent_name, prompt_name, prompt_version, prompt_sha256, model_name, raw_model_output, validated_output_json, status',
+        ') VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, NOW())',
+        'RETURNING id, session_id, turn_seq, request_id, run_purpose, agent_name, prompt_name, prompt_version, prompt_sha256, model_provider, model_name, model_params_json, raw_model_output, validated_output_json, status',
       ].join(' '),
       [
         params.sessionId,
@@ -300,7 +304,9 @@ export class SessionStore {
         params.promptName,
         params.promptVersion,
         params.promptSha256,
+        params.modelProvider ?? 'ollama',
         params.modelName,
+        toJson(params.modelParamsJson ?? {}),
         params.inputContractName,
         params.inputContractVersion,
         params.outputContractName,
@@ -587,7 +593,7 @@ export class SessionStore {
         [sessionId],
       ),
       this.database.query<AgentRunRecord>(
-        'SELECT id, session_id, turn_seq, request_id, run_purpose, agent_name, prompt_name, prompt_version, prompt_sha256, model_name, raw_model_output, validated_output_json, status FROM agent_runs WHERE session_id = $1 ORDER BY started_at ASC',
+        'SELECT id, session_id, turn_seq, request_id, run_purpose, agent_name, prompt_name, prompt_version, prompt_sha256, model_provider, model_name, model_params_json, raw_model_output, validated_output_json, status FROM agent_runs WHERE session_id = $1 ORDER BY started_at ASC',
         [sessionId],
       ),
       this.database.query<SnapshotRecord>(

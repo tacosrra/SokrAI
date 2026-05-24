@@ -63,13 +63,20 @@ describe('problem-definition invalid JSON handling', () => {
     expect(agentResponse.statusCode).toBe(200);
     expect(agentResponse.json().agent_status).toBe('continue');
 
-    const run = await app.services.database.query<{ repair_attempted: boolean; raw_model_output: string }>(
-      'SELECT repair_attempted, raw_model_output FROM agent_runs WHERE request_id = $1',
+    const run = await app.services.database.query<{
+      repair_attempted: boolean;
+      raw_model_output: string;
+      model_provider: string;
+      model_params_json: Record<string, unknown>;
+    }>(
+      'SELECT repair_attempted, raw_model_output, model_provider, model_params_json FROM agent_runs WHERE request_id = $1',
       ['req-repair-agent'],
     );
 
     expect(run.rows[0]?.repair_attempted).toBe(true);
     expect(run.rows[0]?.raw_model_output).toContain('"agent_status"');
+    expect(run.rows[0]?.model_provider).toBe('ollama');
+    expect(typeof run.rows[0]?.model_params_json).toBe('object');
   });
 
   it('returns a controlled error when JSON repair also fails and blocks the session without persisting a corrupt turn', async () => {
@@ -130,8 +137,11 @@ describe('problem-definition invalid JSON handling', () => {
       raw_model_output: string | null;
       prompt_name: string;
       prompt_sha256: string;
+      model_provider: string;
+      model_name: string;
+      model_params_json: Record<string, unknown>;
     }>(
-      'SELECT status, raw_model_output, prompt_name, prompt_sha256 FROM agent_runs WHERE request_id = $1',
+      'SELECT status, raw_model_output, prompt_name, prompt_sha256, model_provider, model_name, model_params_json FROM agent_runs WHERE request_id = $1',
       ['req-unrepairable-agent'],
     );
 
@@ -141,6 +151,9 @@ describe('problem-definition invalid JSON handling', () => {
     expect(failedRun.rows[0]?.raw_model_output).toContain('not json');
     expect(failedRun.rows[0]?.prompt_name).toBe('problem-definition-agent');
     expect(failedRun.rows[0]?.prompt_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(failedRun.rows[0]?.model_provider).toBe('ollama');
+    expect(failedRun.rows[0]?.model_name).toBe('fake-model');
+    expect(typeof failedRun.rows[0]?.model_params_json).toBe('object');
   });
 
   it('returns a controlled ollama timeout error and blocks the session for inspection', async () => {
@@ -197,8 +210,14 @@ describe('problem-definition invalid JSON handling', () => {
       'SELECT status FROM proposal_sessions WHERE id = $1',
       [sessionId],
     );
-    const failedRun = await app.services.database.query<{ status: string; error_code: string | null }>(
-      'SELECT status, error_code FROM agent_runs WHERE request_id = $1 AND run_purpose = $2',
+    const failedRun = await app.services.database.query<{
+      status: string;
+      error_code: string | null;
+      model_provider: string;
+      model_name: string;
+      model_params_json: Record<string, unknown>;
+    }>(
+      'SELECT status, error_code, model_provider, model_name, model_params_json FROM agent_runs WHERE request_id = $1 AND run_purpose = $2',
       [requestId, 'problem_definition'],
     );
     const requestStatus = await app.inject({
@@ -209,6 +228,9 @@ describe('problem-definition invalid JSON handling', () => {
     expect(session.rows[0]?.status).toBe('blocked');
     expect(failedRun.rows[0]?.status).toBe('model_failed');
     expect(failedRun.rows[0]?.error_code).toBe('ollama_timeout');
+    expect(failedRun.rows[0]?.model_provider).toBe('ollama');
+    expect(failedRun.rows[0]?.model_name).toBe('fake-model');
+    expect(typeof failedRun.rows[0]?.model_params_json).toBe('object');
     expect(requestStatus.statusCode).toBe(200);
     expect(requestStatus.json()).toMatchObject({
       request_id: requestId,
@@ -400,8 +422,10 @@ describe('problem-definition invalid JSON handling', () => {
       status: string;
       error_code: string | null;
       prompt_sha256: string;
+      model_provider: string;
+      model_name: string;
     }>(
-      'SELECT status, error_code, prompt_sha256 FROM agent_runs WHERE request_id = $1 AND run_purpose = $2',
+      'SELECT status, error_code, prompt_sha256, model_provider, model_name FROM agent_runs WHERE request_id = $1 AND run_purpose = $2',
       ['req-max-turn-reply', 'problem_definition'],
     );
     const blockedEvents = await app.services.database.query<{ count: string }>(
@@ -429,6 +453,8 @@ describe('problem-definition invalid JSON handling', () => {
     expect(failedRun.rows[0]).toMatchObject({
       status: 'controlled_error',
       error_code: 'maximum_turns_reached',
+      model_provider: 'ollama',
+      model_name: 'fake-model',
     });
     expect(failedRun.rows[0]?.prompt_sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(failedRuns.rows[0]?.count).toBe('1');

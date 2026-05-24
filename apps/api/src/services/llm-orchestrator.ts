@@ -7,7 +7,7 @@ import {
 import type { ProblemDefinitionTurn, StructuredBrief } from '../contracts/types';
 import type { AppConfig } from '../config/env';
 import { ModelOutputError } from '../utils/errors';
-import type { LanguageModelClient, ModelCompletionResult } from './ollama-client';
+import type { AiCompletionResult, AiProviderName, AiProviderPort } from './ai-provider';
 import { loadPrompt, type PromptAsset } from './prompt-service';
 
 function safeJsonParse(input: string): unknown {
@@ -17,7 +17,9 @@ function safeJsonParse(input: string): unknown {
 interface GenerationResult<T> {
   output: T;
   prompt: PromptAsset;
+  providerName: AiProviderName;
   modelName: string;
+  modelParams: Record<string, unknown>;
   rawOutput: string;
   repairAttempted: boolean;
   metrics: Record<string, unknown>;
@@ -26,7 +28,7 @@ interface GenerationResult<T> {
 export class LlmOrchestrator {
   constructor(
     private readonly config: AppConfig,
-    private readonly client: LanguageModelClient,
+    private readonly aiProvider: AiProviderPort,
   ) {}
 
   async extractStructuredBrief(input: {
@@ -97,8 +99,8 @@ export class LlmOrchestrator {
     validate: (payload: unknown) => T;
     responseSchema: Record<string, unknown>;
   }): Promise<GenerationResult<T>> {
-    const firstAttempt = await this.client.generate({
-      model: this.config.ollamaModel,
+    const firstAttempt = await this.aiProvider.generate({
+      model: this.config.aiModel,
       systemPrompt: params.prompt.content,
       userPrompt: params.userPrompt,
       responseSchema: params.responseSchema,
@@ -110,7 +112,9 @@ export class LlmOrchestrator {
       return {
         output: params.validate(parsed),
         prompt: params.prompt,
+        providerName: firstAttempt.providerName,
         modelName: firstAttempt.modelName,
+        modelParams: firstAttempt.modelParams,
         rawOutput: firstAttempt.content,
         repairAttempted: false,
         metrics: firstAttempt.metrics,
@@ -130,8 +134,8 @@ export class LlmOrchestrator {
     }
 
     const repairPrompt = await loadPrompt('json-repair');
-    const repairedAttempt = await this.client.generate({
-      model: this.config.ollamaModel,
+    const repairedAttempt = await this.aiProvider.generate({
+      model: this.config.aiModel,
       systemPrompt: repairPrompt.content,
       userPrompt: [
         'Repair the following text into valid JSON that follows the required schema.',
@@ -150,7 +154,9 @@ export class LlmOrchestrator {
       return {
         output: params.validate(repairedJson),
         prompt: params.prompt,
+        providerName: repairedAttempt.providerName,
         modelName: repairedAttempt.modelName,
+        modelParams: repairedAttempt.modelParams,
         rawOutput: firstAttempt.content,
         repairAttempted: true,
         metrics: mergeMetrics(firstAttempt, repairedAttempt),
@@ -171,16 +177,18 @@ export class LlmOrchestrator {
 }
 
 function mergeMetrics(
-  firstAttempt: ModelCompletionResult,
-  repairedAttempt: ModelCompletionResult,
+  firstAttempt: AiCompletionResult,
+  repairedAttempt: AiCompletionResult,
 ): Record<string, unknown> {
   return {
     initial: {
+      provider_name: firstAttempt.providerName,
       model_name: firstAttempt.modelName,
       latency_ms: firstAttempt.latencyMs,
       ...firstAttempt.metrics,
     },
     repair: {
+      provider_name: repairedAttempt.providerName,
       model_name: repairedAttempt.modelName,
       latency_ms: repairedAttempt.latencyMs,
       ...repairedAttempt.metrics,

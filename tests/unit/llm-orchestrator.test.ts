@@ -13,6 +13,8 @@ function createConfig(): AppConfig {
     databaseUrl: 'postgresql://sokrai_app:localpass@localhost:5432/sokrai_app',
     databasePoolMax: 5,
     databaseStatementTimeoutMs: 5000,
+    aiProvider: 'ollama',
+    aiModel: 'fake-model',
     ollamaBaseUrl: 'http://localhost:11434',
     ollamaModel: 'fake-model',
     ollamaTimeoutMs: 1000,

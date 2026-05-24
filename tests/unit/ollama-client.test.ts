@@ -82,7 +82,7 @@ describe('OllamaClient', () => {
     });
   });
 
-  it('sends keep_alive to reduce cold starts between nearby requests', async () => {
+  it('sends keep_alive to reduce cold starts and returns provider metadata', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue({
@@ -96,7 +96,7 @@ describe('OllamaClient', () => {
 
     const client = createClient();
 
-    await client.generate({
+    const result = await client.generate({
       model: 'fake-model',
       systemPrompt: 'system',
       userPrompt: 'user',
@@ -106,5 +106,14 @@ describe('OllamaClient', () => {
     const payload = JSON.parse(String(init.body));
 
     expect(payload.keep_alive).toBe('30m');
+    expect(result).toMatchObject({
+      providerName: 'ollama',
+      modelName: 'fake-model',
+      modelParams: {
+        temperature: 0.2,
+        num_ctx: 4096,
+        keep_alive: '30m',
+      },
+    });
   });
 });

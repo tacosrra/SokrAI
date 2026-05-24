@@ -313,7 +313,9 @@ export interface AgentRun {
   prompt_name: string;
   prompt_version: string;
   prompt_sha256: string;
+  model_provider: string;
   model_name: string;
+  model_params_json: Record<string, unknown>;
   raw_model_output: string | null;
   validated_output_json: Record<string, unknown> | null;
   status:

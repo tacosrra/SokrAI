@@ -7,7 +7,7 @@ import type { AppConfig } from '../../apps/api/src/config/env.ts';
 import { Database } from '../../apps/api/src/repositories/database.ts';
 import { JsonLogger } from '../../apps/api/src/utils/logger.ts';
 import { fromRepoRoot } from '../../apps/api/src/utils/paths.ts';
-import type { LanguageModelClient } from '../../apps/api/src/services/ollama-client.ts';
+import type { AiProviderPort } from '../../apps/api/src/services/ai-provider.ts';
 
 let migrationsApplied = false;
 
@@ -22,6 +22,8 @@ export function createTestConfig(): AppConfig {
       'postgresql://sokrai_app:localpass@localhost:5433/sokrai_app',
     databasePoolMax: 5,
     databaseStatementTimeoutMs: 5000,
+    aiProvider: 'ollama',
+    aiModel: 'fake-model',
     ollamaBaseUrl: 'http://localhost:11434',
     ollamaModel: 'fake-model',
     ollamaTimeoutMs: 1000,
@@ -77,12 +79,12 @@ export async function truncateAll(database: Database): Promise<void> {
   );
 }
 
-export async function buildTestApp(languageModelClient: LanguageModelClient): Promise<{
+export async function buildTestApp(aiProvider: AiProviderPort): Promise<{
   app: FastifyInstance;
   database: Database;
 }>;
 export async function buildTestApp(
-  languageModelClient: LanguageModelClient,
+  aiProvider: AiProviderPort,
   options?: { resetDatabase?: boolean; database?: Database; config?: Partial<AppConfig> },
 ): Promise<{
   app: FastifyInstance;
@@ -102,7 +104,7 @@ export async function buildTestApp(
   const app = await buildApp({
     config,
     database,
-    languageModelClient,
+    aiProvider,
     logger: new JsonLogger('error'),
   });
 

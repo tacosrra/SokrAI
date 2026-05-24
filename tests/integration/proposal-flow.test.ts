@@ -66,8 +66,13 @@ describe('proposal flow integration', () => {
       answer_text: string | null;
       status: string;
     }>('SELECT turn_seq, question_text, answer_text, status FROM conversation_turns ORDER BY turn_seq ASC');
-    const runs = await app.services.database.query<{ prompt_version: string; model_name: string }>(
-      'SELECT prompt_version, model_name FROM agent_runs ORDER BY started_at ASC',
+    const runs = await app.services.database.query<{
+      prompt_version: string;
+      model_provider: string;
+      model_name: string;
+      model_params_json: Record<string, unknown>;
+    }>(
+      'SELECT prompt_version, model_provider, model_name, model_params_json FROM agent_runs ORDER BY started_at ASC',
     );
     const snapshots = await app.services.database.query<{ count: string }>(
       'SELECT COUNT(*)::text AS count FROM session_snapshots',
@@ -94,6 +99,9 @@ describe('proposal flow integration', () => {
     expect(turns.rows[0]?.answer_text?.toLowerCase()).toContain('enfermeria');
     expect(runs.rows).toHaveLength(3);
     expect(runs.rows.every((run) => run.prompt_version === 'v1')).toBe(true);
+    expect(runs.rows.every((run) => run.model_provider === 'ollama')).toBe(true);
+    expect(runs.rows.every((run) => run.model_name === 'fake-model')).toBe(true);
+    expect(runs.rows.every((run) => typeof run.model_params_json === 'object')).toBe(true);
     expect(snapshots.rows[0]?.count).toBe('3');
     expect(alphaRows.rows[0]).toEqual({
       proposals_count: '1',
