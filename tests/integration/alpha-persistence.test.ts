@@ -128,7 +128,10 @@ describe('alpha persistence integration', () => {
         questionText: 'A second open question should fail.',
         turnStatus: 'awaiting_user',
       }),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({
+      errorCode: 'alpha_open_turn_conflict',
+      statusCode: 409,
+    });
 
     await store.updateModuleChatStatus(app.services.database, {
       chatId: chat.chat_id,
@@ -145,6 +148,19 @@ describe('alpha persistence integration', () => {
       diagnosis: ['Evidence now has a concrete source.'],
       sourceRefs: [source],
       gapRefs: [gap.gap_id],
+    });
+    await expect(
+      store.createChatTurn(app.services.database, {
+        chatId: chat.chat_id,
+        proposalId: session.id,
+        module: 'problem',
+        turnSeq: 1,
+        questionText: 'A duplicate turn sequence should fail.',
+        turnStatus: 'resolved',
+      }),
+    ).rejects.toMatchObject({
+      errorCode: 'alpha_turn_sequence_conflict',
+      statusCode: 409,
     });
     const resolvedGap = await store.updateGapStatus(app.services.database, {
       gapId: gap.gap_id,
@@ -273,6 +289,120 @@ describe('alpha persistence integration', () => {
     ).rejects.toThrow();
   });
 
+  it('rejects Alpha child references that cross proposal boundaries', async () => {
+    ({ app } = await buildTestApp(new QueueLanguageModelClient([])));
+    const structuredBrief = await readFixture<StructuredBrief>('expected', 'structured-brief.strong.json');
+    const firstSession = await createLegacySession(app.services.database, app.services.sessionStore, structuredBrief);
+    const secondSession = await createLegacySession(app.services.database, app.services.sessionStore, structuredBrief);
+    const store = app.services.alphaStore;
+
+    await Promise.all([
+      store.createProposal(app.services.database, {
+        proposalId: firstSession.id,
+        sessionId: firstSession.id,
+        proposalStatus: 'active',
+        projectTitle: structuredBrief.project_title,
+        goal: structuredBrief.goal,
+        structuredBrief,
+        schemaVersion: 'alpha-model.v1',
+      }),
+      store.createProposal(app.services.database, {
+        proposalId: secondSession.id,
+        sessionId: secondSession.id,
+        proposalStatus: 'active',
+        projectTitle: structuredBrief.project_title,
+        goal: structuredBrief.goal,
+        structuredBrief,
+        schemaVersion: 'alpha-model.v1',
+      }),
+    ]);
+    const document = await store.createDocument(app.services.database, {
+      proposalId: firstSession.id,
+      sourceKind: 'pasted_text',
+      documentStatus: 'normalized',
+      pastedText: 'Initial text',
+      normalizedText: 'Initial text',
+    });
+    const chat = await store.createModuleChat(app.services.database, {
+      proposalId: firstSession.id,
+      module: 'problem',
+      chatStatus: 'active',
+    });
+
+    await expect(
+      app.services.database.query(
+        [
+          'INSERT INTO chat_turns (chat_id, proposal_id, module, turn_seq, question_text, turn_status)',
+          'VALUES ($1, $2, $3, $4, $5, $6)',
+        ].join(' '),
+        [chat.chat_id, secondSession.id, 'problem', 1, 'This turn belongs to the wrong proposal.', 'awaiting_user'],
+      ),
+    ).rejects.toThrow();
+
+    const turn = await store.createChatTurn(app.services.database, {
+      chatId: chat.chat_id,
+      proposalId: firstSession.id,
+      module: 'problem',
+      turnSeq: 1,
+      questionText: 'What evidence shows this problem is frequent?',
+      turnStatus: 'awaiting_user',
+    });
+    const section = await store.createGeneratedSection(app.services.database, {
+      proposalId: firstSession.id,
+      sectionKind: 'problem',
+      sectionStatus: 'generated',
+      title: 'Problem definition',
+      contentMarkdown: 'Problem text.',
+    });
+
+    for (const [columnName, value] of [
+      ['document_id', document.document_id],
+      ['turn_id', turn.turn_id],
+      ['section_id', section.section_id],
+    ] as const) {
+      await expect(
+        app.services.database.query(
+          [
+            `INSERT INTO proposal_sources (proposal_id, source_kind, label, ${columnName})`,
+            'VALUES ($1, $2, $3, $4)',
+          ].join(' '),
+          [secondSession.id, columnName === 'section_id' ? 'generated_section' : 'pasted_text', 'Cross-proposal source', value],
+        ),
+      ).rejects.toThrow();
+    }
+  });
+
+  it('assigns unique sequential audit event numbers for concurrent appends', async () => {
+    ({ app } = await buildTestApp(new QueueLanguageModelClient([])));
+    const structuredBrief = await readFixture<StructuredBrief>('expected', 'structured-brief.strong.json');
+    const session = await createLegacySession(app.services.database, app.services.sessionStore, structuredBrief);
+    const store = app.services.alphaStore;
+
+    await store.createProposal(app.services.database, {
+      proposalId: session.id,
+      sessionId: session.id,
+      proposalStatus: 'active',
+      projectTitle: structuredBrief.project_title,
+      goal: structuredBrief.goal,
+      structuredBrief,
+      schemaVersion: 'alpha-model.v1',
+    });
+
+    await Promise.all(
+      Array.from({ length: 5 }, (_, index) =>
+        store.appendAuditEvent(app.services.database, {
+          proposalId: session.id,
+          sessionId: session.id,
+          eventType: `concurrent_${index}`,
+          actorType: 'system',
+        }),
+      ),
+    );
+
+    const events = await store.listAuditEvents(session.id);
+    expect(events.map((event) => event.event_seq)).toEqual([1, 2, 3, 4, 5]);
+  });
+
   it('creates initial Alpha rows during the existing start transaction', async () => {
     const structuredBrief = await readFixture<StructuredBrief>('expected', 'structured-brief.strong.json');
 
@@ -323,6 +453,56 @@ describe('alpha persistence integration', () => {
     expect(Number(sources.rows[0]?.count)).toBeGreaterThanOrEqual(1);
     expect(chats.rows[0]?.count).toBe('1');
     expect(events.rows[0]?.count).toBe('1');
+  });
+
+  it('persists extracted document text as Alpha document and source metadata', async () => {
+    const structuredBrief = await readFixture<StructuredBrief>('expected', 'structured-brief.strong.json');
+    ({ app } = await buildTestApp(new QueueLanguageModelClient([JSON.stringify(structuredBrief)])));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/sessions/start-context',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+        'x-request-id': 'req-alpha-document-text',
+      },
+      payload: {
+        request_id: 'req-alpha-document-text',
+        workflow_version: 'proposal_start_v1',
+        payload: {
+          project_title: 'Document-only intake',
+          goal: 'Verify extracted text persistence',
+          document_text: 'Text extracted from the proposal document.',
+        },
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const { session_id: sessionId } = response.json() as { session_id: string };
+
+    const documents = await app.services.database.query<{
+      source_kind: string;
+      normalized_text: string;
+      pasted_text: string | null;
+    }>('SELECT source_kind, normalized_text, pasted_text FROM proposal_documents WHERE proposal_id = $1', [sessionId]);
+    const sources = await app.services.database.query<{
+      source_kind: string;
+      label: string;
+      span_json: { end_char: number };
+    }>('SELECT source_kind, label, span_json FROM proposal_sources WHERE proposal_id = $1', [sessionId]);
+
+    expect(documents.rows).toEqual([
+      {
+        source_kind: 'extracted_text',
+        normalized_text: 'Text extracted from the proposal document.',
+        pasted_text: null,
+      },
+    ]);
+    expect(sources.rows[0]).toMatchObject({
+      source_kind: 'extracted_text',
+      label: 'Extracted proposal text',
+      span_json: { end_char: 'Text extracted from the proposal document.'.length },
+    });
   });
 });
 

@@ -36,7 +36,7 @@ import type {
   StructuredBrief,
 } from '../contracts/types';
 import { AppError } from '../utils/errors';
-import type { Database, SqlExecutor } from './database';
+import { Database, type SqlExecutor } from './database';
 
 export interface ProposalRecord {
   id: string;
@@ -174,6 +174,14 @@ export interface AuditEventRecord {
   created_at: string | Date;
 }
 
+/**
+ * Repository for the Alpha persistence model.
+ *
+ * Mutating methods accept an explicit SqlExecutor so proposal-start can persist
+ * Alpha rows in the same transaction as the legacy resumable session state.
+ * Returned records are mapped back through contract validators before leaving
+ * this boundary.
+ */
 export class AlphaStore {
   constructor(private readonly database: Database) {}
 
@@ -525,32 +533,47 @@ export class AlphaStore {
       warnings?: string[];
     },
   ): Promise<ChatTurn> {
-    const result = await runQuery<ChatTurnRecord>(
-      executor,
-      [
-        'INSERT INTO chat_turns (',
-        '  chat_id, proposal_id, module, turn_seq, question_text, turn_status, agent_status, diagnosis_json,',
-        '  source_refs_json, gap_refs_json, audit_refs_json, warnings_json',
-        ') VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
-        'RETURNING *',
-      ].join(' '),
-      [
-        params.chatId,
-        params.proposalId,
-        params.module,
-        params.turnSeq,
-        params.questionText,
-        params.turnStatus,
-        params.agentStatus ?? null,
-        toJson(params.diagnosis ?? []),
-        toJson(params.sourceRefs ?? []),
-        toJson(params.gapRefs ?? []),
-        toJson(params.auditRefs ?? []),
-        toJson(params.warnings ?? []),
-      ],
-    );
+    try {
+      const result = await runQuery<ChatTurnRecord>(
+        executor,
+        [
+          'INSERT INTO chat_turns (',
+          '  chat_id, proposal_id, module, turn_seq, question_text, turn_status, agent_status, diagnosis_json,',
+          '  source_refs_json, gap_refs_json, audit_refs_json, warnings_json',
+          ') VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)',
+          'RETURNING *',
+        ].join(' '),
+        [
+          params.chatId,
+          params.proposalId,
+          params.module,
+          params.turnSeq,
+          params.questionText,
+          params.turnStatus,
+          params.agentStatus ?? null,
+          toJson(params.diagnosis ?? []),
+          toJson(params.sourceRefs ?? []),
+          toJson(params.gapRefs ?? []),
+          toJson(params.auditRefs ?? []),
+          toJson(params.warnings ?? []),
+        ],
+      );
 
-    return mapChatTurn(result.rows[0]);
+      return mapChatTurn(result.rows[0]);
+    } catch (error) {
+      throw toAlphaPersistenceError(error, params.proposalId, {
+        uq_chat_turns_open_turn: [
+          409,
+          'alpha_open_turn_conflict',
+          'The Alpha chat already has an open turn',
+        ],
+        chat_turns_chat_id_turn_seq_key: [
+          409,
+          'alpha_turn_sequence_conflict',
+          'The Alpha chat turn sequence already exists',
+        ],
+      });
+    }
   }
 
   async updateChatTurnAnswer(
@@ -764,28 +787,47 @@ export class AlphaStore {
       payloadJson?: Record<string, unknown>;
     },
   ): Promise<AuditEventRecord> {
-    const eventSeq = await this.getNextAuditEventSeq(executor, params.proposalId);
-    const result = await runQuery<AuditEventRecord>(
-      executor,
-      [
-        'INSERT INTO audit_events (proposal_id, session_id, run_id, turn_id, event_seq, event_type, actor_type, request_id, payload_json)',
-        'VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-        'RETURNING *',
-      ].join(' '),
-      [
-        params.proposalId,
-        params.sessionId ?? null,
-        params.runId ?? null,
-        params.turnId ?? null,
-        eventSeq,
-        params.eventType,
-        params.actorType,
-        params.requestId ?? null,
-        toJson(params.payloadJson ?? {}),
-      ],
-    );
+    if (executor instanceof Database) {
+      return executor.withTransaction((client) => this.appendAuditEvent(client, params));
+    }
 
-    return normalizeAuditEvent(result.rows[0]);
+    try {
+      await runQuery(executor, 'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [params.proposalId]);
+      const eventSeq = await this.getNextAuditEventSeq(executor, params.proposalId);
+      const result = await runQuery<AuditEventRecord>(
+        executor,
+        [
+          'INSERT INTO audit_events (proposal_id, session_id, run_id, turn_id, event_seq, event_type, actor_type, request_id, payload_json)',
+          'VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+          'RETURNING *',
+        ].join(' '),
+        [
+          params.proposalId,
+          params.sessionId ?? null,
+          params.runId ?? null,
+          params.turnId ?? null,
+          eventSeq,
+          params.eventType,
+          params.actorType,
+          params.requestId ?? null,
+          toJson(params.payloadJson ?? {}),
+        ],
+      );
+
+      return normalizeAuditEvent(result.rows[0]);
+    } catch (error) {
+      if (isPgConstraint(error, 'audit_events_proposal_id_event_seq_key')) {
+        throw new AppError(
+          409,
+          'alpha_audit_sequence_conflict',
+          'The Alpha audit event sequence conflicted while appending an event',
+          true,
+          params.proposalId,
+        );
+      }
+
+      throw error;
+    }
   }
 
   async listAuditEvents(proposalId: string, executor?: SqlExecutor): Promise<AuditEventRecord[]> {
@@ -1049,4 +1091,31 @@ function toIso(value: string | Date): string {
 
 function toJson(value: unknown): string {
   return JSON.stringify(value);
+}
+
+function toAlphaPersistenceError(
+  error: unknown,
+  proposalId: string,
+  constraints: Record<string, [number, string, string]>,
+): AppError | unknown {
+  const constraint = getPgConstraint(error);
+  if (constraint && constraints[constraint]) {
+    const [statusCode, errorCode, safeMessage] = constraints[constraint];
+    return new AppError(statusCode, errorCode, safeMessage, false, proposalId, { constraint });
+  }
+
+  return error;
+}
+
+function isPgConstraint(error: unknown, constraintName: string): boolean {
+  return getPgConstraint(error) === constraintName;
+}
+
+function getPgConstraint(error: unknown): string | null {
+  if (!error || typeof error !== 'object' || !('constraint' in error)) {
+    return null;
+  }
+
+  const constraint = (error as { constraint?: unknown }).constraint;
+  return typeof constraint === 'string' ? constraint : null;
 }

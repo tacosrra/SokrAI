@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS proposal_documents (
         CHECK (jsonb_typeof(warnings_json) = 'array'),
     metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb
         CHECK (jsonb_typeof(metadata_json) = 'object'),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_proposal_documents_proposal_id_id UNIQUE (proposal_id, id)
 );
 
 CREATE TABLE IF NOT EXISTS module_chats (
@@ -63,7 +64,8 @@ CREATE TABLE IF NOT EXISTS module_chats (
     started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     completed_at TIMESTAMPTZ,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE (proposal_id, module)
+    UNIQUE (proposal_id, module),
+    CONSTRAINT uq_module_chats_proposal_id_id UNIQUE (proposal_id, id)
 );
 
 CREATE TABLE IF NOT EXISTS chat_turns (
@@ -219,6 +221,88 @@ CREATE TABLE IF NOT EXISTS audit_events (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (proposal_id, event_seq)
 );
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'uq_proposal_documents_proposal_id_id'
+    ) THEN
+        ALTER TABLE proposal_documents
+            ADD CONSTRAINT uq_proposal_documents_proposal_id_id UNIQUE (proposal_id, id);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'uq_module_chats_proposal_id_id'
+    ) THEN
+        ALTER TABLE module_chats
+            ADD CONSTRAINT uq_module_chats_proposal_id_id UNIQUE (proposal_id, id);
+    END IF;
+END;
+$$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'fk_chat_turns_chat'
+    ) THEN
+        ALTER TABLE chat_turns
+            ADD CONSTRAINT fk_chat_turns_chat
+            FOREIGN KEY (proposal_id, chat_id)
+            REFERENCES module_chats(proposal_id, id)
+            ON DELETE CASCADE
+            DEFERRABLE INITIALLY DEFERRED;
+    END IF;
+END;
+$$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'fk_proposal_sources_document'
+    ) THEN
+        ALTER TABLE proposal_sources
+            ADD CONSTRAINT fk_proposal_sources_document
+            FOREIGN KEY (proposal_id, document_id)
+            REFERENCES proposal_documents(proposal_id, id)
+            ON DELETE SET NULL (document_id)
+            DEFERRABLE INITIALLY DEFERRED;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'fk_proposal_sources_turn'
+    ) THEN
+        ALTER TABLE proposal_sources
+            ADD CONSTRAINT fk_proposal_sources_turn
+            FOREIGN KEY (proposal_id, turn_id)
+            REFERENCES chat_turns(proposal_id, id)
+            ON DELETE SET NULL (turn_id)
+            DEFERRABLE INITIALLY DEFERRED;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'fk_proposal_sources_section'
+    ) THEN
+        ALTER TABLE proposal_sources
+            ADD CONSTRAINT fk_proposal_sources_section
+            FOREIGN KEY (proposal_id, section_id)
+            REFERENCES generated_sections(proposal_id, id)
+            ON DELETE SET NULL (section_id)
+            DEFERRABLE INITIALLY DEFERRED;
+    END IF;
+END;
+$$;
 
 DO $$
 BEGIN
