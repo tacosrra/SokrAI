@@ -88,10 +88,13 @@ const ARRAY_FIELD_RULES: FieldRule[] = [
   },
 ];
 
+// Alpha v1 only suppresses candidates for explicitly out-of-scope modules.
+// Ordinary clinical or hospital problem context must still produce Alpha gaps.
 const FORBIDDEN_SCOPE_PATTERNS = [
   /regulator/i,
   /regulatory/i,
-  /clinic/i,
+  /\bclinic pilot\b/i,
+  /\bhospital_clinic_v1\b/i,
   /clinical classification/i,
   /medical device/i,
   /cost/i,
@@ -106,6 +109,16 @@ const FORBIDDEN_SCOPE_PATTERNS = [
   /pdf/i,
 ];
 
+/**
+ * Alpha deterministic domain entry point for initial gap detection.
+ *
+ * Detection runs in stable order: missing structured fields, explicit
+ * missing_information items, ambiguities, then source-backed confirmation
+ * gaps. Only confirmation gaps may carry source_refs, because absence-backed
+ * gaps must not invent evidence. Candidates for Alpha v1 out-of-scope modules
+ * are filtered before dedupe, then remaining candidates are deduped by
+ * module/field/kind and truncated to the configured max candidate limit.
+ */
 export function detectInitialGapCandidates(input: DetectInitialGapCandidatesInput): InitialGapCandidate[] {
   const maxCandidates = input.maxCandidates ?? MAX_INITIAL_GAPS;
   const candidates = filterForbiddenScope([

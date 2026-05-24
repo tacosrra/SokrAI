@@ -250,7 +250,7 @@ export function deriveSessionPresentation(audit: SessionAuditView): SessionPrese
     latestSnapshot?.current_problem_definition_json ??
     audit.session.latest_problem_definition_json;
   const checklist = deriveChecklist(structuredBrief, problemDefinition);
-  const gaps = audit.gaps ?? [];
+  const gaps = audit.gaps;
 
   return {
     sessionId: audit.session.id,

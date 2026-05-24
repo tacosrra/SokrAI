@@ -374,7 +374,7 @@ export interface SessionAuditView {
   session: SessionRecord;
   documents: ProposalDocument[];
   sources: ProposalSource[];
-  gaps?: AlphaGap[];
+  gaps: AlphaGap[];
   turns: ConversationTurn[];
   runs: AgentRun[];
   snapshots: Snapshot[];

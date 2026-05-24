@@ -393,10 +393,10 @@ export class AlphaStore {
       module: AlphaModule;
       gapKind: GapKind;
       gapStatus: GapStatus;
-      origin?: GapOrigin;
+      origin: GapOrigin;
       field: string;
       description: string;
-      absence?: GapAbsence;
+      absence: GapAbsence;
       questionHint?: string;
       sourceRefs?: ProposalSource[];
       resolvedByTurnId?: string;
@@ -418,10 +418,10 @@ export class AlphaStore {
         params.module,
         params.gapKind,
         params.gapStatus,
-        params.origin ?? 'system_rule',
+        params.origin,
         params.field,
         params.description,
-        toJson(params.absence ?? defaultAbsence(params.gapKind, params.field)),
+        toJson(params.absence),
         params.questionHint ?? null,
         toJson(params.sourceRefs ?? []),
         params.resolvedByTurnId ?? null,
@@ -1103,22 +1103,6 @@ function toIso(value: string | Date): string {
 
 function toJson(value: unknown): string {
   return JSON.stringify(value);
-}
-
-function defaultAbsence(gapKind: GapKind, field: string): GapAbsence {
-  if (gapKind === 'missing_information') {
-    return {
-      is_absent: true,
-      checked_fields: [field],
-      reason: 'Required information was not found in the available structured brief.',
-    };
-  }
-
-  return {
-    is_absent: false,
-    checked_fields: [],
-    reason: '',
-  };
 }
 
 function toAlphaPersistenceError(

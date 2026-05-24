@@ -696,7 +696,7 @@ export function parseSessionAuditView(value: unknown): SessionAuditView {
     sources: expectArray(record.sources, 'session audit view.sources').map((item, index) =>
       parseProposalSource(item, `session audit view.sources[${index}]`),
     ),
-    gaps: expectOptionalArray(record.gaps, [], 'session audit view.gaps').map((item, index) =>
+    gaps: expectArray(record.gaps, 'session audit view.gaps').map((item, index) =>
       parseAlphaGap(item, `session audit view.gaps[${index}]`),
     ),
     turns: expectOptionalArray(record.turns, [], 'session audit view.turns').map((item, index) =>

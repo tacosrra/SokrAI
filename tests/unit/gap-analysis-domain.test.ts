@@ -99,6 +99,25 @@ describe('gap analysis domain rules', () => {
     );
   });
 
+  it('keeps valid clinical problem-definition context inside Alpha scope', () => {
+    const gaps = detectInitialGapCandidates({
+      structuredBrief: {
+        ...baseBrief,
+        evidence_of_problem: 'Registro interno de esperas',
+        missing_information: ['clinical workflow owner'],
+      },
+    });
+
+    expect(gaps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          field: 'missing_information',
+          description: expect.stringMatching(/clinical workflow owner/i),
+        }),
+      ]),
+    );
+  });
+
   it('uses real proposal sources only for confirmation gaps', () => {
     const gaps = detectInitialGapCandidates({
       structuredBrief: {

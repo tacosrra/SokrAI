@@ -100,8 +100,14 @@ describe('alpha persistence integration', () => {
       module: 'problem',
       gapKind: 'missing_information',
       gapStatus: 'open',
+      origin: 'structured_brief_field',
       field: 'evidence_of_problem',
       description: 'Evidence needs a measurable baseline.',
+      absence: {
+        is_absent: true,
+        checked_fields: ['evidence_of_problem'],
+        reason: 'Required information was not found in the available structured brief.',
+      },
       sourceRefs: [source],
     });
     const chat = await store.createModuleChat(app.services.database, {
