@@ -3,7 +3,7 @@ set -euo pipefail
 
 API_BASE_URL="${API_BASE_URL:-http://localhost:3001}"
 N8N_BASE_URL="${N8N_BASE_URL:-http://localhost:5678}"
-INTERNAL_SHARED_SECRET="${INTERNAL_SHARED_SECRET:-local-shared-secret}"
+INTERNAL_SHARED_SECRET="${INTERNAL_SHARED_SECRET:-replace-with-a-random-32-char-secret}"
 REQUEST_TIMEOUT_SECONDS="${REQUEST_TIMEOUT_SECONDS:-480}"
 
 TMP_DIR="$(mktemp -d)"
@@ -163,7 +163,8 @@ start_response="$TMP_DIR/start-response.json"
 build_start_payload "$start_request_id" "$start_payload"
 
 log_step "Starting proposal through n8n webhook"
-http_json POST "$N8N_BASE_URL/webhook/proposal-start-v1" "$start_response" "$start_payload"
+http_json POST "$N8N_BASE_URL/webhook/proposal-start-v1" "$start_response" "$start_payload" \
+  -H "x-request-id: $start_request_id"
 json_assert "$start_response" 'typeof data.session_id === "string" && data.session_id.length > 0' 'start response missing session_id'
 json_assert "$start_response" 'data.structured_brief && typeof data.structured_brief === "object"' 'start response missing structured_brief'
 json_assert "$start_response" 'typeof data.next_question === "string"' 'start response missing next_question'
@@ -182,7 +183,8 @@ reply_response="$TMP_DIR/reply-response.json"
 build_reply_payload "$reply_request_id" "$session_id" "$reply_payload"
 
 log_step "Appending reply through n8n webhook"
-http_json POST "$N8N_BASE_URL/webhook/proposal-reply-v1" "$reply_response" "$reply_payload"
+http_json POST "$N8N_BASE_URL/webhook/proposal-reply-v1" "$reply_response" "$reply_payload" \
+  -H "x-request-id: $reply_request_id"
 SESSION_ID="$session_id" json_assert "$reply_response" 'data.session_id === process.env.SESSION_ID' 'reply response session_id mismatch'
 json_assert "$reply_response" '["continue", "done", "blocked"].includes(data.agent_status)' 'reply response has invalid agent_status'
 

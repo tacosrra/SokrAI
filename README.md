@@ -123,7 +123,7 @@ Que hace:
 - espera a que `PostgreSQL`, `Ollama`, `API`, `n8n` y `web` esten listos
 - descarga el modelo configurado en `OLLAMA_MODEL` con reintentos; si ya esta cacheado, lo reutiliza
 - ejecuta migraciones
-- importa y activa los workflows de `n8n`
+- importa y publica los workflows de `n8n`
 - abre la UI principal en el navegador al terminar
 
 Requisitos de esta ruta:
@@ -166,7 +166,14 @@ pnpm install --store-dir ./.pnpm-store
 docker compose up -d postgres ollama api n8n
 docker compose exec ollama ollama pull qwen2.5:3b-instruct
 docker compose exec api pnpm migrate
-# Importa y publica los workflows de infra/n8n/workflows en http://localhost:5678.
+for workflow in proposal_start_v1.json proposal_reply_v1.json agent_problem_definition_v1.json; do
+  docker compose exec -T -u node n8n n8n import:workflow --input="/workflows/${workflow}"
+done
+for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json; do
+  workflow_id="$(awk -F'"' '/^[[:space:]]*"id":[[:space:]]*"/ { print $4; exit }' "$workflow_path")"
+  docker compose exec -T -u node n8n n8n publish:workflow --id="$workflow_id"
+done
+docker compose restart n8n
 bash scripts/smoke-core.sh
 ```
 
@@ -262,9 +269,9 @@ Archivos:
 - `infra/n8n/workflows/proposal_reply_v1.json`
 - `infra/n8n/workflows/agent_problem_definition_v1.json`
 
-Abre `http://localhost:5678`, importa los tres workflows y asegúrate de que `INTERNAL_SHARED_SECRET` coincide entre `.env`, la API y `n8n`.
+Abre `http://localhost:5678`, importa y publica los tres workflows, y asegúrate de que `INTERNAL_SHARED_SECRET` coincide entre `.env`, la API y `n8n`.
 
-Los exports de workflow de esta version eliminan reintentos sincronos en nodos `HTTP Request` y propagan `statusCode + body` de la API al webhook para que un `ollama_timeout` o cualquier error controlado llegue a la UI como JSON consistente. Si reimportas los workflows, activa la nueva version exportada del repo.
+Los exports de workflow de esta version eliminan reintentos sincronos en nodos `HTTP Request` y propagan `statusCode + body` de la API al webhook para que un `ollama_timeout` o cualquier error controlado llegue a la UI como JSON consistente. Si reimportas los workflows, publica la nueva version exportada del repo.
 
 Si ejecutas `web` o `api` en Docker Compose, recuerda reconstruir esas imagenes tras cambiar el codigo; si ejecutas con Vite/tsx en local, reinicia ambos procesos para que se carguen los nuevos budgets y la recuperacion por `request_id`.
 

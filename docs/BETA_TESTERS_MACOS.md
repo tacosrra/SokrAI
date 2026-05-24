@@ -119,7 +119,7 @@ Este comando hace automáticamente lo siguiente:
 - levanta `PostgreSQL`, `Ollama`, `API`, `n8n` y `web`
 - descarga el modelo
 - ejecuta migraciones
-- importa y activa los workflows de `n8n`
+- importa y publica los workflows de `n8n`
 - abre la aplicación en el navegador al terminar
 
 La primera vez puede tardar varios minutos. No cierres Docker Desktop mientras corre.

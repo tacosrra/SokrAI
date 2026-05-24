@@ -98,6 +98,24 @@ describe('contract schemas', () => {
     expect(new Set(workflowIds).size).toBe(workflowIds.length);
   });
 
+  it('preserves caller request ids in n8n workflow payload setup', async () => {
+    const workflowsDir = path.resolve(process.cwd(), '../../infra/n8n/workflows');
+    const workflowExpectations = [
+      ['proposal_start_v1.json', 'Webhook_StartProposal'],
+      ['proposal_reply_v1.json', 'Webhook_ProposalReply'],
+      ['agent_problem_definition_v1.json', 'Webhook_AgentProblemDefinition'],
+    ];
+
+    for (const [file, webhookNodeName] of workflowExpectations) {
+      const workflow = await readFile(path.join(workflowsDir, file), 'utf8');
+
+      expect(workflow).toContain(
+        `$node[\\"${webhookNodeName}\\"].json.headers?.[\\"x-request-id\\"] || $node[\\"${webhookNodeName}\\"].json.body?.request_id || $execution.id`,
+      );
+      expect(workflow).not.toContain('$json.body.request_id || $execution.id');
+    }
+  });
+
   it('bootstraps n8n workflows with supported per-workflow publish commands', async () => {
     const bashScriptPath = path.resolve(process.cwd(), '../../scripts/common-beta.sh');
     const powershellScriptPath = path.resolve(process.cwd(), '../../scripts/common-beta.ps1');

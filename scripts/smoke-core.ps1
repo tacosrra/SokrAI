@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 
 $ApiBaseUrl = if ($env:API_BASE_URL) { $env:API_BASE_URL } else { 'http://localhost:3001' }
 $N8nBaseUrl = if ($env:N8N_BASE_URL) { $env:N8N_BASE_URL } else { 'http://localhost:5678' }
-$InternalSharedSecret = if ($env:INTERNAL_SHARED_SECRET) { $env:INTERNAL_SHARED_SECRET } else { 'local-shared-secret' }
+$InternalSharedSecret = if ($env:INTERNAL_SHARED_SECRET) { $env:INTERNAL_SHARED_SECRET } else { 'replace-with-a-random-32-char-secret' }
 $RequestTimeoutSeconds = if ($env:REQUEST_TIMEOUT_SECONDS) { [int]$env:REQUEST_TIMEOUT_SECONDS } else { 480 }
 
 function Write-Step {
@@ -63,7 +63,9 @@ $startPayload = Get-Content -LiteralPath 'examples/proposal-start.payload.json' 
 $startPayload | Add-Member -NotePropertyName 'request_id' -NotePropertyValue $startRequestId -Force
 
 Write-Step 'Starting proposal through n8n webhook'
-$startResponse = Invoke-JsonRequest -Method 'POST' -Uri "$N8nBaseUrl/webhook/proposal-start-v1" -Body $startPayload
+$startResponse = Invoke-JsonRequest -Method 'POST' -Uri "$N8nBaseUrl/webhook/proposal-start-v1" -Body $startPayload -Headers @{
+  'x-request-id' = $startRequestId
+}
 Assert-Smoke -Condition (-not [string]::IsNullOrWhiteSpace([string]$startResponse.session_id)) -Message 'start response missing session_id'
 Assert-Smoke -Condition ($null -ne $startResponse.structured_brief) -Message 'start response missing structured_brief'
 Assert-Smoke -Condition ($null -ne $startResponse.next_question) -Message 'start response missing next_question'
@@ -80,7 +82,9 @@ $replyPayload | Add-Member -NotePropertyName 'request_id' -NotePropertyValue $re
 $replyPayload.session_id = $sessionId
 
 Write-Step 'Appending reply through n8n webhook'
-$replyResponse = Invoke-JsonRequest -Method 'POST' -Uri "$N8nBaseUrl/webhook/proposal-reply-v1" -Body $replyPayload
+$replyResponse = Invoke-JsonRequest -Method 'POST' -Uri "$N8nBaseUrl/webhook/proposal-reply-v1" -Body $replyPayload -Headers @{
+  'x-request-id' = $replyRequestId
+}
 Assert-Smoke -Condition ($replyResponse.session_id -eq $sessionId) -Message 'reply response session_id mismatch'
 Assert-Smoke -Condition (@('continue', 'done', 'blocked') -contains $replyResponse.agent_status) -Message 'reply response has invalid agent_status'
 

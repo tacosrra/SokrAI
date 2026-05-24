@@ -335,6 +335,10 @@ describe('problem-definition invalid JSON handling', () => {
       'SELECT status, completion_reason FROM conversation_turns WHERE answer_request_id = $1',
       ['req-max-turn-reply'],
     );
+    const session = await app.services.database.query<{ status: string }>(
+      'SELECT status FROM proposal_sessions WHERE id = $1',
+      [sessionId],
+    );
     const failedRun = await app.services.database.query<{
       status: string;
       error_code: string | null;
@@ -342,6 +346,10 @@ describe('problem-definition invalid JSON handling', () => {
     }>(
       'SELECT status, error_code, prompt_sha256 FROM agent_runs WHERE request_id = $1 AND run_purpose = $2',
       ['req-max-turn-reply', 'problem_definition'],
+    );
+    const blockedEvents = await app.services.database.query<{ count: string }>(
+      'SELECT COUNT(*)::text AS count FROM session_events WHERE session_id = $1 AND event_type = $2',
+      [sessionId, 'session_blocked'],
     );
     const requestStatus = await app.inject({
       method: 'GET',
@@ -356,11 +364,13 @@ describe('problem-definition invalid JSON handling', () => {
       status: 'failed',
       completion_reason: 'The maximum number of turns has already been reached',
     });
+    expect(session.rows[0]?.status).toBe('blocked');
     expect(failedRun.rows[0]).toMatchObject({
       status: 'controlled_error',
       error_code: 'maximum_turns_reached',
     });
     expect(failedRun.rows[0]?.prompt_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(blockedEvents.rows[0]?.count).toBe('1');
     expect(requestStatus.statusCode).toBe(200);
     expect(requestStatus.json()).toMatchObject({
       request_id: 'req-max-turn-reply',

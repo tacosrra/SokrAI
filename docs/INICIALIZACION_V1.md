@@ -65,7 +65,7 @@ Este bootstrap:
 - espera a que `postgres`, `ollama`, `api`, `n8n` y `web` esten listos
 - hace `ollama pull` del modelo configurado con reintentos; si ya esta cacheado, lo reutiliza
 - ejecuta migraciones
-- importa y activa los workflows versionados de `n8n`
+- importa y publica los workflows versionados de `n8n`
 - abre la UI principal en el navegador al terminar
 
 Despues del primer setup:
@@ -487,11 +487,11 @@ Importa estos archivos:
   - ejecuta un turno del agente
   - valida y persiste el resultado
 
-### 11.4 Activar workflows
+### 11.4 Publicar workflows
 
-Despues de importarlos, activalos en n8n.
+Despues de importarlos, publicalos en n8n.
 
-Si no estan activos, el webhook no respondera como esperas.
+Si no estan publicados, el webhook no respondera como esperas.
 
 ## 12. Comprobar rutas reales expuestas
 
@@ -963,7 +963,7 @@ Y luego:
 Revisa:
 
 - que los workflows estan importados
-- que estan activos
+- que estan publicados
 - que n8n esta llamando a `http://api:3001`
 - que `INTERNAL_SHARED_SECRET` coincide entre `.env`, `api` y `n8n`
 
