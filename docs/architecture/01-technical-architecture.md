@@ -137,25 +137,33 @@ La implementacion concreta debe seguir los contratos y schemas vigentes. Este do
 
 Estado actual:
 
-- Ollama corre localmente.
-- La API lo usa via cliente server-side.
-- El modelo por defecto se configura por entorno.
+- Ollama corre localmente y es el unico proveedor soportado en v1.
+- La API crea el proveedor con `createAiProvider`.
+- `AI_PROVIDER=ollama` falla cerrado si se configura otro valor.
+- El modelo efectivo se resuelve por entorno con `AI_MODEL` y, si falta, `OLLAMA_MODEL`.
 
 Decision:
 
-- Mantener Ollama local en MVP Alpha y Clinic Pilot.
-- Introducir o consolidar una abstraccion interna de proveedor IA.
+- Mantener Ollama local en MVP Alpha.
+- Usar `AiProviderPort` como frontera interna entre la orquestacion y el proveedor IA.
 - No implementar proveedor externo en MVP.
 - No disenar despliegue VPS en MVP.
 
-Puerto conceptual:
+Componentes implementados:
 
-- `AiProviderPort`: completa JSON estructurado, expone provider/model metadata y errores tipados.
-- `OllamaChatProvider`: implementacion local actual/futura.
-- `JsonRepairService`: conserva reparacion unica de JSON invalido.
-- `AiRunRecorder`: registra prompt, modelo, input/output, schema y errores.
+- `AiProviderPort`: contrato provider-neutral para generar texto estructurado y devolver metadata de proveedor/modelo.
+- `createAiProvider`: selecciona el proveedor soportado por configuracion y falla cerrado fuera de `ollama`.
+- `OllamaClient`: implementa `AiProviderPort`, ejecuta la llamada server-side a `/api/chat`, aplica timeout, envia `format` con el schema JSON y normaliza errores de proveedor.
+- `LlmOrchestrator`: carga prompts versionados, invoca el proveedor, parsea JSON, valida contra schemas canonicos y ejecuta una reparacion unica cuando corresponde.
+- `SessionStore.recordAgentRun`: persiste prompt, provider, modelo, parametros, schema, raw output, estado, errores y metricas de cada ejecucion.
 
-Roadmap:
+Responsabilidades:
+
+- El proveedor ejecuta la llamada IA y devuelve contenido, metadata y metricas provider-owned.
+- El orquestador conserva la responsabilidad de parseo, validacion de schema y reparacion.
+- La persistencia registra la auditoria de ejecucion, incluidos `model_provider`, `model_name` y `model_params_json`.
+
+Futuro explicito:
 
 - Proveedor local alojado en VPS/on-prem mas potente.
 - Evaluacion de modelos por tarea.

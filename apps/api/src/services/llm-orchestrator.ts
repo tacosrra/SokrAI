@@ -6,13 +6,9 @@ import {
 } from '../contracts/schema-registry';
 import type { ProblemDefinitionTurn, StructuredBrief } from '../contracts/types';
 import type { AppConfig } from '../config/env';
-import { ModelOutputError } from '../utils/errors';
+import { AppError, ModelOutputError } from '../utils/errors';
 import type { AiCompletionResult, AiProviderName, AiProviderPort } from './ai-provider';
 import { loadPrompt, type PromptAsset } from './prompt-service';
-
-function safeJsonParse(input: string): unknown {
-  return JSON.parse(input);
-}
 
 interface GenerationResult<T> {
   output: T;
@@ -107,10 +103,11 @@ export class LlmOrchestrator {
     });
 
     try {
-      const parsed = safeJsonParse(firstAttempt.content);
+      const parsed = parseModelJson(firstAttempt.content, firstAttempt.content, false);
+      const output = validateModelOutput(parsed, params.validate, firstAttempt.content, false);
 
       return {
-        output: params.validate(parsed),
+        output,
         prompt: params.prompt,
         providerName: firstAttempt.providerName,
         modelName: firstAttempt.modelName,
@@ -121,15 +118,11 @@ export class LlmOrchestrator {
       };
     } catch (error) {
       if (this.config.jsonRepairMaxAttempts < 1) {
-        throw new ModelOutputError(
-          'invalid_model_json',
-          'The model did not return valid JSON',
-          firstAttempt.content,
-          false,
-          {
-            cause: error instanceof Error ? error.message : 'unknown',
-          },
-        );
+        throw error;
+      }
+
+      if (!(error instanceof ModelOutputError)) {
+        throw error;
       }
     }
 
@@ -148,31 +141,83 @@ export class LlmOrchestrator {
       responseSchema: params.responseSchema,
     });
 
-    try {
-      const repairedJson = safeJsonParse(repairedAttempt.content);
+    const repairedJson = parseModelJson(repairedAttempt.content, firstAttempt.content, true, {
+      repaired_output: repairedAttempt.content,
+    });
+    const output = validateModelOutput(
+      repairedJson,
+      params.validate,
+      firstAttempt.content,
+      true,
+      {
+        repaired_output: repairedAttempt.content,
+      },
+    );
 
-      return {
-        output: params.validate(repairedJson),
-        prompt: params.prompt,
-        providerName: repairedAttempt.providerName,
-        modelName: repairedAttempt.modelName,
-        modelParams: repairedAttempt.modelParams,
-        rawOutput: firstAttempt.content,
-        repairAttempted: true,
-        metrics: mergeMetrics(firstAttempt, repairedAttempt),
-      };
-    } catch (error) {
+    return {
+      output,
+      prompt: params.prompt,
+      providerName: repairedAttempt.providerName,
+      modelName: repairedAttempt.modelName,
+      modelParams: repairedAttempt.modelParams,
+      rawOutput: firstAttempt.content,
+      repairAttempted: true,
+      metrics: mergeMetrics(firstAttempt, repairedAttempt),
+    };
+  }
+}
+
+function parseModelJson(
+  content: string,
+  rawOutput: string,
+  repairAttempted: boolean,
+  details?: Record<string, unknown>,
+): unknown {
+  try {
+    return JSON.parse(content);
+  } catch (error) {
+    throw new ModelOutputError(
+      repairAttempted ? 'invalid_model_json_after_repair' : 'invalid_model_json',
+      repairAttempted
+        ? 'The model returned invalid JSON and the repair step also failed'
+        : 'The model did not return valid JSON',
+      rawOutput,
+      repairAttempted,
+      {
+        cause: error instanceof Error ? error.message : 'unknown',
+        ...(details ?? {}),
+      },
+    );
+  }
+}
+
+function validateModelOutput<T>(
+  payload: unknown,
+  validate: (payload: unknown) => T,
+  rawOutput: string,
+  repairAttempted: boolean,
+  details?: Record<string, unknown>,
+): T {
+  try {
+    return validate(payload);
+  } catch (error) {
+    if (error instanceof AppError) {
       throw new ModelOutputError(
-        'invalid_model_json_after_repair',
-        'The model returned invalid JSON and the repair step also failed',
-        firstAttempt.content,
-        true,
+        error.errorCode,
+        repairAttempted
+          ? 'The model returned JSON that does not match the required schema after repair'
+          : 'The model returned JSON that does not match the required schema',
+        rawOutput,
+        repairAttempted,
         {
-          cause: error instanceof Error ? error.message : 'unknown',
-          repaired_output: repairedAttempt.content,
+          cause: error.safeMessage,
+          ...(error.details ?? {}),
+          ...(details ?? {}),
         },
       );
     }
+
+    throw error;
   }
 }
 

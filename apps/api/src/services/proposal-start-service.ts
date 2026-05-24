@@ -136,7 +136,7 @@ export class ProposalStartService {
           },
         });
 
-        const extractionRun = await this.sessionStore.insertAgentRun(client, {
+        const extractionRun = await this.sessionStore.recordAgentRun(client, {
           sessionId: createdSession.id,
           requestId,
           runPurpose: 'brief_extraction',

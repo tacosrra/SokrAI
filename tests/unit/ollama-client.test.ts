@@ -76,6 +76,65 @@ describe('OllamaClient', () => {
         userPrompt: 'user',
       }),
     ).rejects.toMatchObject({
+      name: 'AiProviderError',
+      statusCode: 502,
+      errorCode: 'ollama_invalid_response',
+      retryable: false,
+    });
+  });
+
+  it('maps non-2xx responses to a controlled provider error', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: vi.fn().mockResolvedValue('server error'),
+      } satisfies Partial<Response>),
+    );
+
+    const client = createClient();
+
+    await expect(
+      client.generate({
+        model: 'fake-model',
+        systemPrompt: 'system',
+        userPrompt: 'user',
+      }),
+    ).rejects.toMatchObject({
+      name: 'AiProviderError',
+      providerName: 'ollama',
+      statusCode: 502,
+      errorCode: 'ollama_request_failed',
+      retryable: true,
+    });
+  });
+
+  it.each([
+    ['missing message', {}],
+    ['missing message.content', { message: {} }],
+    ['non-string message.content', { message: { content: 42 } }],
+    ['blank message.content', { message: { content: '   ' } }],
+  ])('rejects %s as an invalid provider response', async (_caseName, payload) => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue(payload),
+      } satisfies Partial<Response>),
+    );
+
+    const client = createClient();
+
+    await expect(
+      client.generate({
+        model: 'fake-model',
+        systemPrompt: 'system',
+        userPrompt: 'user',
+      }),
+    ).rejects.toMatchObject({
+      name: 'AiProviderError',
+      providerName: 'ollama',
       statusCode: 502,
       errorCode: 'ollama_invalid_response',
       retryable: false,

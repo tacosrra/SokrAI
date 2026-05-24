@@ -247,7 +247,7 @@ export class SessionStore {
     return result.rows[0];
   }
 
-  async insertAgentRun(
+  async recordAgentRun(
     client: PoolClient,
     params: {
       sessionId: string;

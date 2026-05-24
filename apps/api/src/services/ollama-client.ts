@@ -1,11 +1,11 @@
 import type { AppConfig } from '../config/env';
-import { AppError } from '../utils/errors';
 import {
   AiProviderError,
   type AiCompletionResult,
   type AiGenerationParams,
   type AiProviderPort,
 } from './ai-provider';
+import { AppError } from '../utils/errors';
 
 interface OllamaChatPayload {
   model?: string;
@@ -63,10 +63,17 @@ export class OllamaClient implements AiProviderPort {
 
     if (!response.ok) {
       const text = await response.text();
-      throw new AppError(502, 'ollama_request_failed', 'The local model did not return a successful response', true, undefined, {
-        status: response.status,
-        body: text,
-      });
+      throw new AiProviderError(
+        'ollama',
+        502,
+        'ollama_request_failed',
+        'The local model did not return a successful response',
+        true,
+        {
+          status: response.status,
+          body: text,
+        },
+      );
     }
 
     let payload: OllamaChatPayload;
@@ -74,20 +81,22 @@ export class OllamaClient implements AiProviderPort {
     try {
       payload = (await response.json()) as OllamaChatPayload;
     } catch (error) {
-      throw new AppError(
+      throw new AiProviderError(
+        'ollama',
         502,
         'ollama_invalid_response',
         'The local model returned an invalid JSON payload',
         false,
-        undefined,
         {
           cause: error instanceof Error ? error.message : 'unknown',
         },
       );
     }
 
+    const content = validateMessageContent(payload);
+
     return {
-      content: payload.message?.content ?? '',
+      content,
       providerName: this.providerName,
       modelName: payload.model ?? params.model,
       modelParams,
@@ -99,6 +108,25 @@ export class OllamaClient implements AiProviderPort {
       },
     };
   }
+}
+
+function validateMessageContent(payload: OllamaChatPayload): string {
+  const content = payload.message?.content;
+
+  if (typeof content !== 'string' || content.trim() === '') {
+    throw new AiProviderError(
+      'ollama',
+      502,
+      'ollama_invalid_response',
+      'The local model returned an invalid response payload',
+      false,
+      {
+        cause: 'message.content must be a non-empty string',
+      },
+    );
+  }
+
+  return content;
 }
 
 function toOllamaAppError(error: unknown, config: AppConfig): AppError {

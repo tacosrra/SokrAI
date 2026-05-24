@@ -7,6 +7,69 @@ import {
   parseSessionAuditView,
 } from './validation';
 
+const structuredBrief = {
+  project_title: 'Triage',
+  goal: 'Goal',
+  target_user: '',
+  problem_owner: '',
+  problem_statement: '',
+  evidence_of_problem: '',
+  current_alternatives: '',
+  scope: '',
+  constraints_known: [],
+  assumptions: [],
+  ambiguities: [],
+  missing_information: [],
+};
+
+const validAgentRun = {
+  id: 'run-1',
+  session_id: 'session-1',
+  turn_seq: null,
+  request_id: 'req-1',
+  run_purpose: 'problem_definition',
+  agent_name: 'problem_definition_agent',
+  prompt_name: 'problem-definition-agent',
+  prompt_version: 'v1',
+  prompt_sha256: 'a'.repeat(64),
+  model_provider: 'ollama',
+  model_name: 'qwen2.5:3b-instruct',
+  model_params_json: {
+    temperature: 0.2,
+    num_ctx: 4096,
+    keep_alive: '30m',
+  },
+  raw_model_output: '{"agent_status":"continue"}',
+  validated_output_json: {
+    agent_status: 'continue',
+  },
+  status: 'completed',
+};
+
+function createAuditView(runs: unknown[] = []) {
+  return {
+    session: {
+      id: 'session-1',
+      project_title: 'Triage',
+      goal: 'Goal',
+      current_stage: 'problem_definition',
+      current_agent: 'problem_definition_agent',
+      status: 'waiting_for_user',
+      current_turn_seq: 1,
+      state_version: 1,
+      latest_structured_brief_json: structuredBrief,
+      latest_problem_definition_json: {},
+      latest_snapshot_id: null,
+      latest_successful_run_id: null,
+      completion_reason: null,
+    },
+    turns: [],
+    runs,
+    snapshots: [],
+    events: [],
+  };
+}
+
 describe('parseProposalStartResponse', () => {
   it('accepts payloads aligned with the canonical contract', () => {
     const response = parseProposalStartResponse({
@@ -109,6 +172,35 @@ describe('parseProposalReplyResponse', () => {
 });
 
 describe('parseSessionAuditView', () => {
+  it('accepts agent run model metadata fields', () => {
+    const audit = parseSessionAuditView(createAuditView([validAgentRun]));
+
+    expect(audit.runs[0]?.model_provider).toBe('ollama');
+    expect(audit.runs[0]?.model_name).toBe('qwen2.5:3b-instruct');
+    expect(audit.runs[0]?.model_params_json).toMatchObject({
+      temperature: 0.2,
+      num_ctx: 4096,
+      keep_alive: '30m',
+    });
+  });
+
+  it.each([
+    ['model_provider', 42, /runs\[0\]\.model_provider/],
+    ['model_name', null, /runs\[0\]\.model_name/],
+    ['model_params_json', 'not-json', /runs\[0\]\.model_params_json/],
+  ])('rejects invalid agent run %s', (fieldName, invalidValue, expectedError) => {
+    expect(() =>
+      parseSessionAuditView(
+        createAuditView([
+          {
+            ...validAgentRun,
+            [fieldName]: invalidValue,
+          },
+        ]),
+      ),
+    ).toThrow(expectedError);
+  });
+
   it('accepts numeric fields serialized as strings by the API', () => {
     const audit = parseSessionAuditView({
       session: {

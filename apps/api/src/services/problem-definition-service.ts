@@ -140,7 +140,7 @@ export class ProblemDefinitionService {
             );
           }
 
-          const run = await this.sessionStore.insertAgentRun(client, {
+          const run = await this.sessionStore.recordAgentRun(client, {
             sessionId: lockedSession.id,
             turnSeq: command.trigger === 'reply' ? activeTurn?.turn_seq : lockedSession.current_turn_seq + 1,
             requestId,
@@ -440,7 +440,7 @@ export class ProblemDefinitionService {
         .getDatabase()
         .withTransaction(async (client) => {
           const lockedSession = await this.sessionStore.getSessionForUpdate(session.id, client);
-          const run = await this.sessionStore.insertAgentRun(client, {
+          const run = await this.sessionStore.recordAgentRun(client, {
             sessionId: lockedSession.id,
             turnSeq: openTurn?.turn_seq ?? lockedSession.current_turn_seq + 1,
             requestId: command.context.requestId,

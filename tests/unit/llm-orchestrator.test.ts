@@ -167,4 +167,71 @@ describe('LlmOrchestrator', () => {
       'configured-ai-model',
     ]);
   });
+
+  it('keeps schema validation failures distinct from malformed JSON failures', async () => {
+    const config = {
+      ...createConfig(),
+      jsonRepairMaxAttempts: 0,
+    };
+    const client = new QueueLanguageModelClient([JSON.stringify({ agent_status: 'continue' })]);
+    const orchestrator = new LlmOrchestrator(config, client);
+
+    await expect(
+      orchestrator.runProblemDefinition({
+        structuredBrief: {
+          project_title: 'Proyecto',
+          goal: 'Aclarar el problema',
+          target_user: 'Urgencias',
+          problem_owner: 'Direccion medica',
+          problem_statement: 'El triaje se retrasa',
+          evidence_of_problem: 'Esperas frecuentes',
+          current_alternatives: 'Proceso manual',
+          scope: 'Urgencias hospitalarias',
+          constraints_known: ['presupuesto limitado'],
+          assumptions: ['la demanda es variable'],
+          ambiguities: ['causa principal del retraso'],
+          missing_information: ['metricas de base'],
+        },
+        recentTurns: [],
+      }),
+    ).rejects.toMatchObject({
+      name: 'ModelOutputError',
+      errorCode: 'invalid_problem_definition_turn',
+      repairAttempted: false,
+    });
+    expect(client.calls).toHaveLength(1);
+  });
+
+  it('reports schema-invalid repaired output with the schema error code', async () => {
+    const client = new QueueLanguageModelClient([
+      'esto no es json',
+      JSON.stringify({ agent_status: 'continue' }),
+    ]);
+    const orchestrator = new LlmOrchestrator(createConfig(), client);
+
+    await expect(
+      orchestrator.runProblemDefinition({
+        structuredBrief: {
+          project_title: 'Proyecto',
+          goal: 'Aclarar el problema',
+          target_user: 'Urgencias',
+          problem_owner: 'Direccion medica',
+          problem_statement: 'El triaje se retrasa',
+          evidence_of_problem: 'Esperas frecuentes',
+          current_alternatives: 'Proceso manual',
+          scope: 'Urgencias hospitalarias',
+          constraints_known: ['presupuesto limitado'],
+          assumptions: ['la demanda es variable'],
+          ambiguities: ['causa principal del retraso'],
+          missing_information: ['metricas de base'],
+        },
+        recentTurns: [],
+      }),
+    ).rejects.toMatchObject({
+      name: 'ModelOutputError',
+      errorCode: 'invalid_problem_definition_turn',
+      repairAttempted: true,
+    });
+    expect(client.calls).toHaveLength(2);
+  });
 });
