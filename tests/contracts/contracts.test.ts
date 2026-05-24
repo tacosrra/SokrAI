@@ -99,6 +99,20 @@ describe('contract schemas', () => {
     expect(assertBasicAlphaReport(await readFixture('alpha-model', 'basic-alpha-report.valid.json'))).toBeTruthy();
   });
 
+  it('rejects invalid nested Alpha aggregate children through schema refs', async () => {
+    const proposal = await readFixture('alpha-model', 'alpha-proposal.valid.json');
+    const invalidProposal = structuredClone(proposal) as { documents: Array<Record<string, unknown>> };
+
+    invalidProposal.documents[0].source_kind = 'generated_section';
+    expect(() => assertAlphaProposal(invalidProposal)).toThrow(AppError);
+
+    const report = await readFixture('alpha-model', 'basic-alpha-report.valid.json');
+    const invalidReport = structuredClone(report) as { problem_section: Record<string, unknown> };
+
+    invalidReport.problem_section.section_kind = 'regulatory';
+    expect(() => assertBasicAlphaReport(invalidReport)).toThrow(AppError);
+  });
+
   it('rejects Alpha model payloads that violate required fields, enums, or closed objects', async () => {
     const missingSource = await readFixture('alpha-model', 'proposal-source.missing-id.invalid.json');
     const invalidDocumentStatus = await readFixture('alpha-model', 'proposal-document.invalid-status.invalid.json');
