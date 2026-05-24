@@ -454,7 +454,11 @@ export class ProblemDefinitionService {
             promptSha256: prompt.hash,
             modelProvider: this.config.aiProvider,
             modelName: this.config.aiModel,
-            modelParamsJson: {},
+            modelParamsJson: {
+              temperature: 0.2,
+              num_ctx: this.config.ollamaNumCtx,
+              keep_alive: this.config.ollamaKeepAlive,
+            },
             inputContractName: 'problem-definition-agent.input',
             inputContractVersion: 'v1',
             outputContractName: 'problem-definition-turn',

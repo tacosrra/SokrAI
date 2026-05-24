@@ -263,9 +263,9 @@ export class SessionStore {
       promptName: string;
       promptVersion: string;
       promptSha256: string;
-      modelProvider?: string;
+      modelProvider: string;
       modelName: string;
-      modelParamsJson?: Record<string, unknown>;
+      modelParamsJson: Record<string, unknown>;
       inputContractName: string;
       inputContractVersion: string;
       outputContractName: string;
@@ -304,9 +304,9 @@ export class SessionStore {
         params.promptName,
         params.promptVersion,
         params.promptSha256,
-        params.modelProvider ?? 'ollama',
+        params.modelProvider,
         params.modelName,
-        toJson(params.modelParamsJson ?? {}),
+        toJson(params.modelParamsJson),
         params.inputContractName,
         params.inputContractVersion,
         params.outputContractName,
