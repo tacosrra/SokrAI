@@ -884,6 +884,15 @@ export class ProblemDefinitionService {
               turnSeq: openTurn.turn_seq,
               completionReason: error.safeMessage,
             });
+
+            await this.failAlphaProblemTurn(client, {
+              session: lockedSession,
+              legacyTurn: openTurn,
+              runId: run.id,
+              requestId: command.context.requestId,
+              reason: error.safeMessage,
+              errorCode: error.errorCode,
+            });
           }
 
           await this.sessionStore.insertEvent(client, {
@@ -918,6 +927,102 @@ export class ProblemDefinitionService {
       session_id: command.sessionId,
       error_code: error.errorCode,
       schema: schemaIds.problemDefinitionTurn,
+    });
+  }
+
+  private async failAlphaProblemTurn(
+    client: PoolClient,
+    params: {
+      session: SessionRecord;
+      legacyTurn: ConversationTurnRecord;
+      runId: string;
+      requestId: string;
+      reason: string;
+      errorCode: string;
+    },
+  ): Promise<void> {
+    const chat = await this.alphaStore.findModuleChatByProposalAndModule(
+      params.session.id,
+      'problem',
+      client,
+    );
+
+    if (!chat) {
+      return;
+    }
+
+    const activeAlphaTurn = this.findActiveAlphaTurn(
+      chat.turns,
+      chat.active_turn_id,
+      params.legacyTurn.turn_seq,
+    );
+
+    if (!activeAlphaTurn) {
+      await this.alphaStore.updateModuleChatStatus(client, {
+        chatId: chat.chat_id,
+        chatStatus: 'failed',
+        activeTurnId: null,
+      });
+      return;
+    }
+
+    const sourceRefs: ProposalSource[] = [...activeAlphaTurn.source_refs];
+
+    if (params.legacyTurn.answer_text) {
+      const answerSource = await this.alphaStore.createSource(client, {
+        proposalId: params.session.id,
+        sourceKind: 'user_answer',
+        label: `Problem answer turn ${params.legacyTurn.turn_seq}`,
+        turnId: activeAlphaTurn.turn_id,
+        metadata: {
+          request_id: params.requestId,
+          legacy_turn_seq: params.legacyTurn.turn_seq,
+          failure: true,
+        },
+      });
+
+      sourceRefs.push(answerSource);
+
+      if (activeAlphaTurn.turn_status === 'awaiting_user') {
+        await this.alphaStore.updateChatTurnAnswer(client, {
+          turnId: activeAlphaTurn.turn_id,
+          answerText: params.legacyTurn.answer_text,
+        });
+      }
+    }
+
+    const failedTurn = await this.alphaStore.resolveChatTurn(client, {
+      turnId: activeAlphaTurn.turn_id,
+      turnStatus: 'failed',
+      agentStatus: 'blocked',
+      diagnosis: activeAlphaTurn.diagnosis,
+      sourceRefs,
+      gapRefs: activeAlphaTurn.gap_refs,
+      auditRefs: [{ kind: 'agent_run', id: params.runId }],
+      warnings: [params.reason],
+    });
+
+    await this.alphaStore.updateModuleChatStatus(client, {
+      chatId: chat.chat_id,
+      chatStatus: 'failed',
+      activeTurnId: null,
+    });
+
+    await this.alphaStore.appendAuditEvent(client, {
+      proposalId: params.session.id,
+      sessionId: params.session.id,
+      runId: params.runId,
+      turnId: failedTurn.turn_id,
+      eventType: 'problem_answer_failed',
+      actorType: 'system',
+      requestId: params.requestId,
+      payloadJson: {
+        legacy_turn_seq: params.legacyTurn.turn_seq,
+        error_code: params.errorCode,
+        reason: params.reason,
+        source_refs: sourceRefs.map((source) => source.source_id),
+        gap_refs: failedTurn.gap_refs,
+      },
     });
   }
 

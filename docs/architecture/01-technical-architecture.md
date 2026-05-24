@@ -279,7 +279,7 @@ Modulos funcionales:
 - Documentos/texto pegado.
 - Gap analysis inicial.
 - Chat problema.
-- Writer de seccion problema.
+- Render deterministico de seccion problema.
 - Chat solucion.
 - Writer de seccion solucion.
 - Reporte basico en app.
@@ -288,6 +288,9 @@ Modulos deterministicos de dominio:
 
 - `initial_gap_analysis`: detecta gaps iniciales desde `structured_brief`, `missing_information`,
   `ambiguities` y fuentes internas persistidas.
+- `problem_section_renderer`: al cerrar el carril de problema, genera la seccion `problem`
+  de forma deterministica desde `ProblemDefinitionState`, fuentes internas persistidas,
+  `user_answer` y gaps resueltos. No usa un writer LLM separado en PR 6.
 
 Reglas de `initial_gap_analysis`:
 
@@ -301,10 +304,9 @@ Modulos IA:
 
 - `brief_extraction`.
 - `problem_definition_agent`.
-- `problem_section_writer`.
-- `solution_definition_agent`.
-- `solution_section_writer`.
-- `basic_report_composer`.
+- `solution_definition_agent` (futuro Alpha).
+- `solution_section_writer` (futuro Alpha).
+- `basic_report_composer` (futuro Alpha).
 - `json_repair`.
 
 ## 13. Modulos del MVP Clinic Pilot

@@ -268,6 +268,72 @@ describe('alpha persistence integration', () => {
     });
   });
 
+  it('maps generated section version and current-section conflicts to controlled errors', async () => {
+    ({ app } = await buildTestApp(new QueueLanguageModelClient([])));
+    const structuredBrief = await readFixture<StructuredBrief>('expected', 'structured-brief.strong.json');
+    const session = await createLegacySession(app.services.database, app.services.sessionStore, structuredBrief);
+    const store = app.services.alphaStore;
+
+    await store.createProposal(app.services.database, {
+      proposalId: session.id,
+      sessionId: session.id,
+      proposalStatus: 'active',
+      projectTitle: structuredBrief.project_title,
+      goal: structuredBrief.goal,
+      structuredBrief,
+      schemaVersion: 'alpha-model.v1',
+    });
+
+    const first = await store.createGeneratedSection(app.services.database, {
+      proposalId: session.id,
+      sectionKind: 'problem',
+      sectionStatus: 'generated',
+      title: 'Problem definition',
+      contentMarkdown: 'Problem v1.',
+    });
+
+    await store.supersedeGeneratedSection(app.services.database, {
+      sectionId: first.section_id,
+    });
+
+    await expect(
+      store.createGeneratedSection(app.services.database, {
+        proposalId: session.id,
+        sectionKind: 'problem',
+        sectionStatus: 'generated',
+        sectionVersion: first.section_version,
+        title: 'Duplicate version',
+        contentMarkdown: 'Duplicate.',
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      errorCode: 'alpha_section_version_conflict',
+    });
+
+    await store.createGeneratedSection(app.services.database, {
+      proposalId: session.id,
+      sectionKind: 'problem',
+      sectionStatus: 'generated',
+      sectionVersion: 2,
+      title: 'Problem definition v2',
+      contentMarkdown: 'Problem v2.',
+    });
+
+    await expect(
+      store.createGeneratedSection(app.services.database, {
+        proposalId: session.id,
+        sectionKind: 'problem',
+        sectionStatus: 'generated',
+        sectionVersion: 3,
+        title: 'Second current section',
+        contentMarkdown: 'Still current.',
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      errorCode: 'alpha_current_section_conflict',
+    });
+  });
+
   it('enforces append-only audit events and core enum constraints', async () => {
     ({ app } = await buildTestApp(new QueueLanguageModelClient([])));
     const structuredBrief = await readFixture<StructuredBrief>('expected', 'structured-brief.strong.json');

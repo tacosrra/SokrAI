@@ -96,8 +96,7 @@ describe('OllamaClient', () => {
   });
 
   it('maps non-2xx responses to a controlled provider error', async () => {
-    vi.stubGlobal(
-      'fetch',
+    stubFetch(
       vi.fn().mockResolvedValue({
         ok: false,
         status: 500,
@@ -128,8 +127,7 @@ describe('OllamaClient', () => {
     ['non-string message.content', { message: { content: 42 } }],
     ['blank message.content', { message: { content: '   ' } }],
   ])('rejects %s as an invalid provider response', async (_caseName, payload) => {
-    vi.stubGlobal(
-      'fetch',
+    stubFetch(
       vi.fn().mockResolvedValue({
         ok: true,
         json: vi.fn().mockResolvedValue(payload),
