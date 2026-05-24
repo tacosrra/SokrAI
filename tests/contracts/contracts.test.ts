@@ -3,12 +3,20 @@ import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
+  assertAlphaGap,
+  assertAlphaProposal,
+  assertBasicAlphaReport,
+  assertChatTurn,
+  assertGeneratedSection,
+  assertModuleChat,
   assertProblemDefinitionTurn,
-  assertRequestExecutionResponse,
+  assertProposalDocument,
   assertProposalReplyRequest,
   assertProposalReplyResponse,
+  assertProposalSource,
   assertProposalStartRequest,
   assertProposalStartResponse,
+  assertRequestExecutionResponse,
   assertStructuredBrief,
 } from '../../apps/api/src/contracts/schema-registry.ts';
 import { AppError } from '../../apps/api/src/utils/errors.ts';
@@ -75,6 +83,40 @@ describe('contract schemas', () => {
   it('accepts a valid proposal reply request fixture', async () => {
     const fixture = await readFixture('reply', 'unknown-session.json');
     expect(assertProposalReplyRequest(fixture)).toBeTruthy();
+  });
+
+  it('accepts valid Alpha model component fixtures', async () => {
+    expect(assertProposalSource(await readFixture('alpha-model', 'proposal-source.valid.json'))).toBeTruthy();
+    expect(assertProposalDocument(await readFixture('alpha-model', 'proposal-document.valid.json'))).toBeTruthy();
+    expect(assertAlphaGap(await readFixture('alpha-model', 'alpha-gap.valid.json'))).toBeTruthy();
+    expect(assertChatTurn(await readFixture('alpha-model', 'chat-turn.valid.json'))).toBeTruthy();
+    expect(assertModuleChat(await readFixture('alpha-model', 'module-chat.valid.json'))).toBeTruthy();
+    expect(assertGeneratedSection(await readFixture('alpha-model', 'generated-section.valid.json'))).toBeTruthy();
+  });
+
+  it('accepts valid Alpha aggregate and report fixtures', async () => {
+    expect(assertAlphaProposal(await readFixture('alpha-model', 'alpha-proposal.valid.json'))).toBeTruthy();
+    expect(assertBasicAlphaReport(await readFixture('alpha-model', 'basic-alpha-report.valid.json'))).toBeTruthy();
+  });
+
+  it('rejects Alpha model payloads that violate required fields, enums, or closed objects', async () => {
+    const missingSource = await readFixture('alpha-model', 'proposal-source.missing-id.invalid.json');
+    const invalidDocumentStatus = await readFixture('alpha-model', 'proposal-document.invalid-status.invalid.json');
+    const clinicGap = await readFixture('alpha-model', 'alpha-gap.clinic-module.invalid.json');
+    const extraProposalField = await readFixture('alpha-model', 'alpha-proposal.extra-property.invalid.json');
+
+    expect(() => assertProposalSource(missingSource)).toThrow(AppError);
+    expect(() => assertProposalDocument(invalidDocumentStatus)).toThrow(AppError);
+    expect(() => assertAlphaGap(clinicGap)).toThrow(AppError);
+    expect(() => assertAlphaProposal(extraProposalField)).toThrow(AppError);
+  });
+
+  it('rejects Alpha chat/report payloads that exceed guardrails or export scope', async () => {
+    const tooManyDiagnosis = await readFixture('alpha-model', 'chat-turn.too-many-diagnosis.invalid.json');
+    const reportWithPdfUrl = await readFixture('alpha-model', 'basic-alpha-report.pdf-url.invalid.json');
+
+    expect(() => assertChatTurn(tooManyDiagnosis)).toThrow(AppError);
+    expect(() => assertBasicAlphaReport(reportWithPdfUrl)).toThrow(AppError);
   });
 
   it('keeps n8n workflow assets importable by requiring top-level workflow ids', async () => {

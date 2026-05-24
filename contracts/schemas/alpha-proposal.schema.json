@@ -1,0 +1,138 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sokrai.local/contracts/schemas/alpha-proposal.schema.json",
+  "title": "AlphaProposal",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "proposal_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "user_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "proposal_status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "active",
+        "completed",
+        "blocked",
+        "failed",
+        "archived"
+      ]
+    },
+    "project_title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "goal": {
+      "type": "string",
+      "minLength": 1
+    },
+    "structured_brief": {
+      "$ref": "https://sokrai.local/contracts/schemas/structured-brief.schema.json"
+    },
+    "documents": {
+      "type": "array",
+      "items": {
+        "$ref": "https://sokrai.local/contracts/schemas/proposal-document.schema.json"
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "https://sokrai.local/contracts/schemas/proposal-source.schema.json"
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "$ref": "https://sokrai.local/contracts/schemas/alpha-gap.schema.json"
+      }
+    },
+    "module_chats": {
+      "type": "array",
+      "items": {
+        "$ref": "https://sokrai.local/contracts/schemas/module-chat.schema.json"
+      }
+    },
+    "generated_sections": {
+      "type": "array",
+      "items": {
+        "$ref": "https://sokrai.local/contracts/schemas/generated-section.schema.json"
+      }
+    },
+    "audit_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/audit_ref"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "schema_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "metadata": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "proposal_id",
+    "proposal_status",
+    "project_title",
+    "goal",
+    "structured_brief",
+    "documents",
+    "sources",
+    "gaps",
+    "module_chats",
+    "generated_sections",
+    "audit_refs",
+    "warnings",
+    "schema_version",
+    "created_at",
+    "updated_at"
+  ],
+  "$defs": {
+    "audit_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "agent_run",
+            "audit_event",
+            "snapshot",
+            "chat_turn"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ]
+    }
+  }
+}

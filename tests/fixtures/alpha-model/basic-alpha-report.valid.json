@@ -1,0 +1,92 @@
+{
+  "report_id": "report-1",
+  "proposal_id": "proposal-1",
+  "report_status": "ready",
+  "schema_version": "alpha-model.v1",
+  "structured_brief": {
+    "project_title": "AI intake readiness assistant",
+    "goal": "Reduce manual reconciliation before clinical AI project review.",
+    "target_user": "Clinical innovation project leads",
+    "problem_owner": "Innovation intake team",
+    "problem_statement": "Project leads submit fragmented descriptions that delay review readiness checks.",
+    "evidence_of_problem": "Three service leads reported recurring reconciliation delays in the last intake cycle.",
+    "current_alternatives": "Manual review meetings and spreadsheet notes.",
+    "scope": "Early Alpha intake for problem and solution definition only.",
+    "constraints_known": [
+      "Local execution",
+      "No patient data"
+    ],
+    "assumptions": [
+      "Teams can provide non-sensitive project descriptions"
+    ],
+    "ambiguities": [],
+    "missing_information": []
+  },
+  "current_gaps": [
+    {
+      "gap_id": "gap-1",
+      "proposal_id": "proposal-1",
+      "module": "problem",
+      "gap_kind": "missing_information",
+      "gap_status": "resolved",
+      "field": "evidence_of_problem",
+      "description": "The proposal needs clearer evidence that the intake delay is frequent and material.",
+      "source_refs": [],
+      "resolved_by_turn_id": "turn-1",
+      "audit_refs": [
+        {
+          "kind": "chat_turn",
+          "id": "turn-1"
+        }
+      ],
+      "warnings": [],
+      "created_at": "2026-05-24T14:05:00.000Z",
+      "updated_at": "2026-05-24T14:12:00.000Z"
+    }
+  ],
+  "problem_section": {
+    "section_id": "section-problem-1",
+    "proposal_id": "proposal-1",
+    "section_kind": "problem",
+    "section_status": "accepted",
+    "title": "Problem definition",
+    "content_markdown": "Clinical AI intake reviews are delayed because teams reconcile fragmented notes manually before review.",
+    "source_refs": [],
+    "gap_refs": [
+      "gap-1"
+    ],
+    "generated_by_run_id": "run-2",
+    "warnings": [],
+    "created_at": "2026-05-24T14:20:00.000Z"
+  },
+  "solution_section": {
+    "section_id": "section-solution-1",
+    "proposal_id": "proposal-1",
+    "section_kind": "solution",
+    "section_status": "generated",
+    "title": "Solution definition",
+    "content_markdown": "A local assistant will normalize proposal text, surface gaps, and guide focused clarification chats.",
+    "source_refs": [],
+    "gap_refs": [],
+    "generated_by_run_id": "run-3",
+    "warnings": [],
+    "created_at": "2026-05-24T14:30:00.000Z"
+  },
+  "internal_sources": [
+    {
+      "source_id": "source-1",
+      "source_kind": "pasted_text",
+      "label": "Initial proposal text",
+      "document_id": "document-1",
+      "created_at": "2026-05-24T14:00:00.000Z"
+    }
+  ],
+  "audit_refs": [
+    {
+      "kind": "snapshot",
+      "id": "snapshot-1"
+    }
+  ],
+  "warnings": [],
+  "generated_at": "2026-05-24T14:35:00.000Z"
+}

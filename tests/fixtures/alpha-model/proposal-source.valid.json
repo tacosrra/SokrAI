@@ -1,0 +1,14 @@
+{
+  "source_id": "source-1",
+  "source_kind": "pasted_text",
+  "label": "Initial proposal text",
+  "document_id": "document-1",
+  "span": {
+    "start_char": 0,
+    "end_char": 240
+  },
+  "created_at": "2026-05-24T14:00:00.000Z",
+  "metadata": {
+    "input_channel": "web"
+  }
+}

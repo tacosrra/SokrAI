@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sokrai.local/contracts/schemas/alpha-gap.schema.json",
+  "title": "AlphaGap",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "gap_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "proposal_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "module": {
+      "type": "string",
+      "enum": [
+        "problem",
+        "solution"
+      ]
+    },
+    "gap_kind": {
+      "type": "string",
+      "enum": [
+        "missing_information",
+        "ambiguous_information",
+        "unsupported_claim",
+        "needs_user_confirmation"
+      ]
+    },
+    "gap_status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "in_progress",
+        "resolved",
+        "deferred",
+        "not_applicable"
+      ]
+    },
+    "field": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "question_hint": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "https://sokrai.local/contracts/schemas/proposal-source.schema.json"
+      }
+    },
+    "resolved_by_turn_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "audit_refs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/audit_ref"
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "string"
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "gap_id",
+    "proposal_id",
+    "module",
+    "gap_kind",
+    "gap_status",
+    "field",
+    "description",
+    "source_refs",
+    "audit_refs",
+    "warnings",
+    "created_at",
+    "updated_at"
+  ],
+  "$defs": {
+    "audit_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "agent_run",
+            "audit_event",
+            "snapshot",
+            "chat_turn"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ]
+    }
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "report_id": "report-1",
+  "proposal_id": "proposal-1",
+  "report_status": "ready",
+  "schema_version": "alpha-model.v1",
+  "structured_brief": {
+    "project_title": "AI intake readiness assistant",
+    "goal": "Reduce manual reconciliation before clinical AI project review.",
+    "target_user": "Clinical innovation project leads",
+    "problem_owner": "Innovation intake team",
+    "problem_statement": "Project leads submit fragmented descriptions that delay review readiness checks.",
+    "evidence_of_problem": "Three service leads reported recurring reconciliation delays in the last intake cycle.",
+    "current_alternatives": "Manual review meetings and spreadsheet notes.",
+    "scope": "Early Alpha intake for problem and solution definition only.",
+    "constraints_known": [],
+    "assumptions": [],
+    "ambiguities": [],
+    "missing_information": []
+  },
+  "current_gaps": [],
+  "problem_section": {
+    "section_id": "section-problem-1",
+    "proposal_id": "proposal-1",
+    "section_kind": "problem",
+    "section_status": "accepted",
+    "title": "Problem definition",
+    "content_markdown": "Problem section content.",
+    "source_refs": [],
+    "gap_refs": [],
+    "warnings": [],
+    "created_at": "2026-05-24T14:20:00.000Z"
+  },
+  "solution_section": {
+    "section_id": "section-solution-1",
+    "proposal_id": "proposal-1",
+    "section_kind": "solution",
+    "section_status": "generated",
+    "title": "Solution definition",
+    "content_markdown": "Solution section content.",
+    "source_refs": [],
+    "gap_refs": [],
+    "warnings": [],
+    "created_at": "2026-05-24T14:30:00.000Z"
+  },
+  "internal_sources": [],
+  "audit_refs": [],
+  "warnings": [],
+  "generated_at": "2026-05-24T14:35:00.000Z",
+  "pdf_url": "https://example.invalid/report.pdf"
+}

@@ -1,0 +1,14 @@
+{
+  "gap_id": "gap-1",
+  "proposal_id": "proposal-1",
+  "module": "regulatory",
+  "gap_kind": "missing_information",
+  "gap_status": "open",
+  "field": "evidence_of_problem",
+  "description": "Clinic Pilot module should not be allowed in Alpha contracts.",
+  "source_refs": [],
+  "audit_refs": [],
+  "warnings": [],
+  "created_at": "2026-05-24T14:05:00.000Z",
+  "updated_at": "2026-05-24T14:05:00.000Z"
+}

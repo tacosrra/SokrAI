@@ -1,0 +1,35 @@
+{
+  "turn_id": "turn-1",
+  "chat_id": "chat-1",
+  "proposal_id": "proposal-1",
+  "module": "problem",
+  "turn_seq": 1,
+  "question_text": "What evidence shows this delay happens often enough to prioritize?",
+  "answer_text": "Three service leads reported the same reconciliation delay during the last intake cycle.",
+  "turn_status": "resolved",
+  "agent_status": "continue",
+  "diagnosis": [
+    "Evidence exists but needs a measurable baseline."
+  ],
+  "source_refs": [
+    {
+      "source_id": "source-2",
+      "source_kind": "user_answer",
+      "label": "Problem chat answer",
+      "turn_id": "turn-1",
+      "created_at": "2026-05-24T14:10:00.000Z"
+    }
+  ],
+  "gap_refs": [
+    "gap-1"
+  ],
+  "audit_refs": [
+    {
+      "kind": "chat_turn",
+      "id": "turn-1"
+    }
+  ],
+  "warnings": [],
+  "created_at": "2026-05-24T14:10:00.000Z",
+  "completed_at": "2026-05-24T14:12:00.000Z"
+}
