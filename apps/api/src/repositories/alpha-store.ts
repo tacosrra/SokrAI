@@ -501,11 +501,13 @@ export class AlphaStore {
       executor,
       [
         'UPDATE module_chats',
-        'SET chat_status = $2, active_turn_id = $3, completed_at = CASE WHEN $2 = \'completed\' THEN COALESCE(completed_at, NOW()) ELSE completed_at END',
+        'SET chat_status = $2,',
+        '  active_turn_id = CASE WHEN $3 THEN $4 ELSE active_turn_id END,',
+        '  completed_at = CASE WHEN $2 = \'completed\' THEN COALESCE(completed_at, NOW()) ELSE completed_at END',
         'WHERE id = $1',
         'RETURNING *',
       ].join(' '),
-      [params.chatId, params.chatStatus, params.activeTurnId ?? null],
+      [params.chatId, params.chatStatus, params.activeTurnId !== undefined, params.activeTurnId ?? null],
     );
     const chat = result.rows[0];
 

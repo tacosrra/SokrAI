@@ -138,6 +138,17 @@ describe('alpha persistence integration', () => {
       chatStatus: 'waiting_for_user',
       activeTurnId: turn.turn_id,
     });
+    const statusOnlyChat = await store.updateModuleChatStatus(app.services.database, {
+      chatId: chat.chat_id,
+      chatStatus: 'active',
+    });
+    expect(statusOnlyChat.active_turn_id).toBe(turn.turn_id);
+    const clearedChat = await store.updateModuleChatStatus(app.services.database, {
+      chatId: chat.chat_id,
+      chatStatus: 'waiting_for_user',
+      activeTurnId: null,
+    });
+    expect(clearedChat.active_turn_id).toBeUndefined();
     await store.updateChatTurnAnswer(app.services.database, {
       turnId: turn.turn_id,
       answerText: 'Three service leads reported the delay last month.',
@@ -451,6 +462,63 @@ describe('alpha persistence integration', () => {
     expect(proposals.rows[0]?.count).toBe('1');
     expect(Number(documents.rows[0]?.count)).toBeGreaterThanOrEqual(1);
     expect(Number(sources.rows[0]?.count)).toBeGreaterThanOrEqual(1);
+    expect(chats.rows[0]?.count).toBe('1');
+    expect(events.rows[0]?.count).toBe('1');
+  });
+
+  it('returns the same session without duplicating Alpha rows for an idempotent start retry', async () => {
+    const structuredBrief = await readFixture<StructuredBrief>('expected', 'structured-brief.strong.json');
+
+    ({ app } = await buildTestApp(new QueueLanguageModelClient([JSON.stringify(structuredBrief)])));
+
+    const proposal = await readFixture('start', 'strong-proposal.json');
+    const payload = {
+      request_id: 'req-alpha-start-retry',
+      workflow_version: 'proposal_start_v1',
+      payload: proposal,
+    };
+
+    const firstResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/sessions/start-context',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+        'x-request-id': 'req-alpha-start-retry',
+      },
+      payload,
+    });
+    const secondResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/sessions/start-context',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+        'x-request-id': 'req-alpha-start-retry',
+      },
+      payload,
+    });
+
+    expect(firstResponse.statusCode).toBe(200);
+    expect(secondResponse.statusCode).toBe(200);
+
+    const firstBody = firstResponse.json() as { session_id: string };
+    const secondBody = secondResponse.json() as { session_id: string };
+    expect(secondBody.session_id).toBe(firstBody.session_id);
+
+    const [proposals, chats, events] = await Promise.all([
+      app.services.database.query<{ count: string }>('SELECT COUNT(*)::text AS count FROM proposals WHERE id = $1', [
+        firstBody.session_id,
+      ]),
+      app.services.database.query<{ count: string }>(
+        'SELECT COUNT(*)::text AS count FROM module_chats WHERE proposal_id = $1 AND module = \'problem\'',
+        [firstBody.session_id],
+      ),
+      app.services.database.query<{ count: string }>(
+        'SELECT COUNT(*)::text AS count FROM audit_events WHERE proposal_id = $1 AND event_type = \'proposal_created\'',
+        [firstBody.session_id],
+      ),
+    ]);
+
+    expect(proposals.rows[0]?.count).toBe('1');
     expect(chats.rows[0]?.count).toBe('1');
     expect(events.rows[0]?.count).toBe('1');
   });

@@ -25,7 +25,7 @@ export class ProposalStartService {
     private readonly logger: Logger,
     private readonly sessionStore: SessionStore,
     private readonly llmOrchestrator: LlmOrchestrator,
-    private readonly alphaStore?: AlphaStore,
+    private readonly alphaStore: AlphaStore,
   ) {}
 
   async execute(command: StartContextCommand): Promise<StartContextResponse> {
@@ -109,24 +109,22 @@ export class ProposalStartService {
           initialProblemDefinition,
         });
 
-        if (this.alphaStore) {
-          await this.createInitialAlphaRecords(client, {
-            payload,
-            sessionId: createdSession.id,
-            userId: payload.user_id,
-            requestId,
-            workflowVersion: command.context.workflowVersion,
-            projectTitle: payload.project_title,
-            goal: payload.goal,
-            structuredBrief: briefResult.output,
-            rawProposalText: payload.proposal_text?.trim(),
-            extractedDocumentText,
-            fileName,
-            fileHash,
-            normalizedText: sourceText.normalizedText,
-            warnings: workflowWarnings,
-          });
-        }
+        await this.createInitialAlphaRecords(client, {
+          payload,
+          sessionId: createdSession.id,
+          userId: payload.user_id,
+          requestId,
+          workflowVersion: command.context.workflowVersion,
+          projectTitle: payload.project_title,
+          goal: payload.goal,
+          structuredBrief: briefResult.output,
+          rawProposalText: payload.proposal_text?.trim(),
+          extractedDocumentText,
+          fileName,
+          fileHash,
+          normalizedText: sourceText.normalizedText,
+          warnings: workflowWarnings,
+        });
 
         await this.sessionStore.insertEvent(client, {
           sessionId: createdSession.id,
@@ -254,10 +252,6 @@ export class ProposalStartService {
       warnings: string[];
     },
   ): Promise<void> {
-    if (!this.alphaStore) {
-      return;
-    }
-
     await this.alphaStore.createProposal(client, {
       proposalId: params.sessionId,
       sessionId: params.sessionId,
