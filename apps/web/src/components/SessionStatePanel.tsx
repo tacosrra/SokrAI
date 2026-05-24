@@ -26,6 +26,18 @@ function shortHash(value: string | undefined): string {
   return value ? `${value.slice(0, 12)}…` : 'Sin hash';
 }
 
+function gapEvidenceLabel(gap: SessionPresentation['gaps'][number]): string {
+  if (gap.absence.is_absent) {
+    return `absence: ${gap.absence.checked_fields.join(', ')}`;
+  }
+
+  if (gap.source_refs.length > 0) {
+    return `source: ${gap.source_refs.map((source) => source.label).join(', ')}`;
+  }
+
+  return gap.origin.replaceAll('_', ' ');
+}
+
 export function SessionStatePanel({
   audit,
   presentation,
@@ -142,11 +154,29 @@ export function SessionStatePanel({
         <div className="insight-stack">
           <article className="insight-card insight-card--warning">
             <span className="context-block__label">Detected gaps</span>
-            <ul className="list-block">
-              {listOrPending(presentation.detectedGaps).map((item) => (
-                <li key={item}>{item}</li>
-              ))}
-            </ul>
+            {presentation.gaps.length > 0 ? (
+              <ul className="gap-list">
+                {presentation.gaps.map((gap) => (
+                  <li key={gap.gap_id} className="gap-list__item">
+                    <div className="gap-list__header">
+                      <strong>{gap.field.replaceAll('_', ' ')}</strong>
+                      <span>
+                        {gap.gap_kind.replaceAll('_', ' ')} · {gap.gap_status.replaceAll('_', ' ')}
+                      </span>
+                    </div>
+                    <p>{gap.description}</p>
+                    {gap.question_hint ? <em>{gap.question_hint}</em> : null}
+                    <span className="source-pill">{gapEvidenceLabel(gap)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <ul className="list-block">
+                {listOrPending(presentation.detectedGaps).map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            )}
           </article>
 
           <article className="insight-card insight-card--accent">

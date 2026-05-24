@@ -20,7 +20,9 @@ import type {
   ChatTurn,
   ChatTurnStatus,
   DocumentStatus,
+  GapAbsence,
   GapKind,
+  GapOrigin,
   GapStatus,
   GeneratedSection,
   ModuleChat,
@@ -89,8 +91,10 @@ export interface AlphaGapRecord {
   module: AlphaModule;
   gap_kind: GapKind;
   gap_status: GapStatus;
+  origin: GapOrigin;
   field: string;
   description: string;
+  absence_json: GapAbsence;
   question_hint: string | null;
   source_refs_json: ProposalSource[];
   resolved_by_turn_id: string | null;
@@ -389,8 +393,10 @@ export class AlphaStore {
       module: AlphaModule;
       gapKind: GapKind;
       gapStatus: GapStatus;
+      origin?: GapOrigin;
       field: string;
       description: string;
+      absence?: GapAbsence;
       questionHint?: string;
       sourceRefs?: ProposalSource[];
       resolvedByTurnId?: string;
@@ -402,9 +408,9 @@ export class AlphaStore {
       executor,
       [
         'INSERT INTO alpha_gaps (',
-        '  proposal_id, module, gap_kind, gap_status, field, description, question_hint,',
+        '  proposal_id, module, gap_kind, gap_status, origin, field, description, absence_json, question_hint,',
         '  source_refs_json, resolved_by_turn_id, audit_refs_json, warnings_json',
-        ') VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)',
+        ') VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)',
         'RETURNING *',
       ].join(' '),
       [
@@ -412,8 +418,10 @@ export class AlphaStore {
         params.module,
         params.gapKind,
         params.gapStatus,
+        params.origin ?? 'system_rule',
         params.field,
         params.description,
+        toJson(params.absence ?? defaultAbsence(params.gapKind, params.field)),
         params.questionHint ?? null,
         toJson(params.sourceRefs ?? []),
         params.resolvedByTurnId ?? null,
@@ -1007,15 +1015,17 @@ function mapSource(record: ProposalSourceRecord): ProposalSource {
   });
 }
 
-function mapGap(record: AlphaGapRecord): AlphaGap {
+export function mapGap(record: AlphaGapRecord): AlphaGap {
   return assertAlphaGap({
     gap_id: record.id,
     proposal_id: record.proposal_id,
     module: record.module,
     gap_kind: record.gap_kind,
     gap_status: record.gap_status,
+    origin: record.origin,
     field: record.field,
     description: record.description,
+    absence: record.absence_json,
     ...(record.question_hint ? { question_hint: record.question_hint } : {}),
     source_refs: record.source_refs_json,
     ...(record.resolved_by_turn_id ? { resolved_by_turn_id: record.resolved_by_turn_id } : {}),
@@ -1093,6 +1103,22 @@ function toIso(value: string | Date): string {
 
 function toJson(value: unknown): string {
   return JSON.stringify(value);
+}
+
+function defaultAbsence(gapKind: GapKind, field: string): GapAbsence {
+  if (gapKind === 'missing_information') {
+    return {
+      is_absent: true,
+      checked_fields: [field],
+      reason: 'Required information was not found in the available structured brief.',
+    };
+  }
+
+  return {
+    is_absent: false,
+    checked_fields: [],
+    reason: '',
+  };
 }
 
 function toAlphaPersistenceError(

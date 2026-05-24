@@ -29,8 +29,16 @@
       "module": "problem",
       "gap_kind": "missing_information",
       "gap_status": "resolved",
+      "origin": "structured_brief_field",
       "field": "evidence_of_problem",
       "description": "The proposal needs clearer evidence that the intake delay is frequent and material.",
+      "absence": {
+        "is_absent": true,
+        "checked_fields": [
+          "evidence_of_problem"
+        ],
+        "reason": "Required information was not found in the available structured brief."
+      },
       "source_refs": [],
       "resolved_by_turn_id": "turn-1",
       "audit_refs": [

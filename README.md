@@ -109,11 +109,29 @@ Patron:
 - `proposal_sessions` es el head mutable
 - `proposal_documents` guarda texto pegado, documentos subidos, estado de extraccion, hash SHA-256 y metadatos
 - `proposal_sources` guarda las fuentes internas trazables con etiquetas y spans sobre el texto normalizado
+- `alpha_gaps` guarda gaps iniciales deterministas con `origin`, `absence`, estado y pregunta candidata
 - `session_snapshots` y `session_events` son historial append-only
 - `agent_runs` guarda prompt/provider/model/schema/raw output por ejecucion
 - `conversation_turns` modela la conversacion de una pregunta por turno
 - `proposals` reutiliza el `session_id` como `proposal_id` en Alpha v1 para mantener compatibilidad de resume
 - `audit_events` es append-only por trigger y audita los artefactos Alpha sin reemplazar `session_events`
+
+## Analisis inicial de gaps Alpha
+
+Durante `proposal_start_v1`, la API genera gaps iniciales de forma determinista desde el `structured_brief` validado y las fuentes internas persistidas. No se ejecuta un modelo adicional para esta fase.
+
+Cada `AlphaGap` persistido incluye:
+
+- `module`, limitado a `problem` o `solution`
+- `gap_kind` y `gap_status`
+- `origin`, para distinguir campo estructurado, `missing_information`, ambiguedad, fuente interna o regla del sistema
+- `absence`, con campos revisados y razon cuando falta informacion
+- `source_refs`, solo cuando existe una fuente interna real que se puede referenciar
+- `question_hint`, como pregunta candidata para aclaracion posterior
+
+Los gaps de ausencia no son conclusiones negativas ni scoring. Esta v1 no introduce ranking, aprobacion, dictamen legal, regulacion Clinic, medical device, costes, recursos, RAG avanzado ni PDF.
+
+`GET /api/v1/sessions/:sessionId` devuelve `gaps` junto con documentos, fuentes, turns, runs, snapshots y eventos para replay y auditoria. `detected_gaps` se mantiene como resumen de compatibilidad en snapshots y respuestas internas.
 
 ## Arranque local
 

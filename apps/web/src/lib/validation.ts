@@ -1,9 +1,13 @@
 import type {
   AgentRun,
   AgentStatus,
+  AlphaGap,
   ConversationTurn,
   DocumentStatus,
   ErrorResponse,
+  GapKind,
+  GapOrigin,
+  GapStatus,
   ProblemDefinitionState,
   ProposalDocument,
   ProposalDocumentSourceKind,
@@ -38,6 +42,20 @@ const PROPOSAL_DOCUMENT_SOURCE_KINDS: ProposalDocumentSourceKind[] = [
   'extracted_text',
 ];
 const DOCUMENT_STATUSES: DocumentStatus[] = ['received', 'normalized', 'unsupported', 'failed'];
+const GAP_KINDS: GapKind[] = [
+  'missing_information',
+  'ambiguous_information',
+  'unsupported_claim',
+  'needs_user_confirmation',
+];
+const GAP_STATUSES: GapStatus[] = ['open', 'in_progress', 'resolved', 'deferred', 'not_applicable'];
+const GAP_ORIGINS: GapOrigin[] = [
+  'structured_brief_field',
+  'structured_brief_missing_information',
+  'structured_brief_ambiguity',
+  'proposal_source',
+  'system_rule',
+];
 const SESSION_STATUSES: SessionStatus[] = [
   'active',
   'waiting_for_user',
@@ -386,6 +404,54 @@ function parseProposalDocument(value: unknown, label: string): ProposalDocument 
   };
 }
 
+function parseAlphaGap(value: unknown, label: string): AlphaGap {
+  const record = expectRecord(value, label);
+  const absence = expectRecord(record.absence, `${label}.absence`);
+
+  return {
+    gap_id: expectString(record.gap_id, `${label}.gap_id`),
+    proposal_id: expectString(record.proposal_id, `${label}.proposal_id`),
+    module: expectEnum(record.module, `${label}.module`, ['problem', 'solution']),
+    gap_kind: expectEnum(record.gap_kind, `${label}.gap_kind`, GAP_KINDS),
+    gap_status: expectEnum(record.gap_status, `${label}.gap_status`, GAP_STATUSES),
+    origin: expectEnum(record.origin, `${label}.origin`, GAP_ORIGINS),
+    field: expectString(record.field, `${label}.field`),
+    description: expectString(record.description, `${label}.description`),
+    absence: {
+      is_absent: expectBoolean(absence.is_absent, `${label}.absence.is_absent`),
+      checked_fields: expectStringArray(absence.checked_fields, `${label}.absence.checked_fields`),
+      reason: expectString(absence.reason, `${label}.absence.reason`),
+    },
+    question_hint:
+      record.question_hint === null || record.question_hint === undefined
+        ? undefined
+        : expectString(record.question_hint, `${label}.question_hint`),
+    source_refs: expectOptionalArray(record.source_refs, [], `${label}.source_refs`).map((item, index) =>
+      parseProposalSource(item, `${label}.source_refs[${index}]`),
+    ),
+    resolved_by_turn_id:
+      record.resolved_by_turn_id === null || record.resolved_by_turn_id === undefined
+        ? undefined
+        : expectString(record.resolved_by_turn_id, `${label}.resolved_by_turn_id`),
+    audit_refs: expectOptionalArray(record.audit_refs, [], `${label}.audit_refs`).map((item, index) => {
+      const auditRef = expectRecord(item, `${label}.audit_refs[${index}]`);
+
+      return {
+        kind: expectEnum(auditRef.kind, `${label}.audit_refs[${index}].kind`, [
+          'agent_run',
+          'audit_event',
+          'snapshot',
+          'chat_turn',
+        ]),
+        id: expectString(auditRef.id, `${label}.audit_refs[${index}].id`),
+      };
+    }),
+    warnings: expectOptionalStringArray(record.warnings, [], `${label}.warnings`),
+    created_at: expectString(record.created_at, `${label}.created_at`),
+    updated_at: expectString(record.updated_at, `${label}.updated_at`),
+  };
+}
+
 function parseConversationTurn(value: unknown, label: string): ConversationTurn {
   const record = expectRecord(value, label);
 
@@ -629,6 +695,9 @@ export function parseSessionAuditView(value: unknown): SessionAuditView {
     ),
     sources: expectArray(record.sources, 'session audit view.sources').map((item, index) =>
       parseProposalSource(item, `session audit view.sources[${index}]`),
+    ),
+    gaps: expectOptionalArray(record.gaps, [], 'session audit view.gaps').map((item, index) =>
+      parseAlphaGap(item, `session audit view.gaps[${index}]`),
     ),
     turns: expectOptionalArray(record.turns, [], 'session audit view.turns').map((item, index) =>
       parseConversationTurn(item, `session audit view.turns[${index}]`),

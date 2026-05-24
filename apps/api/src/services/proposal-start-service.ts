@@ -15,9 +15,10 @@ import {
   type PreparedProposalSource,
 } from '../domain/document-sources';
 import { schemaIds } from '../contracts/schema-registry';
-import type { StructuredBrief } from '../contracts/types';
+import type { AlphaGap, ProposalSource, StructuredBrief } from '../contracts/types';
 import type { AlphaStore } from '../repositories/alpha-store';
 import type { SessionStore } from '../repositories/session-store';
+import type { GapAnalysisService } from './gap-analysis-service';
 import type { LlmOrchestrator } from './llm-orchestrator';
 import { PdfExtractionService } from './pdf-extraction-service';
 import type { StartContextCommand, StartContextResponse } from './service-types';
@@ -31,6 +32,7 @@ export class ProposalStartService {
     private readonly sessionStore: SessionStore,
     private readonly llmOrchestrator: LlmOrchestrator,
     private readonly alphaStore: AlphaStore,
+    private readonly gapAnalysisService: GapAnalysisService,
   ) {}
 
   async execute(command: StartContextCommand): Promise<StartContextResponse> {
@@ -42,12 +44,16 @@ export class ProposalStartService {
 
       if (existingSession) {
         const warnings = await this.rehydrateStartWarnings(existingSession.id);
+        const existingGaps = await this.rehydrateAlphaGaps(existingSession.id);
 
         return {
           session_id: existingSession.id,
           stage: 'problem_definition',
           structured_brief: existingSession.latest_structured_brief_json,
-          detected_gaps: deriveDetectedGaps(existingSession.latest_structured_brief_json),
+          detected_gaps: summarizeAlphaGaps(
+            existingGaps,
+            deriveDetectedGaps(existingSession.latest_structured_brief_json),
+          ),
           warnings,
         };
       }
@@ -103,7 +109,7 @@ export class ProposalStartService {
       normalizedText: briefExtractionInput.text,
     });
 
-    const detectedGaps = deriveDetectedGaps(briefResult.output);
+    let detectedGaps = deriveDetectedGaps(briefResult.output);
     const initialProblemDefinition = toProblemDefinitionState(briefResult.output);
 
     const session = await this.sessionStore
@@ -123,7 +129,7 @@ export class ProposalStartService {
           initialProblemDefinition,
         });
 
-        await this.createInitialAlphaRecords(client, {
+        const alphaRecords = await this.createInitialAlphaRecords(client, {
           sessionId: createdSession.id,
           userId: payload.user_id,
           requestId,
@@ -135,6 +141,7 @@ export class ProposalStartService {
           sources: sourceText.sources,
           warnings: workflowWarnings,
         });
+        detectedGaps = summarizeAlphaGaps(alphaRecords.gaps, detectedGaps);
 
         await this.sessionStore.insertEvent(client, {
           sessionId: createdSession.id,
@@ -273,6 +280,12 @@ export class ProposalStartService {
       source_count: sourceText.sources.length,
     });
 
+    this.logger.info('proposal_gaps_created', {
+      request_id: requestId,
+      session_id: session.id,
+      gap_count: detectedGaps.length,
+    });
+
     return {
       session_id: session.id,
       stage: 'problem_definition',
@@ -296,7 +309,7 @@ export class ProposalStartService {
       sources: PreparedProposalSource[];
       warnings: string[];
     },
-  ): Promise<void> {
+  ): Promise<{ sources: ProposalSource[]; gaps: AlphaGap[] }> {
     await this.alphaStore.createProposal(client, {
       proposalId: params.sessionId,
       sessionId: params.sessionId,
@@ -348,11 +361,13 @@ export class ProposalStartService {
       });
     }
 
+    const createdSources: ProposalSource[] = [];
+
     for (const source of params.sources) {
       // These initial Alpha source rows use merged normalized-session spans.
       // Document-local spans, when added for richer extraction metadata, must
       // stay separate because the two coordinate systems are not interchangeable.
-      await this.alphaStore.createSource(client, {
+      const createdSource = await this.alphaStore.createSource(client, {
         proposalId: params.sessionId,
         sourceKind: source.sourceKind,
         label: source.label,
@@ -360,7 +375,16 @@ export class ProposalStartService {
         span: source.span,
         metadata: source.metadata,
       });
+      createdSources.push(createdSource);
     }
+
+    const gaps = await this.gapAnalysisService.createInitialGaps(client, {
+      proposalId: params.sessionId,
+      sessionId: params.sessionId,
+      requestId: params.requestId,
+      structuredBrief: params.structuredBrief,
+      sources: createdSources,
+    });
 
     await this.alphaStore.createModuleChat(client, {
       proposalId: params.sessionId,
@@ -380,6 +404,11 @@ export class ProposalStartService {
         workflow_version: params.workflowVersion,
       },
     });
+
+    return {
+      sources: createdSources,
+      gaps,
+    };
   }
 
   private async rehydrateStartWarnings(sessionId: string): Promise<string[]> {
@@ -395,4 +424,26 @@ export class ProposalStartService {
       ]),
     );
   }
+
+  private async rehydrateAlphaGaps(sessionId: string): Promise<AlphaGap[]> {
+    const proposal = await this.alphaStore.findProposalBySessionId(sessionId);
+
+    if (!proposal) {
+      return [];
+    }
+
+    return this.alphaStore.listGaps(proposal.proposal_id);
+  }
+}
+
+function summarizeAlphaGaps(gaps: AlphaGap[], fallback: string[]): string[] {
+  if (gaps.length === 0) {
+    return fallback;
+  }
+
+  return Array.from(
+    new Set(
+      gaps.map((gap) => `${gap.field}: ${gap.description}`),
+    ),
+  );
 }
