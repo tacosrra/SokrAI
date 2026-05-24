@@ -234,6 +234,8 @@ Incluye:
 - Preguntas candidatas.
 - Estados de gap.
 - Validacion por schema.
+- Persistencia inicial en `alpha_gaps` durante `proposal_start_v1`.
+- Exposicion de `gaps` en la vista de auditoria de sesion.
 
 No incluye:
 

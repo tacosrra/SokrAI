@@ -135,11 +135,13 @@ describe('contract schemas', () => {
     const missingSource = await readFixture('alpha-model', 'proposal-source.missing-id.invalid.json');
     const invalidDocumentStatus = await readFixture('alpha-model', 'proposal-document.invalid-status.invalid.json');
     const clinicGap = await readFixture('alpha-model', 'alpha-gap.clinic-module.invalid.json');
+    const missingAbsenceGap = await readFixture('alpha-model', 'alpha-gap.missing-absence.invalid.json');
     const extraProposalField = await readFixture('alpha-model', 'alpha-proposal.extra-property.invalid.json');
 
     expect(() => assertProposalSource(missingSource)).toThrow(AppError);
     expect(() => assertProposalDocument(invalidDocumentStatus)).toThrow(AppError);
     expect(() => assertAlphaGap(clinicGap)).toThrow(AppError);
+    expect(() => assertAlphaGap(missingAbsenceGap)).toThrow(AppError);
     expect(() => assertAlphaProposal(extraProposalField)).toThrow(AppError);
   });
 

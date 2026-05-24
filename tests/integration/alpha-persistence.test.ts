@@ -100,8 +100,14 @@ describe('alpha persistence integration', () => {
       module: 'problem',
       gapKind: 'missing_information',
       gapStatus: 'open',
+      origin: 'structured_brief_field',
       field: 'evidence_of_problem',
       description: 'Evidence needs a measurable baseline.',
+      absence: {
+        is_absent: true,
+        checked_fields: ['evidence_of_problem'],
+        reason: 'Required information was not found in the available structured brief.',
+      },
       sourceRefs: [source],
     });
     const chat = await store.createModuleChat(app.services.database, {
@@ -296,6 +302,44 @@ describe('alpha persistence integration', () => {
       app.services.database.query(
         'INSERT INTO proposal_documents (proposal_id, source_kind, document_status) VALUES ($1, $2, $3)',
         [session.id, 'generated_section', 'normalized'],
+      ),
+    ).rejects.toThrow();
+    await expect(
+      app.services.database.query(
+        [
+          'INSERT INTO alpha_gaps',
+          '(proposal_id, module, gap_kind, gap_status, origin, field, description, absence_json)',
+          'VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        ].join(' '),
+        [
+          session.id,
+          'problem',
+          'missing_information',
+          'open',
+          'clinic_module',
+          'evidence_of_problem',
+          'Invalid origin should fail.',
+          JSON.stringify({ is_absent: true, checked_fields: ['evidence_of_problem'], reason: 'Missing.' }),
+        ],
+      ),
+    ).rejects.toThrow();
+    await expect(
+      app.services.database.query(
+        [
+          'INSERT INTO alpha_gaps',
+          '(proposal_id, module, gap_kind, gap_status, origin, field, description, absence_json)',
+          'VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+        ].join(' '),
+        [
+          session.id,
+          'problem',
+          'missing_information',
+          'open',
+          'structured_brief_field',
+          'evidence_of_problem',
+          'Missing information must carry absence evidence.',
+          JSON.stringify({ is_absent: false, checked_fields: [], reason: '' }),
+        ],
       ),
     ).rejects.toThrow();
   });

@@ -46,6 +46,28 @@ const validAgentRun = {
   status: 'completed',
 };
 
+const validAlphaGap = {
+  gap_id: 'gap-1',
+  proposal_id: 'session-1',
+  module: 'problem',
+  gap_kind: 'missing_information',
+  gap_status: 'open',
+  origin: 'structured_brief_field',
+  field: 'evidence_of_problem',
+  description: 'Observable evidence of the problem is missing from the structured brief.',
+  absence: {
+    is_absent: true,
+    checked_fields: ['evidence_of_problem'],
+    reason: 'Required information was not found in the available structured brief.',
+  },
+  question_hint: 'Que evidencia observable tienes de que este problema existe y genera impacto real?',
+  source_refs: [],
+  audit_refs: [],
+  warnings: [],
+  created_at: '2026-05-24T20:00:00.000Z',
+  updated_at: '2026-05-24T20:00:00.000Z',
+};
+
 function createAuditView(runs: unknown[] = []) {
   return {
     session: {
@@ -65,6 +87,7 @@ function createAuditView(runs: unknown[] = []) {
     },
     documents: [],
     sources: [],
+    gaps: [],
     turns: [],
     runs,
     snapshots: [],
@@ -243,6 +266,7 @@ describe('parseSessionAuditView', () => {
       },
       documents: [],
       sources: [],
+      gaps: [],
       turns: [],
       runs: [],
       snapshots: [
@@ -303,7 +327,7 @@ describe('parseSessionAuditView', () => {
     expect(audit.events[0]?.event_seq).toBe(1);
   });
 
-  it('unwraps enveloped payloads and tolerates omitted non-source array sections', () => {
+  it('unwraps enveloped payloads and tolerates omitted legacy array sections', () => {
     const audit = parseSessionAuditView({
       payload: {
         session: {
@@ -336,6 +360,7 @@ describe('parseSessionAuditView', () => {
         },
         documents: [],
         sources: [],
+        gaps: [],
       },
     });
 
@@ -356,6 +381,46 @@ describe('parseSessionAuditView', () => {
     const { sources: _sources, ...payload } = createAuditView();
 
     expect(() => parseSessionAuditView(payload)).toThrow(/session audit view\.sources/);
+  });
+
+  it('rejects audit payloads missing required gaps', () => {
+    const { gaps: _gaps, ...payload } = createAuditView();
+
+    expect(() => parseSessionAuditView(payload)).toThrow(/session audit view\.gaps/);
+  });
+
+  it('parses valid structured gaps', () => {
+    const audit = parseSessionAuditView({
+      ...createAuditView(),
+      gaps: [validAlphaGap],
+    });
+
+    expect(audit.gaps[0]).toMatchObject({
+      gap_id: 'gap-1',
+      origin: 'structured_brief_field',
+      absence: {
+        is_absent: true,
+        checked_fields: ['evidence_of_problem'],
+      },
+    });
+  });
+
+  it('rejects malformed structured gaps', () => {
+    expect(() =>
+      parseSessionAuditView({
+        ...createAuditView(),
+        gaps: [
+          {
+            ...validAlphaGap,
+            absence: {
+              is_absent: 'yes',
+              checked_fields: ['evidence_of_problem'],
+              reason: 'Invalid boolean should fail.',
+            },
+          },
+        ],
+      }),
+    ).toThrow(/session audit view\.gaps\[0\]\.absence\.is_absent/);
   });
 
   it('parses document and source audit sections', () => {
@@ -413,6 +478,7 @@ describe('parseSessionAuditView', () => {
           metadata: { role: 'extracted_pdf_text' },
         },
       ],
+      gaps: [],
       turns: [],
       runs: [],
       snapshots: [],

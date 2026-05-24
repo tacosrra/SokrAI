@@ -26,6 +26,7 @@ PR 2A defines schema-backed contracts and TypeScript domain types for the MVP Al
 | Source | `source_kind` | `pasted_text`, `uploaded_file`, `extracted_text`, `user_answer`, `generated_section` | Internal provenance kind only; no RAG corpus or vector reference. |
 | Gap | `gap_kind` | `missing_information`, `ambiguous_information`, `unsupported_claim`, `needs_user_confirmation` | Descriptive gap kind, not scoring or approval. |
 | Gap | `gap_status` | `open`, `in_progress`, `resolved`, `deferred`, `not_applicable` | Gap resolution state for later chats. |
+| Gap | `origin` | `structured_brief_field`, `structured_brief_missing_information`, `structured_brief_ambiguity`, `proposal_source`, `system_rule` | Deterministic provenance for why the gap exists. |
 | Module chat | `module` | `problem`, `solution` | Alpha modules only. |
 | Module chat | `chat_status` | `not_started`, `active`, `waiting_for_user`, `ready_to_generate`, `completed`, `blocked`, `failed` | Chat lifecycle for problem and solution modules. |
 | Chat turn | `turn_status` | `awaiting_user`, `processing`, `resolved`, `failed`, `skipped` | Turn lifecycle for modular chats. |
@@ -33,6 +34,19 @@ PR 2A defines schema-backed contracts and TypeScript domain types for the MVP Al
 | Generated section | `section_status` | `draft`, `generated`, `accepted`, `needs_revision`, `superseded` | Versioned section lifecycle. |
 | Basic report | `report_status` | `draft`, `ready`, `needs_revision` | In-app report readiness state. |
 | Audit reference | `audit_refs[].kind` | `agent_run`, `audit_event`, `snapshot`, `chat_turn` | Reference-only audit linkage. |
+
+## AlphaGap absence and provenance
+
+PR 5 extends `AlphaGap` so initial gaps can be audited without inventing evidence:
+
+- `origin` records which deterministic path created the gap.
+- `absence.is_absent = true` is required for `missing_information`.
+- `absence.checked_fields` lists the structured brief fields that were checked.
+- `absence.reason` explains the absence without making a negative assessment.
+- `source_refs` remains empty for absence-only gaps.
+- `source_refs` may contain persisted internal sources only when the gap is tied to real submitted material.
+
+Initial gap analysis is deterministic API/domain code. It does not add scoring, ranking, approval, legal/regulatory conclusions, medical-device classification, cost/resource analysis, RAG, or PDF export.
 
 ## PR2A exclusions
 

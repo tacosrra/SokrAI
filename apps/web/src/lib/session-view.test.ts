@@ -42,6 +42,7 @@ const auditFixture: SessionAuditView = {
   },
   documents: [],
   sources: [],
+  gaps: [],
   turns: [
     {
       id: 'turn-1',
@@ -201,5 +202,41 @@ describe('deriveSessionPresentation', () => {
       isComplete: true,
       source: 'problem_definition',
     });
+  });
+
+  it('uses structured gaps before legacy snapshot gap strings', () => {
+    const auditWithStructuredGaps: SessionAuditView = {
+      ...auditFixture,
+      gaps: [
+        {
+          gap_id: 'gap-1',
+          proposal_id: 'session-1',
+          module: 'problem',
+          gap_kind: 'missing_information',
+          gap_status: 'open',
+          origin: 'structured_brief_field',
+          field: 'evidence_of_problem',
+          description: 'Observable evidence of the problem is missing from the structured brief.',
+          absence: {
+            is_absent: true,
+            checked_fields: ['evidence_of_problem'],
+            reason: 'Required information was not found in the available structured brief.',
+          },
+          question_hint: 'Que evidencia observable tienes de que este problema existe y genera impacto real?',
+          source_refs: [],
+          audit_refs: [],
+          warnings: [],
+          created_at: '2026-05-24T20:00:00.000Z',
+          updated_at: '2026-05-24T20:00:00.000Z',
+        },
+      ],
+    };
+
+    const presentation = deriveSessionPresentation(auditWithStructuredGaps);
+
+    expect(presentation.detectedGaps).toEqual([
+      'evidence_of_problem: Observable evidence of the problem is missing from the structured brief.',
+    ]);
+    expect(presentation.detectedGaps).not.toContain('problem_owner');
   });
 });

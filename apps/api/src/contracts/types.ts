@@ -36,6 +36,13 @@ export type GapKind =
 
 export type GapStatus = 'open' | 'in_progress' | 'resolved' | 'deferred' | 'not_applicable';
 
+export type GapOrigin =
+  | 'structured_brief_field'
+  | 'structured_brief_missing_information'
+  | 'structured_brief_ambiguity'
+  | 'proposal_source'
+  | 'system_rule';
+
 export type ChatStatus =
   | 'not_started'
   | 'active'
@@ -93,14 +100,22 @@ export interface ProposalDocument {
   metadata?: Record<string, unknown>;
 }
 
+export interface GapAbsence {
+  is_absent: boolean;
+  checked_fields: string[];
+  reason: string;
+}
+
 export interface AlphaGap {
   gap_id: string;
   proposal_id: string;
   module: AlphaModule;
   gap_kind: GapKind;
   gap_status: GapStatus;
+  origin: GapOrigin;
   field: string;
   description: string;
+  absence: GapAbsence;
   question_hint?: string;
   source_refs: ProposalSource[];
   resolved_by_turn_id?: string;

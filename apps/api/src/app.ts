@@ -14,6 +14,7 @@ import { AlphaStore } from './repositories/alpha-store';
 import { SessionStore } from './repositories/session-store';
 import type { AiProviderPort } from './services/ai-provider';
 import { createAiProvider } from './services/ai-provider-factory';
+import { GapAnalysisService } from './services/gap-analysis-service';
 import { LlmOrchestrator } from './services/llm-orchestrator';
 import { ProblemDefinitionService } from './services/problem-definition-service';
 import { ProposalReplyService } from './services/proposal-reply-service';
@@ -36,7 +37,15 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const sessionStore = new SessionStore(database);
   const alphaStore = new AlphaStore(database);
   const llmOrchestrator = new LlmOrchestrator(config, aiProvider);
-  const proposalStartService = new ProposalStartService(config, logger, sessionStore, llmOrchestrator, alphaStore);
+  const gapAnalysisService = new GapAnalysisService(logger, alphaStore);
+  const proposalStartService = new ProposalStartService(
+    config,
+    logger,
+    sessionStore,
+    llmOrchestrator,
+    alphaStore,
+    gapAnalysisService,
+  );
   const proposalReplyService = new ProposalReplyService(config, logger, sessionStore);
   const problemDefinitionService = new ProblemDefinitionService(config, logger, sessionStore, llmOrchestrator);
 
@@ -52,6 +61,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     alphaStore,
     aiProvider,
     llmOrchestrator,
+    gapAnalysisService,
     proposalStartService,
     proposalReplyService,
     problemDefinitionService,

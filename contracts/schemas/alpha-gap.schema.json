@@ -39,6 +39,16 @@
         "not_applicable"
       ]
     },
+    "origin": {
+      "type": "string",
+      "enum": [
+        "structured_brief_field",
+        "structured_brief_missing_information",
+        "structured_brief_ambiguity",
+        "proposal_source",
+        "system_rule"
+      ]
+    },
     "field": {
       "type": "string",
       "minLength": 1
@@ -46,6 +56,30 @@
     "description": {
       "type": "string",
       "minLength": 1
+    },
+    "absence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "is_absent": {
+          "type": "boolean"
+        },
+        "checked_fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "is_absent",
+        "checked_fields",
+        "reason"
+      ]
     },
     "question_hint": {
       "type": "string",
@@ -83,14 +117,47 @@
       "format": "date-time"
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "gap_kind": {
+            "const": "missing_information"
+          }
+        },
+        "required": [
+          "gap_kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "absence": {
+            "properties": {
+              "is_absent": {
+                "const": true
+              },
+              "checked_fields": {
+                "minItems": 1
+              },
+              "reason": {
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
   "required": [
     "gap_id",
     "proposal_id",
     "module",
     "gap_kind",
     "gap_status",
+    "origin",
     "field",
     "description",
+    "absence",
     "source_refs",
     "audit_refs",
     "warnings",

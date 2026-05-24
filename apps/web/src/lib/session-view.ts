@@ -1,6 +1,7 @@
 import type {
   AgentRun,
   AgentStatus,
+  AlphaGap,
   ConversationTurn,
   ProblemDefinitionState,
   SessionAuditView,
@@ -50,6 +51,7 @@ export interface SessionPresentation {
   agentStatus: AgentStatus;
   structuredBrief: StructuredBrief;
   problemDefinition: ProblemDefinitionState | null;
+  gaps: AlphaGap[];
   detectedGaps: string[];
   latestDiagnosis: string[];
   currentQuestion: string;
@@ -248,6 +250,7 @@ export function deriveSessionPresentation(audit: SessionAuditView): SessionPrese
     latestSnapshot?.current_problem_definition_json ??
     audit.session.latest_problem_definition_json;
   const checklist = deriveChecklist(structuredBrief, problemDefinition);
+  const gaps = audit.gaps;
 
   return {
     sessionId: audit.session.id,
@@ -258,7 +261,10 @@ export function deriveSessionPresentation(audit: SessionAuditView): SessionPrese
     agentStatus: latestSnapshot?.agent_status ?? fallbackAgentStatus(audit.session.status),
     structuredBrief,
     problemDefinition,
-    detectedGaps: latestSnapshot?.detected_gaps_json ?? [],
+    gaps,
+    detectedGaps: gaps.length > 0
+      ? gaps.map((gap) => `${gap.field}: ${gap.description}`)
+      : latestSnapshot?.detected_gaps_json ?? [],
     latestDiagnosis: latestResolvedTurn?.diagnosis_json ?? [],
     currentQuestion:
       openTurn?.question_text ?? latestSnapshot?.next_question_text ?? '',

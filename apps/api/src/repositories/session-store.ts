@@ -1,6 +1,7 @@
 import type { PoolClient, QueryResult, QueryResultRow } from 'pg';
 
 import type {
+  AlphaGap,
   DocumentStatus,
   ProblemDefinitionState,
   ProposalDocument,
@@ -11,6 +12,7 @@ import type {
   StructuredBrief,
 } from '../contracts/types';
 import { AppError } from '../utils/errors';
+import { mapGap, type AlphaGapRecord } from './alpha-store';
 import type { Database, SqlExecutor } from './database';
 
 export interface SessionRecord {
@@ -645,7 +647,8 @@ export class SessionStore {
         | 'session_blocked'
         | 'document_received'
         | 'document_extracted'
-        | 'document_failed';
+        | 'document_failed'
+        | 'gap_detected';
       actorType: 'user' | 'workflow' | 'agent' | 'system';
       requestId?: string;
       payloadJson?: Record<string, unknown>;
@@ -675,15 +678,25 @@ export class SessionStore {
     session: SessionRecord;
     documents: ProposalDocument[];
     sources: ProposalSource[];
+    gaps: AlphaGap[];
     turns: ConversationTurnRecord[];
     runs: AgentRunRecord[];
     snapshots: SnapshotRecord[];
     events: Array<Record<string, unknown>>;
   }> {
     const session = await this.getSession(sessionId);
-    const [documents, sources, turns, runs, snapshots, events] = await Promise.all([
+    const [documents, sources, gaps, turns, runs, snapshots, sessionEvents, alphaEvents] = await Promise.all([
       this.listProposalDocuments(sessionId),
       this.listProposalSources(sessionId),
+      this.database.query<AlphaGapRecord>(
+        [
+          'SELECT *',
+          'FROM alpha_gaps',
+          'WHERE proposal_id = (SELECT id FROM proposals WHERE session_id = $1 LIMIT 1)',
+          'ORDER BY created_at ASC, id ASC',
+        ].join(' '),
+        [sessionId],
+      ),
       this.database.query<ConversationTurnRecord>(
         'SELECT * FROM conversation_turns WHERE session_id = $1 ORDER BY turn_seq ASC',
         [sessionId],
@@ -700,16 +713,26 @@ export class SessionStore {
         'SELECT * FROM session_events WHERE session_id = $1 ORDER BY event_seq ASC',
         [sessionId],
       ),
+      this.database.query<Record<string, unknown>>(
+        [
+          'SELECT *',
+          'FROM audit_events',
+          'WHERE proposal_id = (SELECT id FROM proposals WHERE session_id = $1 LIMIT 1)',
+          'ORDER BY event_seq ASC',
+        ].join(' '),
+        [sessionId],
+      ),
     ]);
 
     return {
       session,
       documents,
       sources,
+      gaps: gaps.rows.map(mapGap),
       turns: turns.rows,
       runs: runs.rows,
       snapshots: snapshots.rows,
-      events: events.rows,
+      events: [...sessionEvents.rows, ...alphaEvents.rows],
     };
   }
 
