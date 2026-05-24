@@ -284,10 +284,22 @@ Modulos funcionales:
 - Writer de seccion solucion.
 - Reporte basico en app.
 
+Modulos deterministicos de dominio:
+
+- `initial_gap_analysis`: detecta gaps iniciales desde `structured_brief`, `missing_information`,
+  `ambiguities` y fuentes internas persistidas.
+
+Reglas de `initial_gap_analysis`:
+
+- No ejecuta un modelo adicional ni prompt propio en PR 5.
+- Persiste `AlphaGap` con `origin`, `absence`, `source_refs`, estado y pregunta candidata.
+- Los gaps de ausencia no inventan fuentes ni representan scoring, ranking, aprobacion o dictamen.
+- Filtra items fuera del Alpha como legal/regulatorio Clinic, medical device, costes, recursos,
+  RAG avanzado y PDF.
+
 Modulos IA:
 
 - `brief_extraction`.
-- `gap_analysis`.
 - `problem_definition_agent`.
 - `problem_section_writer`.
 - `solution_definition_agent`.

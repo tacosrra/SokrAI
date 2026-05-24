@@ -685,7 +685,7 @@ export class SessionStore {
     events: Array<Record<string, unknown>>;
   }> {
     const session = await this.getSession(sessionId);
-    const [documents, sources, gaps, turns, runs, snapshots, events] = await Promise.all([
+    const [documents, sources, gaps, turns, runs, snapshots, sessionEvents, alphaEvents] = await Promise.all([
       this.listProposalDocuments(sessionId),
       this.listProposalSources(sessionId),
       this.database.query<AlphaGapRecord>(
@@ -713,6 +713,15 @@ export class SessionStore {
         'SELECT * FROM session_events WHERE session_id = $1 ORDER BY event_seq ASC',
         [sessionId],
       ),
+      this.database.query<Record<string, unknown>>(
+        [
+          'SELECT *',
+          'FROM audit_events',
+          'WHERE proposal_id = (SELECT id FROM proposals WHERE session_id = $1 LIMIT 1)',
+          'ORDER BY event_seq ASC',
+        ].join(' '),
+        [sessionId],
+      ),
     ]);
 
     return {
@@ -723,7 +732,7 @@ export class SessionStore {
       turns: turns.rows,
       runs: runs.rows,
       snapshots: snapshots.rows,
-      events: events.rows,
+      events: [...sessionEvents.rows, ...alphaEvents.rows],
     };
   }
 

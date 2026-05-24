@@ -121,6 +121,7 @@ Estos son los paths importantes para arrancar y probar la v1:
 - `db/migrations/001_initial.sql`
 - `db/migrations/002_alpha_data_model.sql`
 - `db/migrations/003_documents_sources.sql`
+- `db/migrations/004_alpha_gap_analysis.sql`
 - `infra/n8n/workflows/proposal_start_v1.json`
 - `infra/n8n/workflows/proposal_reply_v1.json`
 - `infra/n8n/workflows/agent_problem_definition_v1.json`
@@ -428,6 +429,7 @@ Las migraciones de la v1 estan en:
 - `db/migrations/001_initial.sql`
 - `db/migrations/002_alpha_data_model.sql`
 - `db/migrations/003_documents_sources.sql`
+- `db/migrations/004_alpha_gap_analysis.sql`
 
 ### 9.1 Ejecutarlas desde el contenedor `api`
 
@@ -823,6 +825,9 @@ Una prueba manual minima satisfactoria de la v1 es:
    - `structured_brief`
    - `detected_gaps`
    - una sola pregunta principal
+   - En la respuesta inicial, `detected_gaps` es el resumen de compatibilidad.
+     Para auditar `origin`, `absence`, `source_refs` y `question_hint`, consulta
+     `GET /api/v1/sessions/:sessionId` y revisa el array `gaps`.
 3. respondes con mas detalle
 4. el sistema actualiza:
    - `updated_problem_definition`
@@ -1248,7 +1253,8 @@ Considera que la inicializacion esta bien hecha si puedes marcar todo esto:
 - has importado y publicado los 3 workflows
 - `POST /webhook/proposal-start-v1` devuelve `session_id`
 - `POST /webhook/proposal-reply-v1` reutiliza ese `session_id`
-- `GET /api/v1/sessions/:sessionId` devuelve sesiones, turnos, runs y snapshots
+- `GET /api/v1/sessions/:sessionId` devuelve session, documentos, fuentes, gaps, turnos, runs,
+  snapshots y eventos
 - `pnpm verify` pasa completo
 - `bash scripts/smoke-core.sh` pasa contra el stack vivo
 

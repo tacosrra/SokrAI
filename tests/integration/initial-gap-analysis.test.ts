@@ -80,10 +80,29 @@ describe('initial Alpha gap analysis', () => {
     });
 
     const audit = await app.inject({ method: 'GET', url: `/api/v1/sessions/${body.session_id}` });
-    const auditBody = audit.json() as { gaps: AlphaGap[] };
+    const auditBody = audit.json() as {
+      gaps: AlphaGap[];
+      events: Array<{ event_type: string; payload_json: Record<string, unknown> }>;
+    };
+    const gapEvents = auditBody.events.filter((event) => event.event_type === 'gap_detected');
 
     expect(audit.statusCode).toBe(200);
     expect(auditBody.gaps).toEqual(expect.arrayContaining([expect.objectContaining({ gap_id: evidenceGap?.gap_id })]));
+    expect(gapEvents).toHaveLength(gaps.length);
+    expect(gapEvents).toEqual(
+      expect.arrayContaining(
+        gaps.map((gap) =>
+          expect.objectContaining({
+            payload_json: expect.objectContaining({
+              gap_id: gap.gap_id,
+              origin: gap.origin,
+              field: gap.field,
+              gap_kind: gap.gap_kind,
+            }),
+          }),
+        ),
+      ),
+    );
   });
 
   it('rehydrates existing gaps on idempotent start retry without duplicating rows', async () => {
@@ -99,14 +118,21 @@ describe('initial Alpha gap analysis', () => {
 
     const first = await startContext(app, 'req-initial-gaps-retry', payload);
     expect(first.statusCode).toBe(200);
-    const sessionId = (first.json() as { session_id: string }).session_id;
+    const firstBody = first.json() as { session_id: string; detected_gaps: string[] };
+    const sessionId = firstBody.session_id;
     const firstGaps = await app.services.alphaStore.listGaps(sessionId);
 
     const second = await startContext(app, 'req-initial-gaps-retry', payload);
     expect(second.statusCode).toBe(200);
-    expect((second.json() as { session_id: string }).session_id).toBe(sessionId);
+    const secondBody = second.json() as { session_id: string; detected_gaps: string[] };
+    expect(secondBody.session_id).toBe(sessionId);
+    const persistedGapSummaries = firstGaps.map((gap) => `${gap.field}: ${gap.description}`);
+    expect(secondBody.detected_gaps).toHaveLength(persistedGapSummaries.length);
+    expect(secondBody.detected_gaps).toEqual(expect.arrayContaining(persistedGapSummaries));
 
     const secondGaps = await app.services.alphaStore.listGaps(sessionId);
+    expect(secondBody.detected_gaps).toHaveLength(firstBody.detected_gaps.length);
+    expect(secondBody.detected_gaps).toEqual(expect.arrayContaining(firstBody.detected_gaps));
     expect(secondGaps.map((gap) => gap.gap_id)).toEqual(firstGaps.map((gap) => gap.gap_id));
 
     const count = await app.services.database.query<{ count: string }>(
