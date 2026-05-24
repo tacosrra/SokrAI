@@ -5,12 +5,17 @@ import type { Logger } from '../utils/logger';
 import type { AppConfig } from '../config/env';
 import {
   deriveDetectedGaps,
-  mergeSourceText,
   prepareBriefExtractionInput,
   toProblemDefinitionState,
 } from '../domain/intake';
+import {
+  mergePreparedSources,
+  prepareInputSources,
+  type PreparedProposalDocument,
+  type PreparedProposalSource,
+} from '../domain/document-sources';
 import { schemaIds } from '../contracts/schema-registry';
-import type { ProposalDocumentSourceKind, ProposalStartRequest, StructuredBrief } from '../contracts/types';
+import type { StructuredBrief } from '../contracts/types';
 import type { AlphaStore } from '../repositories/alpha-store';
 import type { SessionStore } from '../repositories/session-store';
 import type { LlmOrchestrator } from './llm-orchestrator';
@@ -51,24 +56,30 @@ export class ProposalStartService {
       new AppError(400, 'proposal_too_large', 'The proposal text exceeds the maximum supported length'),
     );
 
-    let extractedDocumentText = payload.document_text?.trim() ?? '';
-    let fileName: string | undefined;
-    let fileHash: string | undefined;
+    let pdfExtraction:
+      | Awaited<ReturnType<PdfExtractionService['extractDocument']>>
+      | undefined;
 
     if (payload.file) {
-      fileName = payload.file.file_name;
-      fileHash = sha256(payload.file.content_base64);
-      extractedDocumentText = await this.pdfExtractionService.extractText(
+      pdfExtraction = await this.pdfExtractionService.extractDocument(
         payload.file.file_name,
         payload.file.content_base64,
       );
     }
 
-    const sourceText = mergeSourceText(
-      payload.proposal_text,
-      extractedDocumentText,
-      this.config.maxProposalChars,
-    );
+    const preparedSources = prepareInputSources({
+      proposalText: payload.proposal_text,
+      documentText: payload.document_text,
+      uploadedPdf: payload.file && pdfExtraction
+        ? {
+            fileName: payload.file.file_name,
+            mimeType: payload.file.mime_type,
+            extraction: pdfExtraction,
+          }
+        : undefined,
+      allowSensitiveHealthData: this.config.allowSensitiveHealthData,
+    });
+    const sourceText = mergePreparedSources(preparedSources, this.config.maxProposalChars);
 
     ensure(
       sourceText.normalizedText.length > 0,
@@ -101,8 +112,8 @@ export class ProposalStartService {
           projectTitle: payload.project_title,
           goal: payload.goal,
           rawInputText: sourceText.rawText,
-          rawInputFileName: fileName,
-          rawInputFileSha256: fileHash,
+          rawInputFileName: payload.file?.file_name,
+          rawInputFileSha256: pdfExtraction?.sha256,
           normalizedText: sourceText.normalizedText,
           metadata: payload.metadata ?? {},
           structuredBrief: briefResult.output,
@@ -110,7 +121,6 @@ export class ProposalStartService {
         });
 
         await this.createInitialAlphaRecords(client, {
-          payload,
           sessionId: createdSession.id,
           userId: payload.user_id,
           requestId,
@@ -118,11 +128,8 @@ export class ProposalStartService {
           projectTitle: payload.project_title,
           goal: payload.goal,
           structuredBrief: briefResult.output,
-          rawProposalText: payload.proposal_text?.trim(),
-          extractedDocumentText,
-          fileName,
-          fileHash,
-          normalizedText: sourceText.normalizedText,
+          documents: sourceText.documents,
+          sources: sourceText.sources,
           warnings: workflowWarnings,
         });
 
@@ -155,8 +162,38 @@ export class ProposalStartService {
           outputContractName: 'structured-brief',
           outputContractVersion: 'v1',
           inputPayloadJson: {
-            ...payload,
-            document_text: extractedDocumentText || undefined,
+            request_id: payload.request_id,
+            user_id: payload.user_id,
+            project_title: payload.project_title,
+            goal: payload.goal,
+            proposal_text: payload.proposal_text,
+            document_text: payload.document_text,
+            file: payload.file
+              ? {
+                  file_name: payload.file.file_name,
+                  mime_type: payload.file.mime_type,
+                  sha256: pdfExtraction?.sha256,
+                }
+              : undefined,
+            metadata: payload.metadata,
+            source_summary: {
+              document_count: sourceText.documents.length,
+              source_count: sourceText.sources.length,
+              documents: sourceText.documents.map((document) => ({
+                key: document.key,
+                source_kind: document.sourceKind,
+                document_status: document.documentStatus,
+                file_name: document.fileName,
+                sha256: document.sha256,
+                warnings: document.warnings,
+              })),
+              sources: sourceText.sources.map((source) => ({
+                key: source.key,
+                source_kind: source.sourceKind,
+                label: source.label,
+                span: source.span,
+              })),
+            },
           },
           rawModelOutput: briefResult.rawOutput,
           validatedOutputJson: briefResult.output as unknown as Record<string, unknown>,
@@ -226,6 +263,13 @@ export class ProposalStartService {
       schema: schemaIds.proposalStartRequest,
     });
 
+    this.logger.info('proposal_sources_created', {
+      request_id: requestId,
+      session_id: session.id,
+      document_count: sourceText.documents.length,
+      source_count: sourceText.sources.length,
+    });
+
     return {
       session_id: session.id,
       stage: 'problem_definition',
@@ -236,9 +280,8 @@ export class ProposalStartService {
   }
 
   private async createInitialAlphaRecords(
-    client: Parameters<AlphaStore['createProposal']>[0],
+    client: Parameters<SessionStore['insertEvent']>[0],
     params: {
-      payload: ProposalStartRequest;
       sessionId: string;
       userId?: string;
       requestId?: string;
@@ -246,11 +289,8 @@ export class ProposalStartService {
       projectTitle: string;
       goal: string;
       structuredBrief: StructuredBrief;
-      rawProposalText?: string;
-      extractedDocumentText: string;
-      fileName?: string;
-      fileHash?: string;
-      normalizedText: string;
+      documents: PreparedProposalDocument[];
+      sources: PreparedProposalSource[];
       warnings: string[];
     },
   ): Promise<void> {
@@ -270,33 +310,49 @@ export class ProposalStartService {
       },
     });
 
-    const sourceDocuments = this.buildInitialAlphaDocuments(params);
+    const documentIds = new Map<string, string>();
 
-    for (const sourceDocument of sourceDocuments) {
+    for (const sourceDocument of params.documents) {
       const document = await this.alphaStore.createDocument(client, {
         proposalId: params.sessionId,
         sourceKind: sourceDocument.sourceKind,
-        documentStatus: 'normalized',
+        documentStatus: sourceDocument.documentStatus,
         fileName: sourceDocument.fileName,
         mimeType: sourceDocument.mimeType,
         sha256: sourceDocument.sha256,
         pastedText: sourceDocument.pastedText,
         normalizedText: sourceDocument.normalizedText,
-        warnings: params.warnings,
+        warnings: sourceDocument.warnings,
+        metadata: sourceDocument.metadata,
       });
+      documentIds.set(sourceDocument.key, document.document_id);
 
+      await this.sessionStore.insertEvent(client, {
+        sessionId: params.sessionId,
+        eventType:
+          sourceDocument.sourceKind === 'extracted_text'
+            ? 'document_extracted'
+            : 'document_received',
+        actorType: 'system',
+        requestId: params.requestId,
+        payloadJson: {
+          document_id: document.document_id,
+          source_kind: sourceDocument.sourceKind,
+          document_status: sourceDocument.documentStatus,
+          file_name: sourceDocument.fileName,
+          sha256: sourceDocument.sha256,
+        },
+      });
+    }
+
+    for (const source of params.sources) {
       await this.alphaStore.createSource(client, {
         proposalId: params.sessionId,
-        sourceKind: sourceDocument.sourceKind,
-        label: sourceDocument.label,
-        documentId: document.document_id,
-        span: {
-          start_char: 0,
-          end_char: sourceDocument.normalizedText.length,
-        },
-        metadata: {
-          workflow_version: params.workflowVersion,
-        },
+        sourceKind: source.sourceKind,
+        label: source.label,
+        documentId: documentIds.get(source.documentKey),
+        span: source.span,
+        metadata: source.metadata,
       });
     }
 
@@ -318,69 +374,5 @@ export class ProposalStartService {
         workflow_version: params.workflowVersion,
       },
     });
-  }
-
-  private buildInitialAlphaDocuments(params: {
-    payload: ProposalStartRequest;
-    rawProposalText?: string;
-    extractedDocumentText: string;
-    fileName?: string;
-    fileHash?: string;
-    normalizedText: string;
-  }): Array<{
-    sourceKind: ProposalDocumentSourceKind;
-    label: string;
-    fileName?: string;
-    mimeType?: string;
-    sha256?: string;
-    pastedText?: string;
-    normalizedText: string;
-  }> {
-    const documents: Array<{
-      sourceKind: ProposalDocumentSourceKind;
-      label: string;
-      fileName?: string;
-      mimeType?: string;
-      sha256?: string;
-      pastedText?: string;
-      normalizedText: string;
-    }> = [];
-
-    if (params.rawProposalText) {
-      documents.push({
-        sourceKind: 'pasted_text',
-        label: 'Initial proposal text',
-        pastedText: params.rawProposalText,
-        normalizedText: params.rawProposalText,
-      });
-    }
-
-    if (params.payload.file && params.extractedDocumentText) {
-      documents.push({
-        sourceKind: 'uploaded_file',
-        label: params.fileName ?? 'Uploaded proposal file',
-        fileName: params.fileName,
-        mimeType: params.payload.file.mime_type,
-        sha256: params.fileHash,
-        normalizedText: params.extractedDocumentText,
-      });
-    } else if (params.payload.document_text?.trim()) {
-      documents.push({
-        sourceKind: 'extracted_text',
-        label: 'Extracted proposal text',
-        normalizedText: params.payload.document_text.trim(),
-      });
-    }
-
-    if (documents.length === 0) {
-      documents.push({
-        sourceKind: 'pasted_text',
-        label: 'Initial proposal text',
-        pastedText: params.normalizedText,
-        normalizedText: params.normalizedText,
-      });
-    }
-
-    return documents;
   }
 }

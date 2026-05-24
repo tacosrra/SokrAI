@@ -25,6 +25,15 @@ import {
 import { AppError } from '../../apps/api/src/utils/errors.ts';
 import { readFixture } from '../helpers/test-environment';
 
+function fromRepoRoot(...segments: string[]): string {
+  const cwd = process.cwd();
+  const repoRoot = path.basename(cwd) === 'api' && path.basename(path.dirname(cwd)) === 'apps'
+    ? path.resolve(cwd, '../..')
+    : cwd;
+
+  return path.join(repoRoot, ...segments);
+}
+
 describe('contract schemas', () => {
   it('accepts a valid proposal start request fixture', async () => {
     const fixture = await readFixture('start', 'strong-proposal.json');
@@ -168,7 +177,7 @@ describe('contract schemas', () => {
   });
 
   it('keeps n8n workflow assets importable by requiring top-level workflow ids', async () => {
-    const workflowsDir = path.resolve(process.cwd(), '../../infra/n8n/workflows');
+    const workflowsDir = fromRepoRoot('infra', 'n8n', 'workflows');
     const files = (await readdir(workflowsDir)).filter((file) => file.endsWith('.json')).sort();
 
     expect(files.length).toBeGreaterThan(0);
@@ -189,7 +198,7 @@ describe('contract schemas', () => {
   });
 
   it('preserves caller request ids in n8n workflow payload setup', async () => {
-    const workflowsDir = path.resolve(process.cwd(), '../../infra/n8n/workflows');
+    const workflowsDir = fromRepoRoot('infra', 'n8n', 'workflows');
     const workflowExpectations = [
       ['proposal_start_v1.json', 'Webhook_StartProposal'],
       ['proposal_reply_v1.json', 'Webhook_ProposalReply'],
@@ -207,8 +216,8 @@ describe('contract schemas', () => {
   });
 
   it('bootstraps n8n workflows with supported per-workflow publish commands', async () => {
-    const bashScriptPath = path.resolve(process.cwd(), '../../scripts/common-beta.sh');
-    const powershellScriptPath = path.resolve(process.cwd(), '../../scripts/common-beta.ps1');
+    const bashScriptPath = fromRepoRoot('scripts', 'common-beta.sh');
+    const powershellScriptPath = fromRepoRoot('scripts', 'common-beta.ps1');
     const [bashScript, powershellScript] = await Promise.all([
       readFile(bashScriptPath, 'utf8'),
       readFile(powershellScriptPath, 'utf8'),
@@ -221,8 +230,8 @@ describe('contract schemas', () => {
   });
 
   it('requires completed request execution statuses in core smoke scripts', async () => {
-    const bashScriptPath = path.resolve(process.cwd(), '../../scripts/smoke-core.sh');
-    const powershellScriptPath = path.resolve(process.cwd(), '../../scripts/smoke-core.ps1');
+    const bashScriptPath = fromRepoRoot('scripts', 'smoke-core.sh');
+    const powershellScriptPath = fromRepoRoot('scripts', 'smoke-core.ps1');
     const [bashScript, powershellScript] = await Promise.all([
       readFile(bashScriptPath, 'utf8'),
       readFile(powershellScriptPath, 'utf8'),

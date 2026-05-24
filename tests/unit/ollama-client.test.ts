@@ -13,15 +13,28 @@ function createClient() {
   return new OllamaClient(config);
 }
 
+const originalFetch = globalThis.fetch;
+
+function stubFetch(fetchMock: typeof fetch): void {
+  Object.defineProperty(globalThis, 'fetch', {
+    value: fetchMock,
+    configurable: true,
+    writable: true,
+  });
+}
+
 describe('OllamaClient', () => {
   afterEach(() => {
     vi.restoreAllMocks();
-    vi.unstubAllGlobals();
+    Object.defineProperty(globalThis, 'fetch', {
+      value: originalFetch,
+      configurable: true,
+      writable: true,
+    });
   });
 
   it('maps fetch timeouts to a controlled ollama_timeout error', async () => {
-    vi.stubGlobal(
-      'fetch',
+    stubFetch(
       vi.fn().mockRejectedValue(Object.assign(new Error('timed out'), { name: 'TimeoutError' })),
     );
 
@@ -41,7 +54,7 @@ describe('OllamaClient', () => {
   });
 
   it('maps network failures to a controlled ollama_unreachable error', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('fetch failed')));
+    stubFetch(vi.fn().mockRejectedValue(new TypeError('fetch failed')));
 
     const client = createClient();
 
@@ -59,8 +72,7 @@ describe('OllamaClient', () => {
   });
 
   it('maps invalid JSON payloads to a controlled ollama_invalid_response error', async () => {
-    vi.stubGlobal(
-      'fetch',
+    stubFetch(
       vi.fn().mockResolvedValue({
         ok: true,
         json: vi.fn().mockRejectedValue(new SyntaxError('Unexpected token <')),
@@ -151,7 +163,7 @@ describe('OllamaClient', () => {
         },
       }),
     } satisfies Partial<Response>);
-    vi.stubGlobal('fetch', fetchMock);
+    stubFetch(fetchMock);
 
     const client = createClient();
 

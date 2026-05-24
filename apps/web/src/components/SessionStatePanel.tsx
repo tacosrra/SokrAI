@@ -22,6 +22,10 @@ function sourceLabel(source: SessionPresentation['checklist'][number]['source'])
   }
 }
 
+function shortHash(value: string | undefined): string {
+  return value ? `${value.slice(0, 12)}…` : 'Sin hash';
+}
+
 export function SessionStatePanel({
   audit,
   presentation,
@@ -153,6 +157,53 @@ export function SessionStatePanel({
               ))}
             </ul>
           </article>
+        </div>
+      </section>
+
+      <section className="state-card">
+        <div className="state-card__header">
+          <div>
+            <h3>Fuentes internas</h3>
+            <p>Documentos y fragmentos persistidos para auditoría de la sesión.</p>
+          </div>
+          <strong className="state-count">
+            {audit.documents.length}/{audit.sources.length}
+          </strong>
+        </div>
+
+        <div className="source-summary">
+          {audit.documents.length === 0 ? (
+            <p className="empty-state">Sin documentos persistidos todavía.</p>
+          ) : (
+            audit.documents.map((document) => (
+              <article className="source-row" key={document.document_id}>
+                <div>
+                  <strong>{document.file_name ?? document.source_kind.replaceAll('_', ' ')}</strong>
+                  <span>
+                    {document.document_status} · {document.source_kind.replaceAll('_', ' ')}
+                    {document.sha256 ? ` · sha256 ${shortHash(document.sha256)}` : ''}
+                  </span>
+                </div>
+                {document.warnings.length > 0 ? (
+                  <ul className="list-block source-row__warnings">
+                    {document.warnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </article>
+            ))
+          )}
+
+          {audit.sources.length > 0 ? (
+            <div className="source-chip-list">
+              {audit.sources.map((source) => (
+                <span className="source-pill" key={source.source_id}>
+                  {source.label}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
       </section>
 

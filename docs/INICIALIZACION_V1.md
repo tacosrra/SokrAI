@@ -22,7 +22,7 @@ La v1 implementa un unico carril operativo real:
 Y un flujo end-to-end con estos componentes:
 
 - `PostgreSQL`
-  - persistencia de sesiones, turnos, snapshots, runs y eventos
+  - persistencia de sesiones, documentos, fuentes internas, turnos, snapshots, runs y eventos
 - `Ollama`
   - inferencia local del modelo
 - `API Fastify`
@@ -31,6 +31,10 @@ Y un flujo end-to-end con estos componentes:
   - orquestacion y exposicion de webhooks
 - `Frontend React + Vite`
   - interfaz de demo local para crear, responder y retomar sesiones sin curl
+
+La entrada puede incluir texto de propuesta, texto de apoyo pegado y un PDF con texto extraible. Cada entrada se persiste como `proposal_documents` y `proposal_sources` para auditoria posterior. Esta v1 no hace OCR ni procesa PDFs escaneados.
+
+No uses datos reales de pacientes en MVP Alpha. Si `ALLOW_SENSITIVE_HEALTH_DATA=false`, la API y la UI muestran el aviso de usar datos ficticios o anonimizados.
 
 ## 2. Requisitos previos
 
@@ -116,6 +120,7 @@ Estos son los paths importantes para arrancar y probar la v1:
 - `apps/web/`
 - `db/migrations/001_initial.sql`
 - `db/migrations/002_alpha_data_model.sql`
+- `db/migrations/002_documents_sources.sql`
 - `infra/n8n/workflows/proposal_start_v1.json`
 - `infra/n8n/workflows/proposal_reply_v1.json`
 - `infra/n8n/workflows/agent_problem_definition_v1.json`

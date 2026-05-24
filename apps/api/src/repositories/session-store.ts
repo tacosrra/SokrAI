@@ -1,6 +1,15 @@
 import type { PoolClient, QueryResult, QueryResultRow } from 'pg';
 
-import type { ProblemDefinitionState, StructuredBrief } from '../contracts/types';
+import type {
+  DocumentStatus,
+  ProblemDefinitionState,
+  ProposalDocument,
+  ProposalDocumentSourceKind,
+  ProposalSource,
+  ProposalSourceKind,
+  SourceSpan,
+  StructuredBrief,
+} from '../contracts/types';
 import { AppError } from '../utils/errors';
 import type { Database, SqlExecutor } from './database';
 
@@ -75,6 +84,35 @@ export interface SnapshotRecord {
   agent_status: 'continue' | 'done' | 'blocked';
   completion_reason: string | null;
   warnings_json: string[];
+}
+
+export interface ProposalDocumentRecord {
+  id: string;
+  proposal_id: string;
+  source_kind: ProposalDocumentSourceKind;
+  document_status: DocumentStatus;
+  file_name: string | null;
+  mime_type: string | null;
+  sha256: string | null;
+  pasted_text: string | null;
+  normalized_text: string | null;
+  source_refs_json: ProposalSource[];
+  warnings_json: string[];
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ProposalSourceRecord {
+  id: string;
+  proposal_id: string;
+  document_id: string | null;
+  turn_id: string | null;
+  section_id: string | null;
+  source_kind: ProposalSourceKind;
+  label: string;
+  span_json: SourceSpan | null;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
 }
 
 export interface RequestExecutionLookup {
@@ -245,6 +283,41 @@ export class SessionStore {
     );
 
     return result.rows[0];
+  }
+
+  async listProposalDocuments(sessionId: string): Promise<ProposalDocument[]> {
+    const result = await this.database.query<ProposalDocumentRecord>(
+      [
+        'SELECT id, proposal_id, source_kind, document_status, file_name, mime_type, sha256,',
+        '       pasted_text, normalized_text, source_refs_json, warnings_json, metadata_json, created_at',
+        'FROM proposal_documents',
+        'WHERE proposal_id = (SELECT id FROM proposals WHERE session_id = $1 LIMIT 1)',
+        'ORDER BY created_at ASC, id ASC',
+      ].join(' '),
+      [sessionId],
+    );
+
+    return result.rows.map(toProposalDocument);
+  }
+
+  async listProposalSources(sessionId: string): Promise<ProposalSource[]> {
+    const result = await this.database.query<ProposalSourceRecord>(
+      [
+        'SELECT id, proposal_id, document_id, turn_id, section_id, source_kind, label, span_json, metadata_json, created_at',
+        'FROM proposal_sources',
+        'WHERE proposal_id = (SELECT id FROM proposals WHERE session_id = $1 LIMIT 1)',
+        'ORDER BY created_at ASC,',
+        '  CASE label',
+        '    WHEN \'Proposal text\' THEN 1',
+        '    WHEN \'Pasted supporting text\' THEN 2',
+        '    ELSE 3',
+        '  END ASC,',
+        '  id ASC',
+      ].join(' '),
+      [sessionId],
+    );
+
+    return result.rows.map(toProposalSource);
   }
 
   async recordAgentRun(
@@ -553,7 +626,10 @@ export class SessionStore {
         | 'run_failed'
         | 'snapshot_created'
         | 'session_completed'
-        | 'session_blocked';
+        | 'session_blocked'
+        | 'document_received'
+        | 'document_extracted'
+        | 'document_failed';
       actorType: 'user' | 'workflow' | 'agent' | 'system';
       requestId?: string;
       payloadJson?: Record<string, unknown>;
@@ -581,13 +657,17 @@ export class SessionStore {
 
   async getAuditView(sessionId: string): Promise<{
     session: SessionRecord;
+    documents: ProposalDocument[];
+    sources: ProposalSource[];
     turns: ConversationTurnRecord[];
     runs: AgentRunRecord[];
     snapshots: SnapshotRecord[];
     events: Array<Record<string, unknown>>;
   }> {
     const session = await this.getSession(sessionId);
-    const [turns, runs, snapshots, events] = await Promise.all([
+    const [documents, sources, turns, runs, snapshots, events] = await Promise.all([
+      this.listProposalDocuments(sessionId),
+      this.listProposalSources(sessionId),
       this.database.query<ConversationTurnRecord>(
         'SELECT * FROM conversation_turns WHERE session_id = $1 ORDER BY turn_seq ASC',
         [sessionId],
@@ -608,6 +688,8 @@ export class SessionStore {
 
     return {
       session,
+      documents,
+      sources,
       turns: turns.rows,
       runs: runs.rows,
       snapshots: snapshots.rows,
@@ -750,6 +832,38 @@ async function runQuery<T extends QueryResultRow>(
 
 function toJson(value: unknown): string {
   return JSON.stringify(value);
+}
+
+function toProposalDocument(record: ProposalDocumentRecord): ProposalDocument {
+  return {
+    document_id: record.id,
+    proposal_id: record.proposal_id,
+    source_kind: record.source_kind,
+    document_status: record.document_status,
+    file_name: record.file_name ?? undefined,
+    mime_type: record.mime_type ?? undefined,
+    sha256: record.sha256 ?? undefined,
+    pasted_text: record.pasted_text ?? undefined,
+    normalized_text: record.normalized_text ?? undefined,
+    source_refs: record.source_refs_json.length > 0 ? record.source_refs_json : undefined,
+    warnings: record.warnings_json,
+    created_at: record.created_at,
+    metadata: record.metadata_json,
+  };
+}
+
+function toProposalSource(record: ProposalSourceRecord): ProposalSource {
+  return {
+    source_id: record.id,
+    source_kind: record.source_kind,
+    label: record.label,
+    document_id: record.document_id ?? undefined,
+    turn_id: record.turn_id ?? undefined,
+    section_id: record.section_id ?? undefined,
+    span: record.span_json ?? undefined,
+    created_at: record.created_at,
+    metadata: record.metadata_json,
+  };
 }
 
 function toRequestExecutionFromRun(

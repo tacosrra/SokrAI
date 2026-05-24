@@ -40,6 +40,8 @@ const auditFixture: SessionAuditView = {
     latest_successful_run_id: 'run-2',
     completion_reason: null,
   },
+  documents: [],
+  sources: [],
   turns: [
     {
       id: 'turn-1',

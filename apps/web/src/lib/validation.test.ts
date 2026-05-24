@@ -339,6 +339,71 @@ describe('parseSessionAuditView', () => {
     expect(audit.snapshots).toEqual([]);
     expect(audit.events).toEqual([]);
   });
+
+  it('parses document and source audit sections', () => {
+    const audit = parseSessionAuditView({
+      session: {
+        id: 'session-3',
+        project_title: 'Triage',
+        goal: 'Goal',
+        current_stage: 'problem_definition',
+        current_agent: 'problem_definition_agent',
+        status: 'waiting_for_user',
+        current_turn_seq: 1,
+        state_version: 1,
+        latest_structured_brief_json: {
+          project_title: 'Triage',
+          goal: 'Goal',
+          target_user: '',
+          problem_owner: '',
+          problem_statement: '',
+          evidence_of_problem: '',
+          current_alternatives: '',
+          scope: '',
+          constraints_known: [],
+          assumptions: [],
+          ambiguities: [],
+          missing_information: [],
+        },
+        latest_problem_definition_json: {},
+        latest_snapshot_id: null,
+        latest_successful_run_id: null,
+        completion_reason: null,
+      },
+      documents: [
+        {
+          document_id: 'doc-1',
+          proposal_id: 'session-3',
+          source_kind: 'uploaded_file',
+          document_status: 'received',
+          file_name: 'intake.pdf',
+          mime_type: 'application/pdf',
+          sha256: 'a'.repeat(64),
+          warnings: [],
+          created_at: '2026-05-24T20:00:00.000Z',
+          metadata: { page_count: 1 },
+        },
+      ],
+      sources: [
+        {
+          source_id: 'src-1',
+          source_kind: 'extracted_text',
+          label: 'Extracted PDF text: intake.pdf',
+          document_id: 'doc-1',
+          span: { start_char: 0, end_char: 24 },
+          created_at: '2026-05-24T20:00:00.000Z',
+          metadata: { role: 'extracted_pdf_text' },
+        },
+      ],
+      turns: [],
+      runs: [],
+      snapshots: [],
+      events: [],
+    });
+
+    expect(audit.documents[0]?.file_name).toBe('intake.pdf');
+    expect(audit.sources[0]?.span?.end_char).toBe(24);
+  });
 });
 
 describe('parseRequestExecutionResponse', () => {
