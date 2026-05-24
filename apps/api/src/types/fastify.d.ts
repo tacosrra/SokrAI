@@ -2,8 +2,8 @@ import type { AppConfig } from '../config/env';
 import type { Database } from '../repositories/database';
 import type { AlphaStore } from '../repositories/alpha-store';
 import type { SessionStore } from '../repositories/session-store';
+import type { AiProviderPort } from '../services/ai-provider';
 import type { LlmOrchestrator } from '../services/llm-orchestrator';
-import type { LanguageModelClient } from '../services/ollama-client';
 import type { ProblemDefinitionService } from '../services/problem-definition-service';
 import type { ProposalReplyService } from '../services/proposal-reply-service';
 import type { ProposalStartService } from '../services/proposal-start-service';
@@ -17,7 +17,7 @@ declare module 'fastify' {
       database: Database;
       sessionStore: SessionStore;
       alphaStore: AlphaStore;
-      llmClient: LanguageModelClient;
+      aiProvider: AiProviderPort;
       llmOrchestrator: LlmOrchestrator;
       proposalStartService: ProposalStartService;
       proposalReplyService: ProposalReplyService;

@@ -36,9 +36,21 @@ describe('proposal flow integration', () => {
 
     ({ app } = await buildTestApp(
       new QueueLanguageModelClient([
-        JSON.stringify(structuredBrief),
-        JSON.stringify(startAgentTurn),
-        JSON.stringify(doneTurn),
+        {
+          content: JSON.stringify(structuredBrief),
+          modelName: 'brief-model',
+          modelParams: { temperature: 0.2, num_ctx: 4096 },
+        },
+        {
+          content: JSON.stringify(startAgentTurn),
+          modelName: 'problem-model',
+          modelParams: { temperature: 0.2, num_ctx: 8192 },
+        },
+        {
+          content: JSON.stringify(doneTurn),
+          modelName: 'problem-model',
+          modelParams: { temperature: 0.2, num_ctx: 8192 },
+        },
       ]),
     ));
 
@@ -66,8 +78,14 @@ describe('proposal flow integration', () => {
       answer_text: string | null;
       status: string;
     }>('SELECT turn_seq, question_text, answer_text, status FROM conversation_turns ORDER BY turn_seq ASC');
-    const runs = await app.services.database.query<{ prompt_version: string; model_name: string }>(
-      'SELECT prompt_version, model_name FROM agent_runs ORDER BY started_at ASC',
+    const runs = await app.services.database.query<{
+      run_purpose: string;
+      prompt_version: string;
+      model_provider: string;
+      model_name: string;
+      model_params_json: Record<string, unknown>;
+    }>(
+      'SELECT run_purpose, prompt_version, model_provider, model_name, model_params_json FROM agent_runs ORDER BY started_at ASC',
     );
     const snapshots = await app.services.database.query<{ count: string }>(
       'SELECT COUNT(*)::text AS count FROM session_snapshots',
@@ -94,6 +112,24 @@ describe('proposal flow integration', () => {
     expect(turns.rows[0]?.answer_text?.toLowerCase()).toContain('enfermeria');
     expect(runs.rows).toHaveLength(3);
     expect(runs.rows.every((run) => run.prompt_version === 'v1')).toBe(true);
+    expect(runs.rows[0]).toMatchObject({
+      run_purpose: 'brief_extraction',
+      model_provider: 'ollama',
+      model_name: 'brief-model',
+      model_params_json: { temperature: 0.2, num_ctx: 4096 },
+    });
+    expect(runs.rows[1]).toMatchObject({
+      run_purpose: 'problem_definition',
+      model_provider: 'ollama',
+      model_name: 'problem-model',
+      model_params_json: { temperature: 0.2, num_ctx: 8192 },
+    });
+    expect(runs.rows[2]).toMatchObject({
+      run_purpose: 'problem_definition',
+      model_provider: 'ollama',
+      model_name: 'problem-model',
+      model_params_json: { temperature: 0.2, num_ctx: 8192 },
+    });
     expect(snapshots.rows[0]?.count).toBe('3');
     expect(alphaRows.rows[0]).toEqual({
       proposals_count: '1',

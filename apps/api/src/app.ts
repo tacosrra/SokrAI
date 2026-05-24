@@ -12,8 +12,9 @@ import {
 import { Database } from './repositories/database';
 import { AlphaStore } from './repositories/alpha-store';
 import { SessionStore } from './repositories/session-store';
+import type { AiProviderPort } from './services/ai-provider';
+import { createAiProvider } from './services/ai-provider-factory';
 import { LlmOrchestrator } from './services/llm-orchestrator';
-import { OllamaClient, type LanguageModelClient } from './services/ollama-client';
 import { ProblemDefinitionService } from './services/problem-definition-service';
 import { ProposalReplyService } from './services/proposal-reply-service';
 import { ProposalStartService } from './services/proposal-start-service';
@@ -24,17 +25,17 @@ export interface BuildAppOptions {
   config?: AppConfig;
   logger?: Logger;
   database?: Database;
-  languageModelClient?: LanguageModelClient;
+  aiProvider?: AiProviderPort;
 }
 
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
   const config = options.config ?? loadConfig();
   const logger = options.logger ?? new JsonLogger(config.logLevel);
   const database = options.database ?? new Database(config);
-  const llmClient = options.languageModelClient ?? new OllamaClient(config);
+  const aiProvider = options.aiProvider ?? createAiProvider(config);
   const sessionStore = new SessionStore(database);
   const alphaStore = new AlphaStore(database);
-  const llmOrchestrator = new LlmOrchestrator(config, llmClient);
+  const llmOrchestrator = new LlmOrchestrator(config, aiProvider);
   const proposalStartService = new ProposalStartService(config, logger, sessionStore, llmOrchestrator, alphaStore);
   const proposalReplyService = new ProposalReplyService(config, logger, sessionStore);
   const problemDefinitionService = new ProblemDefinitionService(config, logger, sessionStore, llmOrchestrator);
@@ -49,7 +50,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     database,
     sessionStore,
     alphaStore,
-    llmClient,
+    aiProvider,
     llmOrchestrator,
     proposalStartService,
     proposalReplyService,

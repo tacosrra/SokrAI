@@ -6,18 +6,16 @@ import {
 } from '../contracts/schema-registry';
 import type { ProblemDefinitionTurn, StructuredBrief } from '../contracts/types';
 import type { AppConfig } from '../config/env';
-import { ModelOutputError } from '../utils/errors';
-import type { LanguageModelClient, ModelCompletionResult } from './ollama-client';
+import { AppError, ModelOutputError } from '../utils/errors';
+import type { AiCompletionResult, AiProviderName, AiProviderPort } from './ai-provider';
 import { loadPrompt, type PromptAsset } from './prompt-service';
-
-function safeJsonParse(input: string): unknown {
-  return JSON.parse(input);
-}
 
 interface GenerationResult<T> {
   output: T;
   prompt: PromptAsset;
+  providerName: AiProviderName;
   modelName: string;
+  modelParams: Record<string, unknown>;
   rawOutput: string;
   repairAttempted: boolean;
   metrics: Record<string, unknown>;
@@ -26,7 +24,7 @@ interface GenerationResult<T> {
 export class LlmOrchestrator {
   constructor(
     private readonly config: AppConfig,
-    private readonly client: LanguageModelClient,
+    private readonly aiProvider: AiProviderPort,
   ) {}
 
   async extractStructuredBrief(input: {
@@ -97,41 +95,40 @@ export class LlmOrchestrator {
     validate: (payload: unknown) => T;
     responseSchema: Record<string, unknown>;
   }): Promise<GenerationResult<T>> {
-    const firstAttempt = await this.client.generate({
-      model: this.config.ollamaModel,
+    const firstAttempt = await this.aiProvider.generate({
+      model: this.config.aiModel,
       systemPrompt: params.prompt.content,
       userPrompt: params.userPrompt,
       responseSchema: params.responseSchema,
     });
 
     try {
-      const parsed = safeJsonParse(firstAttempt.content);
+      const parsed = parseModelJson(firstAttempt.content, firstAttempt.content, false);
+      const output = validateModelOutput(parsed, params.validate, firstAttempt.content, false);
 
       return {
-        output: params.validate(parsed),
+        output,
         prompt: params.prompt,
+        providerName: firstAttempt.providerName,
         modelName: firstAttempt.modelName,
+        modelParams: firstAttempt.modelParams,
         rawOutput: firstAttempt.content,
         repairAttempted: false,
         metrics: firstAttempt.metrics,
       };
     } catch (error) {
       if (this.config.jsonRepairMaxAttempts < 1) {
-        throw new ModelOutputError(
-          'invalid_model_json',
-          'The model did not return valid JSON',
-          firstAttempt.content,
-          false,
-          {
-            cause: error instanceof Error ? error.message : 'unknown',
-          },
-        );
+        throw error;
+      }
+
+      if (!(error instanceof ModelOutputError)) {
+        throw error;
       }
     }
 
     const repairPrompt = await loadPrompt('json-repair');
-    const repairedAttempt = await this.client.generate({
-      model: this.config.ollamaModel,
+    const repairedAttempt = await this.aiProvider.generate({
+      model: this.config.aiModel,
       systemPrompt: repairPrompt.content,
       userPrompt: [
         'Repair the following text into valid JSON that follows the required schema.',
@@ -144,43 +141,99 @@ export class LlmOrchestrator {
       responseSchema: params.responseSchema,
     });
 
-    try {
-      const repairedJson = safeJsonParse(repairedAttempt.content);
+    const repairedJson = parseModelJson(repairedAttempt.content, firstAttempt.content, true, {
+      repaired_output: repairedAttempt.content,
+    });
+    const output = validateModelOutput(
+      repairedJson,
+      params.validate,
+      firstAttempt.content,
+      true,
+      {
+        repaired_output: repairedAttempt.content,
+      },
+    );
 
-      return {
-        output: params.validate(repairedJson),
-        prompt: params.prompt,
-        modelName: repairedAttempt.modelName,
-        rawOutput: firstAttempt.content,
-        repairAttempted: true,
-        metrics: mergeMetrics(firstAttempt, repairedAttempt),
-      };
-    } catch (error) {
+    return {
+      output,
+      prompt: params.prompt,
+      providerName: repairedAttempt.providerName,
+      modelName: repairedAttempt.modelName,
+      modelParams: repairedAttempt.modelParams,
+      rawOutput: firstAttempt.content,
+      repairAttempted: true,
+      metrics: mergeMetrics(firstAttempt, repairedAttempt),
+    };
+  }
+}
+
+function parseModelJson(
+  content: string,
+  rawOutput: string,
+  repairAttempted: boolean,
+  details?: Record<string, unknown>,
+): unknown {
+  try {
+    return JSON.parse(content);
+  } catch (error) {
+    throw new ModelOutputError(
+      repairAttempted ? 'invalid_model_json_after_repair' : 'invalid_model_json',
+      repairAttempted
+        ? 'The model returned invalid JSON and the repair step also failed'
+        : 'The model did not return valid JSON',
+      rawOutput,
+      repairAttempted,
+      {
+        cause: error instanceof Error ? error.message : 'unknown',
+        ...(details ?? {}),
+      },
+    );
+  }
+}
+
+function validateModelOutput<T>(
+  payload: unknown,
+  validate: (payload: unknown) => T,
+  rawOutput: string,
+  repairAttempted: boolean,
+  details?: Record<string, unknown>,
+): T {
+  try {
+    return validate(payload);
+  } catch (error) {
+    if (error instanceof AppError) {
       throw new ModelOutputError(
-        'invalid_model_json_after_repair',
-        'The model returned invalid JSON and the repair step also failed',
-        firstAttempt.content,
-        true,
+        error.errorCode,
+        repairAttempted
+          ? 'The model returned JSON that does not match the required schema after repair'
+          : 'The model returned JSON that does not match the required schema',
+        rawOutput,
+        repairAttempted,
         {
-          cause: error instanceof Error ? error.message : 'unknown',
-          repaired_output: repairedAttempt.content,
+          cause: error.safeMessage,
+          ...(error.details ?? {}),
+          ...(details ?? {}),
         },
       );
     }
+
+    throw error;
   }
 }
 
 function mergeMetrics(
-  firstAttempt: ModelCompletionResult,
-  repairedAttempt: ModelCompletionResult,
+  firstAttempt: AiCompletionResult,
+  repairedAttempt: AiCompletionResult,
 ): Record<string, unknown> {
   return {
     initial: {
+      provider_name: firstAttempt.providerName,
       model_name: firstAttempt.modelName,
       latency_ms: firstAttempt.latencyMs,
       ...firstAttempt.metrics,
     },
     repair: {
+      provider_name: repairedAttempt.providerName,
       model_name: repairedAttempt.modelName,
       latency_ms: repairedAttempt.latencyMs,
       ...repairedAttempt.metrics,

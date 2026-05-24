@@ -140,7 +140,7 @@ export class ProblemDefinitionService {
             );
           }
 
-          const run = await this.sessionStore.insertAgentRun(client, {
+          const run = await this.sessionStore.recordAgentRun(client, {
             sessionId: lockedSession.id,
             turnSeq: command.trigger === 'reply' ? activeTurn?.turn_seq : lockedSession.current_turn_seq + 1,
             requestId,
@@ -152,7 +152,9 @@ export class ProblemDefinitionService {
             promptName: modelTurn.prompt.name,
             promptVersion: modelTurn.prompt.version,
             promptSha256: modelTurn.prompt.hash,
+            modelProvider: modelTurn.providerName,
             modelName: modelTurn.modelName,
+            modelParamsJson: modelTurn.modelParams,
             inputContractName: 'problem-definition-agent.input',
             inputContractVersion: 'v1',
             outputContractName: 'problem-definition-turn',
@@ -438,7 +440,7 @@ export class ProblemDefinitionService {
         .getDatabase()
         .withTransaction(async (client) => {
           const lockedSession = await this.sessionStore.getSessionForUpdate(session.id, client);
-          const run = await this.sessionStore.insertAgentRun(client, {
+          const run = await this.sessionStore.recordAgentRun(client, {
             sessionId: lockedSession.id,
             turnSeq: openTurn?.turn_seq ?? lockedSession.current_turn_seq + 1,
             requestId: command.context.requestId,
@@ -450,7 +452,13 @@ export class ProblemDefinitionService {
             promptName: prompt.name,
             promptVersion: prompt.version,
             promptSha256: prompt.hash,
-            modelName: this.config.ollamaModel,
+            modelProvider: this.config.aiProvider,
+            modelName: this.config.aiModel,
+            modelParamsJson: {
+              temperature: 0.2,
+              num_ctx: this.config.ollamaNumCtx,
+              keep_alive: this.config.ollamaKeepAlive,
+            },
             inputContractName: 'problem-definition-agent.input',
             inputContractVersion: 'v1',
             outputContractName: 'problem-definition-turn',

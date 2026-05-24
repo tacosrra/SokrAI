@@ -15,6 +15,12 @@ Mantener Ollama local como proveedor IA actual del MVP.
 
 Preparar la arquitectura con una abstraccion interna de proveedor IA, pero no implementar ni disenar despliegue VPS en MVP.
 
+## Nota de implementacion
+
+La frontera implementada es `AiProviderPort`. La API instancia el proveedor con `createAiProvider`, que falla cerrado: `AI_PROVIDER=ollama` es el unico valor aceptado en esta v1.
+
+`OllamaClient` es la implementacion actual del puerto. `LlmOrchestrator` conserva parseo JSON, validacion de schema y reparacion unica, mientras que la persistencia de `agent_runs` registra metadata de modelo con `model_provider`, `model_name` y `model_params_json`.
+
 ## Consecuencias
 
 - La API sigue llamando al proveedor IA server-side.

@@ -136,7 +136,7 @@ export class ProposalStartService {
           },
         });
 
-        const extractionRun = await this.sessionStore.insertAgentRun(client, {
+        const extractionRun = await this.sessionStore.recordAgentRun(client, {
           sessionId: createdSession.id,
           requestId,
           runPurpose: 'brief_extraction',
@@ -147,7 +147,9 @@ export class ProposalStartService {
           promptName: briefResult.prompt.name,
           promptVersion: briefResult.prompt.version,
           promptSha256: briefResult.prompt.hash,
+          modelProvider: briefResult.providerName,
           modelName: briefResult.modelName,
+          modelParamsJson: briefResult.modelParams,
           inputContractName: 'proposal-start.request',
           inputContractVersion: 'v1',
           outputContractName: 'structured-brief',

@@ -161,6 +161,8 @@ Abre `.env` y cambia como minimo estos valores:
 - `N8N_ENCRYPTION_KEY`
 - opcionalmente `N8N_BASIC_AUTH_USER`
 - opcionalmente `N8N_BASIC_AUTH_PASSWORD`
+- `AI_PROVIDER=ollama` debe mantenerse como unico proveedor soportado en esta v1
+- opcionalmente `AI_MODEL` como alias del modelo usado por la orquestacion; si no se define, se usa `OLLAMA_MODEL`
 - opcionalmente `OLLAMA_MODEL` si no quieres usar `qwen2.5:3b-instruct`
 - opcionalmente `BETA_OLLAMA_DNS_PRIMARY` y `BETA_OLLAMA_DNS_SECONDARY` si tu Docker necesita DNS explicito para descargar modelos
 
@@ -178,6 +180,9 @@ TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app
 DATABASE_POOL_MAX=10
 DATABASE_STATEMENT_TIMEOUT_MS=5000
 
+AI_PROVIDER=ollama
+# Optional model alias for orchestration. If unset, OLLAMA_MODEL is used.
+# AI_MODEL=qwen2.5:3b-instruct
 OLLAMA_BASE_URL=http://ollama:11434
 OLLAMA_MODEL=qwen2.5:3b-instruct
 OLLAMA_TIMEOUT_MS=420000
@@ -714,7 +719,7 @@ docker compose exec postgres \
 ```bash
 docker compose exec postgres \
   psql -U postgres -d sokrai_app \
-  -c "select session_id, run_purpose, status, prompt_version, model_name, repair_attempted from agent_runs order by started_at;"
+  -c "select session_id, run_purpose, status, prompt_version, model_provider, model_name, repair_attempted from agent_runs order by started_at;"
 ```
 
 #### Snapshots
