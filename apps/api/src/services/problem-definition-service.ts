@@ -235,12 +235,37 @@ export class ProblemDefinitionService {
       'problem_definition',
     );
 
-    if (!existingRun?.validated_output_json) {
+    if (!existingRun) {
+      return null;
+    }
+
+    if (!existingRun.validated_output_json) {
+      if (existingRun.status !== 'completed') {
+        throw this.toStoredAgentRunError(existingRun, sessionId);
+      }
+
       return null;
     }
 
     const session = await this.sessionStore.getSession(sessionId);
     return this.buildResponseFromRun(session, existingRun);
+  }
+
+  private toStoredAgentRunError(run: AgentRunRecord, sessionId: string): AppError {
+    const statusCode =
+      run.error_code === 'maximum_turns_reached'
+        ? 409
+        : run.status === 'model_failed'
+          ? 504
+          : 502;
+
+    return new AppError(
+      statusCode,
+      run.error_code ?? 'request_failed',
+      run.error_message ?? 'The request failed while executing the workflow',
+      run.status === 'model_failed',
+      sessionId,
+    );
   }
 
   private async recoverExistingResponseAfterConflict(

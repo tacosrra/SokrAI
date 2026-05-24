@@ -87,8 +87,8 @@ Assert-Smoke -Condition (@('continue', 'done', 'blocked') -contains $replyRespon
 Write-Step 'Checking request execution status'
 $startStatus = Invoke-JsonRequest -Method 'GET' -Uri "$ApiBaseUrl/api/v1/requests/$startRequestId"
 $replyStatus = Invoke-JsonRequest -Method 'GET' -Uri "$ApiBaseUrl/api/v1/requests/$replyRequestId"
-Assert-Smoke -Condition (@('completed', 'failed') -contains $startStatus.status) -Message 'start request status is not terminal'
-Assert-Smoke -Condition (@('completed', 'failed') -contains $replyStatus.status) -Message 'reply request status is not terminal'
+Assert-Smoke -Condition ($startStatus.status -eq 'completed') -Message 'start request did not complete'
+Assert-Smoke -Condition ($replyStatus.status -eq 'completed') -Message 'reply request did not complete'
 
 $recoveryRequestId = New-SmokeRequestId
 $proposalPayload = Get-Content -LiteralPath 'examples/proposal-start.payload.json' -Raw | ConvertFrom-Json
@@ -107,6 +107,8 @@ Invoke-JsonRequest -Method 'POST' -Uri "$ApiBaseUrl/internal/sessions/start-cont
 $pendingStatus = Invoke-JsonRequest -Method 'GET' -Uri "$ApiBaseUrl/api/v1/requests/$recoveryRequestId"
 Assert-Smoke -Condition ($pendingStatus.status -eq 'pending') -Message 'partial start request should be pending before recovery'
 $recoveryStatus = Invoke-JsonRequest -Method 'POST' -Uri "$ApiBaseUrl/api/v1/requests/$recoveryRequestId/recover"
-Assert-Smoke -Condition ($recoveryStatus.status -ne 'pending' -and $recoveryStatus.status -ne 'not_found') -Message 'recovery did not produce a terminal or inspectable state'
+Assert-Smoke -Condition ($recoveryStatus.status -eq 'completed') -Message 'recovery did not complete the partial start request'
+Assert-Smoke -Condition ($recoveryStatus.request_kind -eq 'proposal_start') -Message 'recovery response has wrong request kind'
+Assert-Smoke -Condition (-not [string]::IsNullOrWhiteSpace([string]$recoveryStatus.session_id)) -Message 'recovery response missing session_id'
 
 Write-Step 'Core smoke completed'

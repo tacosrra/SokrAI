@@ -191,8 +191,8 @@ reply_status="$TMP_DIR/reply-status.json"
 log_step "Checking request execution status"
 http_json GET "$API_BASE_URL/api/v1/requests/$start_request_id" "$start_status"
 http_json GET "$API_BASE_URL/api/v1/requests/$reply_request_id" "$reply_status"
-json_assert "$start_status" 'data.status === "completed" || data.status === "failed"' 'start request status is not terminal'
-json_assert "$reply_status" 'data.status === "completed" || data.status === "failed"' 'reply request status is not terminal'
+json_assert "$start_status" 'data.status === "completed"' 'start request did not complete'
+json_assert "$reply_status" 'data.status === "completed"' 'reply request did not complete'
 
 recovery_request_id="$(request_id)"
 recovery_payload="$TMP_DIR/recovery.json"
@@ -208,6 +208,8 @@ http_json POST "$API_BASE_URL/internal/sessions/start-context" "$recovery_contex
 http_json GET "$API_BASE_URL/api/v1/requests/$recovery_request_id" "$recovery_pending"
 json_assert "$recovery_pending" 'data.status === "pending"' 'partial start request should be pending before recovery'
 http_json POST "$API_BASE_URL/api/v1/requests/$recovery_request_id/recover" "$recovery_response"
-json_assert "$recovery_response" 'data.status !== "pending" && data.status !== "not_found"' 'recovery did not produce a terminal or inspectable state'
+json_assert "$recovery_response" 'data.status === "completed"' 'recovery did not complete the partial start request'
+json_assert "$recovery_response" 'data.request_kind === "proposal_start"' 'recovery response has wrong request kind'
+json_assert "$recovery_response" 'data.session_id && typeof data.session_id === "string"' 'recovery response missing session_id'
 
 log_step "Core smoke completed"

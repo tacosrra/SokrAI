@@ -111,4 +111,24 @@ describe('contract schemas', () => {
     expect(powershellScript).toContain('n8n publish:workflow "--id=$workflowId"');
     expect(powershellScript).not.toContain('n8n update:workflow --all --active=true');
   });
+
+  it('requires completed request execution statuses in core smoke scripts', async () => {
+    const bashScriptPath = path.resolve(process.cwd(), '../../scripts/smoke-core.sh');
+    const powershellScriptPath = path.resolve(process.cwd(), '../../scripts/smoke-core.ps1');
+    const [bashScript, powershellScript] = await Promise.all([
+      readFile(bashScriptPath, 'utf8'),
+      readFile(powershellScriptPath, 'utf8'),
+    ]);
+
+    expect(bashScript).toContain('data.status === "completed"');
+    expect(bashScript).toContain('recovery response missing session_id');
+    expect(bashScript).not.toContain('data.status === "completed" || data.status === "failed"');
+    expect(bashScript).not.toContain('data.status !== "pending" && data.status !== "not_found"');
+
+    expect(powershellScript).toContain("$startStatus.status -eq 'completed'");
+    expect(powershellScript).toContain("$replyStatus.status -eq 'completed'");
+    expect(powershellScript).toContain("$recoveryStatus.status -eq 'completed'");
+    expect(powershellScript).not.toContain("@('completed', 'failed') -contains");
+    expect(powershellScript).not.toContain("$recoveryStatus.status -ne 'pending'");
+  });
 });

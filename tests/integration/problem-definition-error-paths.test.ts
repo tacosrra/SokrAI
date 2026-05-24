@@ -198,8 +198,8 @@ describe('problem-definition invalid JSON handling', () => {
       [sessionId],
     );
     const failedRun = await app.services.database.query<{ status: string; error_code: string | null }>(
-      'SELECT status, error_code FROM agent_runs WHERE request_id = $1',
-      [requestId],
+      'SELECT status, error_code FROM agent_runs WHERE request_id = $1 AND run_purpose = $2',
+      [requestId, 'problem_definition'],
     );
     const requestStatus = await app.inject({
       method: 'GET',
@@ -313,6 +313,23 @@ describe('problem-definition invalid JSON handling', () => {
 
     expect(agentResponse.statusCode).toBe(409);
     expect(agentResponse.json().error_code).toBe('maximum_turns_reached');
+
+    const retryAgentResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/agents/problem-definition/run',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        request_id: 'req-max-turn-reply',
+        workflow_version: 'agent_problem_definition_v1',
+        session_id: sessionId,
+        trigger: 'reply',
+      },
+    });
+
+    expect(retryAgentResponse.statusCode).toBe(409);
+    expect(retryAgentResponse.json().error_code).toBe('maximum_turns_reached');
 
     const turn = await app.services.database.query<{ status: string; completion_reason: string | null }>(
       'SELECT status, completion_reason FROM conversation_turns WHERE answer_request_id = $1',
