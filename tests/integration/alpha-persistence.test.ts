@@ -339,6 +339,11 @@ describe('alpha persistence integration', () => {
       module: 'problem',
       chatStatus: 'active',
     });
+    const secondChat = await store.createModuleChat(app.services.database, {
+      proposalId: secondSession.id,
+      module: 'problem',
+      chatStatus: 'active',
+    });
 
     await expect(
       app.services.database.query(
@@ -358,6 +363,14 @@ describe('alpha persistence integration', () => {
       questionText: 'What evidence shows this problem is frequent?',
       turnStatus: 'awaiting_user',
     });
+
+    await expect(
+      app.services.database.query('UPDATE module_chats SET active_turn_id = $2 WHERE id = $1', [
+        secondChat.chat_id,
+        turn.turn_id,
+      ]),
+    ).rejects.toThrow();
+
     const section = await store.createGeneratedSection(app.services.database, {
       proposalId: firstSession.id,
       sectionKind: 'problem',
@@ -371,16 +384,85 @@ describe('alpha persistence integration', () => {
       ['turn_id', turn.turn_id],
       ['section_id', section.section_id],
     ] as const) {
+      const sourceKindByColumn = {
+        document_id: 'pasted_text',
+        turn_id: 'user_answer',
+        section_id: 'generated_section',
+      } as const;
+
       await expect(
         app.services.database.query(
           [
             `INSERT INTO proposal_sources (proposal_id, source_kind, label, ${columnName})`,
             'VALUES ($1, $2, $3, $4)',
           ].join(' '),
-          [secondSession.id, columnName === 'section_id' ? 'generated_section' : 'pasted_text', 'Cross-proposal source', value],
+          [secondSession.id, sourceKindByColumn[columnName], 'Cross-proposal source', value],
         ),
       ).rejects.toThrow();
     }
+  });
+
+  it('rejects proposal source rows whose kind does not match the reference column', async () => {
+    ({ app } = await buildTestApp(new QueueLanguageModelClient([])));
+    const structuredBrief = await readFixture<StructuredBrief>('expected', 'structured-brief.strong.json');
+    const session = await createLegacySession(app.services.database, app.services.sessionStore, structuredBrief);
+    const store = app.services.alphaStore;
+
+    await store.createProposal(app.services.database, {
+      proposalId: session.id,
+      sessionId: session.id,
+      proposalStatus: 'active',
+      projectTitle: structuredBrief.project_title,
+      goal: structuredBrief.goal,
+      structuredBrief,
+      schemaVersion: 'alpha-model.v1',
+    });
+    const document = await store.createDocument(app.services.database, {
+      proposalId: session.id,
+      sourceKind: 'pasted_text',
+      documentStatus: 'normalized',
+      pastedText: 'Initial text',
+      normalizedText: 'Initial text',
+    });
+    const chat = await store.createModuleChat(app.services.database, {
+      proposalId: session.id,
+      module: 'problem',
+      chatStatus: 'active',
+    });
+    const turn = await store.createChatTurn(app.services.database, {
+      chatId: chat.chat_id,
+      proposalId: session.id,
+      module: 'problem',
+      turnSeq: 1,
+      questionText: 'What evidence shows this problem is frequent?',
+      turnStatus: 'awaiting_user',
+    });
+    const section = await store.createGeneratedSection(app.services.database, {
+      proposalId: session.id,
+      sectionKind: 'problem',
+      sectionStatus: 'generated',
+      title: 'Problem definition',
+      contentMarkdown: 'Problem text.',
+    });
+
+    await expect(
+      app.services.database.query(
+        'INSERT INTO proposal_sources (proposal_id, source_kind, label, section_id) VALUES ($1, $2, $3, $4)',
+        [session.id, 'pasted_text', 'Wrong source relation', section.section_id],
+      ),
+    ).rejects.toThrow();
+    await expect(
+      app.services.database.query(
+        'INSERT INTO proposal_sources (proposal_id, source_kind, label, document_id) VALUES ($1, $2, $3, $4)',
+        [session.id, 'user_answer', 'Wrong source relation', document.document_id],
+      ),
+    ).rejects.toThrow();
+    await expect(
+      app.services.database.query(
+        'INSERT INTO proposal_sources (proposal_id, source_kind, label, turn_id) VALUES ($1, $2, $3, $4)',
+        [session.id, 'generated_section', 'Wrong source relation', turn.turn_id],
+      ),
+    ).rejects.toThrow();
   });
 
   it('assigns unique sequential audit event numbers for concurrent appends', async () => {
@@ -523,6 +605,53 @@ describe('alpha persistence integration', () => {
     expect(events.rows[0]?.count).toBe('1');
   });
 
+  it('rolls back the legacy start session when initial Alpha persistence fails', async () => {
+    const structuredBrief = await readFixture<StructuredBrief>('expected', 'structured-brief.strong.json');
+    ({ app } = await buildTestApp(new QueueLanguageModelClient([JSON.stringify(structuredBrief)])));
+
+    await installFailingProposalTrigger(app.services.database);
+
+    try {
+      const proposal = await readFixture('start', 'strong-proposal.json');
+      const response = await app.inject({
+        method: 'POST',
+        url: '/internal/sessions/start-context',
+        headers: {
+          'x-internal-shared-secret': 'test-secret',
+          'x-request-id': 'req-alpha-start-rollback',
+        },
+        payload: {
+          request_id: 'req-alpha-start-rollback',
+          workflow_version: 'proposal_start_v1',
+          payload: proposal,
+        },
+      });
+
+      expect(response.statusCode).toBe(500);
+
+      const [sessions, proposals, events] = await Promise.all([
+        app.services.database.query<{ count: string }>(
+          'SELECT COUNT(*)::text AS count FROM proposal_sessions WHERE start_request_id = $1',
+          ['req-alpha-start-rollback'],
+        ),
+        app.services.database.query<{ count: string }>(
+          'SELECT COUNT(*)::text AS count FROM proposals WHERE session_id IN (SELECT id FROM proposal_sessions WHERE start_request_id = $1)',
+          ['req-alpha-start-rollback'],
+        ),
+        app.services.database.query<{ count: string }>(
+          'SELECT COUNT(*)::text AS count FROM session_events WHERE request_id = $1',
+          ['req-alpha-start-rollback'],
+        ),
+      ]);
+
+      expect(sessions.rows[0]?.count).toBe('0');
+      expect(proposals.rows[0]?.count).toBe('0');
+      expect(events.rows[0]?.count).toBe('0');
+    } finally {
+      await removeFailingProposalTrigger(app.services.database);
+    }
+  });
+
   it('persists extracted document text as Alpha document and source metadata', async () => {
     const structuredBrief = await readFixture<StructuredBrief>('expected', 'structured-brief.strong.json');
     ({ app } = await buildTestApp(new QueueLanguageModelClient([JSON.stringify(structuredBrief)])));
@@ -588,4 +717,32 @@ async function createLegacySession(database: Database, sessionStore: SessionStor
       initialProblemDefinition: {},
     }),
   );
+}
+
+async function installFailingProposalTrigger(database: Database): Promise<void> {
+  await removeFailingProposalTrigger(database);
+  await database.query(
+    [
+      'CREATE OR REPLACE FUNCTION test_raise_alpha_proposal_insert_failure()',
+      'RETURNS trigger AS $$',
+      'BEGIN',
+      '  RAISE EXCEPTION \'forced Alpha proposal failure\'',
+      '    USING ERRCODE = \'23514\', CONSTRAINT = \'test_alpha_proposal_insert_failure\';',
+      'END;',
+      '$$ LANGUAGE plpgsql',
+    ].join('\n'),
+  );
+  await database.query(
+    [
+      'CREATE TRIGGER test_raise_alpha_proposal_insert_failure',
+      'BEFORE INSERT ON proposals',
+      'FOR EACH ROW',
+      'EXECUTE FUNCTION test_raise_alpha_proposal_insert_failure()',
+    ].join('\n'),
+  );
+}
+
+async function removeFailingProposalTrigger(database: Database): Promise<void> {
+  await database.query('DROP TRIGGER IF EXISTS test_raise_alpha_proposal_insert_failure ON proposals');
+  await database.query('DROP FUNCTION IF EXISTS test_raise_alpha_proposal_insert_failure()');
 }

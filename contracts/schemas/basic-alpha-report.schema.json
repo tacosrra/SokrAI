@@ -49,7 +49,7 @@
     "audit_refs": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/audit_ref"
+        "$ref": "https://sokrai.local/contracts/schemas/audit-ref.schema.json"
       }
     },
     "warnings": {
@@ -76,30 +76,5 @@
     "audit_refs",
     "warnings",
     "generated_at"
-  ],
-  "$defs": {
-    "audit_ref": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "kind": {
-          "type": "string",
-          "enum": [
-            "agent_run",
-            "audit_event",
-            "snapshot",
-            "chat_turn"
-          ]
-        },
-        "id": {
-          "type": "string",
-          "minLength": 1
-        }
-      },
-      "required": [
-        "kind",
-        "id"
-      ]
-    }
-  }
+  ]
 }

@@ -17,7 +17,10 @@ import {
   assertProposalStartRequest,
   assertProposalStartResponse,
   assertRequestExecutionResponse,
+  assertSchema,
   assertStructuredBrief,
+  schemaDocuments,
+  schemaIds,
 } from '../../apps/api/src/contracts/schema-registry.ts';
 import { AppError } from '../../apps/api/src/utils/errors.ts';
 import { readFixture } from '../helpers/test-environment';
@@ -94,6 +97,12 @@ describe('contract schemas', () => {
     expect(assertGeneratedSection(await readFixture('alpha-model', 'generated-section.valid.json'))).toBeTruthy();
   });
 
+  it('exposes AuditRef as a shared contract schema', () => {
+    expect(schemaIds.auditRef).toBe('https://sokrai.local/contracts/schemas/audit-ref.schema.json');
+    expect(schemaDocuments.auditRef.$id).toBe(schemaIds.auditRef);
+    expect(assertSchema(schemaIds.auditRef, { kind: 'audit_event', id: 'audit-1' })).toBeTruthy();
+  });
+
   it('accepts valid Alpha aggregate and report fixtures', async () => {
     expect(assertAlphaProposal(await readFixture('alpha-model', 'alpha-proposal.valid.json'))).toBeTruthy();
     expect(assertBasicAlphaReport(await readFixture('alpha-model', 'basic-alpha-report.valid.json'))).toBeTruthy();
@@ -123,6 +132,31 @@ describe('contract schemas', () => {
     expect(() => assertProposalDocument(invalidDocumentStatus)).toThrow(AppError);
     expect(() => assertAlphaGap(clinicGap)).toThrow(AppError);
     expect(() => assertAlphaProposal(extraProposalField)).toThrow(AppError);
+  });
+
+  it('requires proposal source references to match their source kind', async () => {
+    const source = (await readFixture('alpha-model', 'proposal-source.valid.json')) as Record<string, unknown>;
+    const sourceWithoutDocument = { ...source };
+    delete sourceWithoutDocument.document_id;
+
+    expect(() => assertProposalSource({ ...sourceWithoutDocument, source_kind: 'generated_section' })).toThrow(AppError);
+    expect(() => assertProposalSource({ ...source, source_kind: 'user_answer', turn_id: 'turn-1' })).toThrow(AppError);
+    expect(
+      assertProposalSource({
+        ...sourceWithoutDocument,
+        source_kind: 'generated_section',
+        section_id: 'section-1',
+      }),
+    ).toBeTruthy();
+  });
+
+  it('returns a typed error for unregistered schema lookups', () => {
+    expect(() => assertSchema('https://sokrai.local/contracts/schemas/missing.schema.json', {})).toThrow(
+      expect.objectContaining({
+        errorCode: 'schema_not_registered',
+        statusCode: 500,
+      }),
+    );
   });
 
   it('rejects Alpha chat/report payloads that exceed guardrails or export scope', async () => {

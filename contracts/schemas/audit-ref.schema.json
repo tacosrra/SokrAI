@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sokrai.local/contracts/schemas/audit-ref.schema.json",
+  "title": "AuditRef",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": [
+        "agent_run",
+        "audit_event",
+        "snapshot",
+        "chat_turn"
+      ]
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "kind",
+    "id"
+  ]
+}

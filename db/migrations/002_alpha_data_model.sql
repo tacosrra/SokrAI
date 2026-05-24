@@ -146,7 +146,27 @@ CREATE TABLE IF NOT EXISTS proposal_sources (
         ),
     metadata_json JSONB NOT NULL DEFAULT '{}'::jsonb
         CHECK (jsonb_typeof(metadata_json) = 'object'),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT ck_proposal_sources_kind_reference CHECK (
+        (
+            source_kind IN ('pasted_text', 'uploaded_file', 'extracted_text')
+            AND document_id IS NOT NULL
+            AND turn_id IS NULL
+            AND section_id IS NULL
+        )
+        OR (
+            source_kind = 'user_answer'
+            AND document_id IS NULL
+            AND turn_id IS NOT NULL
+            AND section_id IS NULL
+        )
+        OR (
+            source_kind = 'generated_section'
+            AND document_id IS NULL
+            AND turn_id IS NULL
+            AND section_id IS NOT NULL
+        )
+    )
 );
 
 CREATE TABLE IF NOT EXISTS alpha_gaps (
@@ -224,6 +244,34 @@ CREATE TABLE IF NOT EXISTS audit_events (
 
 DO $$
 BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'ck_proposal_sources_kind_reference'
+    ) THEN
+        ALTER TABLE proposal_sources
+            ADD CONSTRAINT ck_proposal_sources_kind_reference CHECK (
+                (
+                    source_kind IN ('pasted_text', 'uploaded_file', 'extracted_text')
+                    AND document_id IS NOT NULL
+                    AND turn_id IS NULL
+                    AND section_id IS NULL
+                )
+                OR (
+                    source_kind = 'user_answer'
+                    AND document_id IS NULL
+                    AND turn_id IS NOT NULL
+                    AND section_id IS NULL
+                )
+                OR (
+                    source_kind = 'generated_section'
+                    AND document_id IS NULL
+                    AND turn_id IS NULL
+                    AND section_id IS NOT NULL
+                )
+            );
+    END IF;
+
     IF NOT EXISTS (
         SELECT 1
         FROM pg_constraint
