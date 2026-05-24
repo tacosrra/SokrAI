@@ -685,8 +685,16 @@ describe('alpha persistence integration', () => {
     const sources = await app.services.database.query<{
       source_kind: string;
       label: string;
-      span_json: { end_char: number };
-    }>('SELECT source_kind, label, span_json FROM proposal_sources WHERE proposal_id = $1', [sessionId]);
+      span_json: { start_char: number; end_char: number };
+    }>(
+      [
+        'SELECT source_kind, label, span_json',
+        'FROM proposal_sources',
+        'WHERE proposal_id = $1',
+        'ORDER BY created_at ASC, id ASC',
+      ].join(' '),
+      [sessionId],
+    );
 
     expect(documents.rows).toEqual([
       {
@@ -698,7 +706,10 @@ describe('alpha persistence integration', () => {
     expect(sources.rows[0]).toMatchObject({
       source_kind: 'pasted_text',
       label: 'Pasted supporting text',
-      span_json: { end_char: 'Text extracted from the proposal document.'.length },
+      span_json: {
+        start_char: 0,
+        end_char: 'Pasted supporting text:\nText extracted from the proposal document.'.length,
+      },
     });
   });
 });
