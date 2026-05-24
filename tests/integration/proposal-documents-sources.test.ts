@@ -1,7 +1,11 @@
+import { readFile } from 'node:fs/promises';
+
 import { afterEach, describe, expect, it } from 'vitest';
 
 import type { FastifyInstance } from 'fastify';
 
+import { sha256Buffer } from '../../apps/api/src/utils/hash';
+import { fromRepoRoot } from '../../apps/api/src/utils/paths';
 import { QueueLanguageModelClient } from '../helpers/fake-language-model-client';
 import { buildTestApp, readFixture } from '../helpers/test-environment';
 
@@ -30,18 +34,35 @@ describe('proposal document and source persistence', () => {
     });
 
     expect(response.statusCode).toBe(200);
+    const { session_id: sessionId } = response.json() as { session_id: string };
     expect(response.json().warnings).toContain('Do not submit real patient data in MVP Alpha.');
 
     const documents = await app.services.database.query<{
       source_kind: string;
       document_status: string;
       normalized_text: string | null;
-    }>('SELECT source_kind, document_status, normalized_text FROM proposal_documents ORDER BY created_at ASC');
+    }>(
+      [
+        'SELECT source_kind, document_status, normalized_text',
+        'FROM proposal_documents',
+        'WHERE proposal_id = (SELECT id FROM proposals WHERE session_id = $1 LIMIT 1)',
+        'ORDER BY created_at ASC',
+      ].join(' '),
+      [sessionId],
+    );
     const sources = await app.services.database.query<{
       source_kind: string;
       label: string;
       span_json: { start_char: number; end_char: number } | null;
-    }>('SELECT source_kind, label, span_json FROM proposal_sources ORDER BY created_at ASC');
+    }>(
+      [
+        'SELECT source_kind, label, span_json',
+        'FROM proposal_sources',
+        'WHERE proposal_id = (SELECT id FROM proposals WHERE session_id = $1 LIMIT 1)',
+        'ORDER BY created_at ASC',
+      ].join(' '),
+      [sessionId],
+    );
 
     expect(documents.rows).toHaveLength(2);
     expect(documents.rows.every((document) => document.document_status === 'normalized')).toBe(true);
@@ -53,13 +74,75 @@ describe('proposal document and source persistence', () => {
 
     const audit = await app.inject({
       method: 'GET',
-      url: `/api/v1/sessions/${response.json().session_id}`,
+      url: `/api/v1/sessions/${sessionId}`,
     });
 
     expect(audit.statusCode).toBe(200);
     expect(audit.json().documents).toHaveLength(2);
     expect(audit.json().sources).toHaveLength(2);
     expect(audit.json().sources[0].label).toBe('Proposal text');
+  });
+
+  it('persists a valid uploaded PDF as file and extracted-text audit sources', async () => {
+    const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
+    const pdfBytes = await readFile(fromRepoRoot('tests', 'fixtures', 'documents', 'text-pdf.pdf'));
+    const expectedHash = sha256Buffer(pdfBytes);
+
+    ({ app } = await buildTestApp(
+      new QueueLanguageModelClient([JSON.stringify(structuredBrief)]),
+    ));
+
+    const response = await startContext(app, 'req-docs-valid-pdf', {
+      project_title: 'Triage IA en Urgencias',
+      goal: 'Definir mejor el problema',
+      file: {
+        file_name: 'intake.pdf',
+        mime_type: 'application/pdf',
+        content_base64: pdfBytes.toString('base64'),
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const { session_id: sessionId } = response.json() as { session_id: string };
+
+    const audit = await app.inject({ method: 'GET', url: `/api/v1/sessions/${sessionId}` });
+    const auditBody = audit.json() as {
+      documents: Array<{
+        source_kind: string;
+        document_status: string;
+        file_name?: string;
+        sha256?: string;
+      }>;
+      sources: Array<{ label: string; source_kind: string }>;
+      events: Array<{ event_type: string }>;
+    };
+
+    expect(audit.statusCode).toBe(200);
+    expect(auditBody.documents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source_kind: 'uploaded_file',
+          document_status: 'received',
+          file_name: 'intake.pdf',
+          sha256: expectedHash,
+        }),
+        expect.objectContaining({
+          source_kind: 'extracted_text',
+          document_status: 'normalized',
+          file_name: 'intake.pdf',
+          sha256: expectedHash,
+        }),
+      ]),
+    );
+    expect(auditBody.sources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          label: 'Extracted PDF text: intake.pdf',
+          source_kind: 'extracted_text',
+        }),
+      ]),
+    );
+    expect(auditBody.events.map((event) => event.event_type)).toContain('document_extracted');
   });
 
   it('does not duplicate documents or sources on idempotent start retry', async () => {
