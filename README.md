@@ -340,10 +340,12 @@ No cambies `N8N_ENCRYPTION_KEY` una vez que `n8n` haya inicializado su volumen p
 - `POST /internal/sessions/solution-start`
 - `POST /internal/sessions/solution-reply`
 - `POST /internal/agents/solution-definition/run`
+- `POST /internal/reports/basic-alpha/compose`
 
 ### API de inspeccion
 
 - `GET /api/v1/sessions/:sessionId`
+- `GET /api/v1/sessions/:sessionId/report`
 - `GET /api/v1/requests/:requestId`
 - `POST /api/v1/requests/:requestId/recover`
 - `GET /healthz`
@@ -376,6 +378,8 @@ El flujo normal es:
 4. repetir hasta `agent_status = "done"`
 5. iniciar `solution_start_v1`
 6. responder con `solution_reply_v1` hasta `agent_status = "done"`
+7. componer el informe con `POST /internal/reports/basic-alpha/compose`
+8. leerlo con `GET /api/v1/sessions/:sessionId/report`
 
 Al cerrar el carril de problema, la API conserva la compatibilidad de resume con
 `conversation_turns`, `session_snapshots` y `agent_runs`, y tambien escribe el
@@ -389,11 +393,17 @@ separado.
 Tras cerrar el problema, el carril de solucion usa `module = "solution"` y genera
 una fila `generated_sections` con `section_kind = "solution"`. La seccion de
 solucion tambien se renderiza de forma determinista desde respuestas persistidas
-y fuentes internas; el reporte basico queda preparado para consumir ambas
-secciones en una PR posterior.
+y fuentes internas.
+
+El reporte basico Alpha se compone de forma deterministica desde el brief,
+gaps actuales, seccion de problema, seccion de solucion, fuentes internas,
+referencias de auditoria y advertencias fijas. La ruta publica
+`GET /api/v1/sessions/:sessionId/report` devuelve solo el contrato
+`BasicAlphaReport`; no expone `raw_model_output`, prompts, parametros de modelo
+ni payloads crudos de los `agent_runs`.
 
 Siguen fuera de alcance en esta PR: plan de negocio, costes, legal/regulatorio,
-medical device, PDF export, RAG, scoring, aprobacion/rechazo y reporte basico.
+medical device, PDF export, RAG, scoring y aprobacion/rechazo.
 
 ## Tests
 

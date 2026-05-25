@@ -2,6 +2,7 @@ import type {
   AgentRun,
   AgentStatus,
   AlphaGap,
+  BasicAlphaReport,
   ChatStatus,
   ChatTurn,
   ChatTurnStatus,
@@ -21,6 +22,7 @@ import type {
   ProposalSourceKind,
   ProposalStartResponse,
   RequestExecutionResponse,
+  ReportStatus,
   SessionAuditView,
   SessionEvent,
   SessionRecord,
@@ -73,6 +75,7 @@ const CHAT_TURN_STATUSES: ChatTurnStatus[] = [
   'failed',
   'skipped',
 ];
+const REPORT_STATUSES: ReportStatus[] = ['draft', 'ready', 'needs_revision'];
 const GAP_ORIGINS: GapOrigin[] = [
   'structured_brief_field',
   'structured_brief_missing_information',
@@ -87,6 +90,15 @@ const SESSION_STATUSES: SessionStatus[] = [
   'blocked',
   'failed',
 ];
+const BASIC_REPORT_DISALLOWED_KEYS = new Set([
+  'raw_model_output',
+  'validated_output_json',
+  'prompt_name',
+  'prompt_version',
+  'prompt_sha256',
+  'model_params_json',
+  'pdf_url',
+]);
 
 function expectRecord(value: unknown, label: string): JsonRecord {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -186,6 +198,25 @@ function expectEnum<T extends string>(value: unknown, label: string, choices: re
 
 function isRecord(value: unknown): value is JsonRecord {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function rejectDisallowedReportKeys(value: unknown, label: string): void {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => rejectDisallowedReportKeys(item, `${label}[${index}]`));
+    return;
+  }
+
+  if (!isRecord(value)) {
+    return;
+  }
+
+  for (const [key, child] of Object.entries(value)) {
+    if (BASIC_REPORT_DISALLOWED_KEYS.has(key)) {
+      throw new Error(`Unexpected ${label}.${key} in Basic Alpha report`);
+    }
+
+    rejectDisallowedReportKeys(child, `${label}.${key}`);
+  }
 }
 
 function looksLikeJsonString(value: string): boolean {
@@ -943,5 +974,32 @@ export function parseSessionAuditView(value: unknown): SessionAuditView {
     events: expectOptionalArray(record.events, [], 'session audit view.events').map((item, index) =>
       parseSessionEvent(item, `session audit view.events[${index}]`),
     ),
+  };
+}
+
+export function parseBasicAlphaReport(value: unknown): BasicAlphaReport {
+  const record = expectRecord(unwrapContractValue(value), 'basic alpha report');
+
+  rejectDisallowedReportKeys(record, 'basic alpha report');
+
+  return {
+    report_id: expectString(record.report_id, 'basic alpha report.report_id'),
+    proposal_id: expectString(record.proposal_id, 'basic alpha report.proposal_id'),
+    report_status: expectEnum(record.report_status, 'basic alpha report.report_status', REPORT_STATUSES),
+    schema_version: expectString(record.schema_version, 'basic alpha report.schema_version'),
+    structured_brief: parseStructuredBrief(record.structured_brief, 'basic alpha report.structured_brief'),
+    current_gaps: expectArray(record.current_gaps, 'basic alpha report.current_gaps').map((item, index) =>
+      parseAlphaGap(item, `basic alpha report.current_gaps[${index}]`),
+    ),
+    problem_section: parseGeneratedSection(record.problem_section, 'basic alpha report.problem_section'),
+    solution_section: parseGeneratedSection(record.solution_section, 'basic alpha report.solution_section'),
+    internal_sources: expectArray(record.internal_sources, 'basic alpha report.internal_sources').map((item, index) =>
+      parseProposalSource(item, `basic alpha report.internal_sources[${index}]`),
+    ),
+    audit_refs: expectArray(record.audit_refs, 'basic alpha report.audit_refs').map((item, index) =>
+      parseAuditRef(item, `basic alpha report.audit_refs[${index}]`),
+    ),
+    warnings: expectStringArray(record.warnings, 'basic alpha report.warnings'),
+    generated_at: expectString(record.generated_at, 'basic alpha report.generated_at'),
   };
 }

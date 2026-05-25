@@ -4,6 +4,8 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 
 import { loadConfig, type AppConfig } from './config/env';
 import {
+  assertBasicAlphaReport,
+  assertBasicReportComposeRequest,
   assertErrorResponse,
   assertProposalReplyResponse,
   assertProposalStartResponse,
@@ -17,6 +19,7 @@ import { AlphaStore } from './repositories/alpha-store';
 import { SessionStore } from './repositories/session-store';
 import type { AiProviderPort } from './services/ai-provider';
 import { createAiProvider } from './services/ai-provider-factory';
+import { BasicReportService } from './services/basic-report-service';
 import { GapAnalysisService } from './services/gap-analysis-service';
 import { LlmOrchestrator } from './services/llm-orchestrator';
 import { ProblemDefinitionService } from './services/problem-definition-service';
@@ -43,6 +46,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const alphaStore = new AlphaStore(database);
   const llmOrchestrator = new LlmOrchestrator(config, aiProvider);
   const gapAnalysisService = new GapAnalysisService(logger, alphaStore);
+  const basicReportService = new BasicReportService(logger, alphaStore);
   const proposalStartService = new ProposalStartService(
     config,
     logger,
@@ -81,6 +85,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     aiProvider,
     llmOrchestrator,
     gapAnalysisService,
+    basicReportService,
     proposalStartService,
     proposalReplyService,
     problemDefinitionService,
@@ -104,13 +109,19 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
         retryable: error.retryable,
       });
 
-      logger.warn('request_failed', {
+      const logPayload = {
         request_id: requestId,
         error_code: error.errorCode,
         status_code: error.statusCode,
         path: request.url,
         session_id: error.sessionId,
-      });
+      };
+
+      if (error.statusCode >= 500) {
+        logger.error('request_failed', logPayload);
+      } else {
+        logger.warn('request_failed', logPayload);
+      }
 
       reply.status(error.statusCode).send(payload);
       return;
@@ -139,6 +150,16 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.get('/api/v1/sessions/:sessionId', async (request) => {
     const params = request.params as { sessionId: string };
     return sessionStore.getAuditView(params.sessionId);
+  });
+
+  app.get('/api/v1/sessions/:sessionId/report', async (request, reply) => {
+    const params = request.params as { sessionId: string };
+    const report = await assertBasicAlphaReportResponse(
+      () => basicReportService.getForSession(params.sessionId),
+      params.sessionId,
+    );
+
+    return reply.send(report);
   });
 
   app.get('/api/v1/requests/:requestId', async (request, reply) => {
@@ -349,6 +370,26 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     return reply.send(response);
   });
 
+  app.post('/internal/reports/basic-alpha/compose', async (request, reply) => {
+    assertInternalSecret(request);
+
+    const body = assertBasicReportComposeRequest(request.body);
+
+    const result = await assertBasicAlphaReportResponse(
+      () => basicReportService.composeForSession({
+        context: {
+          requestId: body.request_id ?? getRequestId(request),
+          workflowVersion: body.workflow_version ?? 'basic_alpha_report_v1',
+          workflowExecutionId: body.workflow_execution_id,
+        },
+        sessionId: body.session_id,
+      }),
+      body.session_id,
+    );
+
+    return reply.send(result);
+  });
+
   return app;
 }
 
@@ -368,6 +409,28 @@ function assertInternalSecret(request: FastifyRequest): void {
 
   if (headerValue !== secret) {
     throw new AppError(401, 'unauthorized_internal_request', 'Missing or invalid internal shared secret');
+  }
+}
+
+async function assertBasicAlphaReportResponse(
+  loadReport: () => Promise<unknown>,
+  sessionId: string,
+) {
+  try {
+    return assertBasicAlphaReport(await loadReport());
+  } catch (error) {
+    if (error instanceof AppError && error.errorCode === 'invalid_basic_alpha_report') {
+      throw new AppError(
+        500,
+        'invalid_response_contract',
+        'The server produced a Basic Alpha report that does not match the response contract',
+        false,
+        sessionId,
+        error.details,
+      );
+    }
+
+    throw error;
   }
 }
 

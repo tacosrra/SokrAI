@@ -558,6 +558,92 @@ describe('proposal flow integration', () => {
     });
   });
 
+  it('replays solution reply guardrail warnings from persisted turn state', async () => {
+    const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
+    const doneProblemTurn = await readFixture('expected', 'problem-definition.done.json');
+    const continueSolutionTurn = await readFixture('expected', 'solution-definition.continue.json');
+    const prematureDoneSolutionTurn = {
+      ...continueSolutionTurn,
+      agent_status: 'done',
+      next_question: '',
+      completion_reason: 'solution sufficiently defined',
+    };
+    const startAgentTurn = {
+      agent_status: 'continue',
+      diagnosis: ['Falta identificar con precision quien responde hoy por el problema'],
+      updated_problem_definition: {
+        problem_owner: '',
+        problem_statement: structuredBrief.problem_statement,
+        evidence_of_problem: structuredBrief.evidence_of_problem,
+        scope: structuredBrief.scope,
+        current_alternatives: structuredBrief.current_alternatives,
+        assumptions: structuredBrief.assumptions,
+        ambiguities_remaining: structuredBrief.ambiguities,
+      },
+      next_question: '¿Qué equipo o responsable responde hoy por este problema en urgencias?',
+      completion_reason: '',
+    };
+
+    ({ app } = await buildTestApp(
+      new QueueLanguageModelClient([
+        JSON.stringify(structuredBrief),
+        JSON.stringify(startAgentTurn),
+        JSON.stringify(doneProblemTurn),
+        JSON.stringify(continueSolutionTurn),
+        JSON.stringify(prematureDoneSolutionTurn),
+      ]),
+    ));
+
+    const strongProposal = await readFixture('start', 'strong-proposal.json');
+    const strongAnswer = await readFixture('reply', 'strong-answer.json');
+    const solutionAnswer = await readFixture('reply', 'solution-workflow-change.json');
+
+    const startResult = await startFlow(app, 'req-start-solution-warning-replay', strongProposal);
+    await replyFlow(app, 'req-problem-done-solution-warning-replay', startResult.body.session_id, strongAnswer);
+    await solutionStartFlow(app, 'req-solution-start-warning-replay', startResult.body.session_id);
+
+    const first = await solutionReplyFlow(
+      app,
+      'req-solution-warning-replay',
+      startResult.body.session_id,
+      solutionAnswer,
+    );
+    const replay = await app.inject({
+      method: 'POST',
+      url: '/internal/agents/solution-definition/run',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+        'x-request-id': 'req-solution-warning-replay',
+      },
+      payload: {
+        request_id: 'req-solution-warning-replay',
+        workflow_version: 'agent_solution_definition_v1',
+        session_id: startResult.body.session_id,
+        trigger: 'reply',
+      },
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(first.body.agent_status).toBe('continue');
+    expect(first.body.warnings).toContain('Model marked solution lane as done before completion criteria were met');
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json().agent_status).toBe('continue');
+    expect(replay.json().warnings).toEqual(first.body.warnings);
+
+    const rows = await app.services.database.query<{ solution_runs_count: string }>(
+      [
+        'SELECT COUNT(*)::text AS solution_runs_count',
+        'FROM agent_runs',
+        'WHERE session_id = $1 AND request_id = $2 AND run_purpose = \'solution_definition\'',
+      ].join(' '),
+      [startResult.body.session_id, 'req-solution-warning-replay'],
+    );
+
+    expect(rows.rows[0]).toEqual({
+      solution_runs_count: '1',
+    });
+  });
+
   it('reformulates after a low-information reply instead of advancing to done', async () => {
     const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
     const startAgentTurn = {

@@ -286,6 +286,10 @@ No incluye:
 
 ## 13. PR 8: Reporte basico Alpha
 
+Estado:
+
+- Implementado en esta rama como reporte estructurado en app.
+
 Objetivo:
 
 - Mostrar dentro de la app un reporte basico estructurado.
@@ -299,12 +303,17 @@ Incluye:
 - Fuentes internas.
 - Advertencias de no dictamen/no aprobacion.
 - Version basica del reporte en app.
+- Endpoint interno `POST /internal/reports/basic-alpha/compose`.
+- Endpoint publico `GET /api/v1/sessions/:sessionId/report`.
+- Persistencia idempotente en `basic_reports`.
+- Tests de contrato, dominio, integracion y UI para evitar salida cruda de modelo.
 
 No incluye:
 
 - PDF.
 - Modulos Clinic Pilot.
 - Vista evaluador enterprise.
+- Legal/regulatorio, medical device, RAG, scoring, ranking, aprobacion o rechazo.
 
 Criterio Alpha:
 

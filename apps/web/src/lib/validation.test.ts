@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  parseBasicAlphaReport,
   parseProposalReplyResponse,
   parseProposalStartResponse,
   parseRequestExecutionResponse,
@@ -115,6 +116,39 @@ const validGeneratedSection = {
   supersedes_section_id: null,
   warnings: [],
   created_at: '2026-05-24T20:05:00.000Z',
+};
+
+const validBasicAlphaReport = {
+  report_id: 'report-1',
+  proposal_id: 'session-1',
+  report_status: 'needs_revision',
+  schema_version: 'basic-alpha-report.v1',
+  structured_brief: structuredBrief,
+  current_gaps: [validAlphaGap],
+  problem_section: validGeneratedSection,
+  solution_section: {
+    ...validGeneratedSection,
+    section_id: 'section-solution',
+    section_kind: 'solution',
+    title: 'Solution definition',
+    content_markdown: '## Solution\nA guided assistant prepares structured notes.',
+    generated_by_run_id: 'run-solution',
+  },
+  internal_sources: [
+    {
+      source_id: 'source-1',
+      source_kind: 'pasted_text',
+      label: 'Initial proposal text',
+      created_at: '2026-05-24T20:00:00.000Z',
+    },
+  ],
+  audit_refs: [{ kind: 'agent_run', id: 'run-1' }],
+  warnings: [
+    'This Alpha report is not a dictamen and must not be used as one.',
+    'This Alpha report does not approve, reject, rank, or prioritize the proposal.',
+    'This Alpha report is not a legal, clinical, or regulatory decision.',
+  ],
+  generated_at: '2026-05-24T20:05:00.000Z',
 };
 
 const validSolutionDefinition = {
@@ -700,5 +734,54 @@ describe('parseRequestExecutionResponse', () => {
     });
 
     expect(response.status).toBe('pending');
+  });
+});
+
+describe('parseBasicAlphaReport', () => {
+  it('accepts a valid report-shaped payload', () => {
+    const report = parseBasicAlphaReport(validBasicAlphaReport);
+
+    expect(report.report_id).toBe('report-1');
+    expect(report.report_status).toBe('needs_revision');
+    expect(report.problem_section.section_kind).toBe('problem');
+    expect(report.solution_section.section_kind).toBe('solution');
+  });
+
+  it('rejects invalid nested section kinds', () => {
+    expect(() =>
+      parseBasicAlphaReport({
+        ...validBasicAlphaReport,
+        solution_section: {
+          ...validBasicAlphaReport.solution_section,
+          section_kind: 'regulatory',
+        },
+      }),
+    ).toThrow(/section_kind/);
+  });
+
+  it('rejects raw, model, and export fields anywhere in the report payload', () => {
+    expect(() =>
+      parseBasicAlphaReport({
+        ...validBasicAlphaReport,
+        raw_model_output: '{"agent_status":"done"}',
+      }),
+    ).toThrow(/raw_model_output/);
+
+    expect(() =>
+      parseBasicAlphaReport({
+        ...validBasicAlphaReport,
+        problem_section: {
+          ...validBasicAlphaReport.problem_section,
+          validated_output_json: { agent_status: 'done' },
+        },
+      }),
+    ).toThrow(/validated_output_json/);
+
+    expect(() =>
+      parseBasicAlphaReport({
+        ...validBasicAlphaReport,
+        pdf_url: 'https://example.test/report.pdf',
+      }),
+    ).toThrow(/pdf_url/);
   });
 });

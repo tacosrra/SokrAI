@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { recoverRequestExecution, replySolution, startSession, startSolution } from './api';
+import { fetchBasicAlphaReport, recoverRequestExecution, replySolution, startSession, startSolution } from './api';
 
 const REQUEST_STATUS_RESPONSE = {
   request_id: 'web-start-1',
@@ -71,6 +71,51 @@ const SOLUTION_REPLY_RESPONSE = {
   next_question: '',
   completion_reason: 'solution sufficiently defined',
   warnings: [],
+};
+
+const BASIC_ALPHA_REPORT_RESPONSE = {
+  report_id: 'report-1',
+  proposal_id: 'session-1',
+  report_status: 'ready',
+  schema_version: 'basic-alpha-report.v1',
+  structured_brief: START_RESPONSE.structured_brief,
+  current_gaps: [],
+  problem_section: {
+    section_id: 'section-problem',
+    proposal_id: 'session-1',
+    section_kind: 'problem',
+    section_status: 'generated',
+    section_version: 1,
+    title: 'Problem definition',
+    content_markdown: '## Problem\nThe problem is defined.',
+    source_refs: [],
+    gap_refs: [],
+    generated_by_run_id: 'run-problem',
+    warnings: [],
+    created_at: '2026-05-25T12:00:00.000Z',
+  },
+  solution_section: {
+    section_id: 'section-solution',
+    proposal_id: 'session-1',
+    section_kind: 'solution',
+    section_status: 'generated',
+    section_version: 1,
+    title: 'Solution definition',
+    content_markdown: '## Solution\nThe solution is defined.',
+    source_refs: [],
+    gap_refs: [],
+    generated_by_run_id: 'run-solution',
+    warnings: [],
+    created_at: '2026-05-25T12:00:00.000Z',
+  },
+  internal_sources: [],
+  audit_refs: [{ kind: 'agent_run', id: 'run-problem' }],
+  warnings: [
+    'This Alpha report is not a dictamen and must not be used as one.',
+    'This Alpha report does not approve, reject, rank, or prioritize the proposal.',
+    'This Alpha report is not a legal, clinical, or regulatory decision.',
+  ],
+  generated_at: '2026-05-25T12:00:00.000Z',
 };
 
 const originalFetch = globalThis.fetch;
@@ -241,6 +286,48 @@ describe('requestJson transport options', () => {
         answer: 'The solution changes intake by preparing a structured handoff.',
       }),
     ).rejects.toMatchObject({
+      errorCode: 'invalid_response_contract',
+      statusCode: 502,
+    });
+  });
+
+  it('fetches a Basic Alpha report from the session report endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(BASIC_ALPHA_REPORT_RESPONSE), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }),
+    );
+    stubGlobal('fetch', fetchMock);
+
+    const result = await fetchBasicAlphaReport('session-1');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toBe('/api/v1/sessions/session-1/report');
+    expect(init.method).toBe('GET');
+    expect(result.report_id).toBe('report-1');
+  });
+
+  it('maps invalid report responses to invalid_response_contract', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ...BASIC_ALPHA_REPORT_RESPONSE,
+          raw_model_output: '{"agent_status":"done"}',
+        }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      ),
+    );
+    stubGlobal('fetch', fetchMock);
+
+    await expect(fetchBasicAlphaReport('session-1')).rejects.toMatchObject({
       errorCode: 'invalid_response_contract',
       statusCode: 502,
     });

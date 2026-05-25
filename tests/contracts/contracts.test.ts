@@ -6,6 +6,7 @@ import {
   assertAlphaGap,
   assertAlphaProposal,
   assertBasicAlphaReport,
+  assertBasicReportComposeRequest,
   assertChatTurn,
   assertGeneratedSection,
   assertModuleChat,
@@ -171,6 +172,25 @@ describe('contract schemas', () => {
     expect(assertBasicAlphaReport(await readFixture('alpha-model', 'basic-alpha-report.valid.json'))).toBeTruthy();
   });
 
+  it('validates Basic Alpha report compose requests at the contract boundary', () => {
+    expect(
+      assertBasicReportComposeRequest({
+        request_id: 'req-report-compose',
+        workflow_version: 'basic_alpha_report_v1',
+        workflow_execution_id: 'workflow-run-1',
+        session_id: 'session-1',
+      }),
+    ).toBeTruthy();
+    expect(() => assertBasicReportComposeRequest({ request_id: 'req-report-compose' })).toThrow(AppError);
+    expect(() =>
+      assertBasicReportComposeRequest({
+        request_id: 'req-report-compose',
+        session_id: 'session-1',
+        payload: {},
+      }),
+    ).toThrow(AppError);
+  });
+
   it('rejects invalid nested Alpha aggregate children through schema refs', async () => {
     const proposal = await readFixture('alpha-model', 'alpha-proposal.valid.json');
     const invalidProposal = structuredClone(proposal) as { documents: Array<Record<string, unknown>> };
@@ -227,9 +247,21 @@ describe('contract schemas', () => {
   it('rejects Alpha chat/report payloads that exceed guardrails or export scope', async () => {
     const tooManyDiagnosis = await readFixture('alpha-model', 'chat-turn.too-many-diagnosis.invalid.json');
     const reportWithPdfUrl = await readFixture('alpha-model', 'basic-alpha-report.pdf-url.invalid.json');
+    const validReport = await readFixture('alpha-model', 'basic-alpha-report.valid.json');
+    const reportWithRawOutput = structuredClone(validReport) as Record<string, unknown>;
+    const reportWithNestedRawOutput = structuredClone(validReport) as {
+      problem_section: Record<string, unknown>;
+      solution_section: Record<string, unknown>;
+    };
+
+    reportWithRawOutput.raw_model_output = '{"agent_status":"done"}';
+    reportWithNestedRawOutput.problem_section.raw_model_output = '{"section":"raw"}';
+    reportWithNestedRawOutput.solution_section.validated_output_json = { agent_status: 'done' };
 
     expect(() => assertChatTurn(tooManyDiagnosis)).toThrow(AppError);
     expect(() => assertBasicAlphaReport(reportWithPdfUrl)).toThrow(AppError);
+    expect(() => assertBasicAlphaReport(reportWithRawOutput)).toThrow(AppError);
+    expect(() => assertBasicAlphaReport(reportWithNestedRawOutput)).toThrow(AppError);
   });
 
   it('keeps n8n workflow assets importable by requiring top-level workflow ids', async () => {

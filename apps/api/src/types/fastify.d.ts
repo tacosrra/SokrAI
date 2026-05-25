@@ -3,6 +3,7 @@ import type { Database } from '../repositories/database';
 import type { AlphaStore } from '../repositories/alpha-store';
 import type { SessionStore } from '../repositories/session-store';
 import type { AiProviderPort } from '../services/ai-provider';
+import type { BasicReportService } from '../services/basic-report-service';
 import type { GapAnalysisService } from '../services/gap-analysis-service';
 import type { LlmOrchestrator } from '../services/llm-orchestrator';
 import type { ProblemDefinitionService } from '../services/problem-definition-service';
@@ -23,6 +24,7 @@ declare module 'fastify' {
       aiProvider: AiProviderPort;
       llmOrchestrator: LlmOrchestrator;
       gapAnalysisService: GapAnalysisService;
+      basicReportService: BasicReportService;
       proposalStartService: ProposalStartService;
       proposalReplyService: ProposalReplyService;
       problemDefinitionService: ProblemDefinitionService;

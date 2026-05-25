@@ -282,7 +282,7 @@ Modulos funcionales:
 - Render deterministico de seccion problema.
 - Chat solucion.
 - Render deterministico de seccion solucion.
-- Reporte basico en app (futuro Alpha).
+- Reporte basico Alpha en app.
 
 Modulos deterministicos de dominio:
 
@@ -295,6 +295,12 @@ Modulos deterministicos de dominio:
   de forma deterministica desde `SolutionDefinitionState`, fuentes internas persistidas,
   `user_answer` y gaps resueltos. No introduce plan de negocio, costes, legal/regulatorio,
   medical device, RAG, scoring, aprobacion ni reporte basico completo.
+- `basic_report_composition`: al existir secciones actuales de `problem` y `solution`,
+  compone `BasicAlphaReport` desde `structured_brief`, gaps actuales, secciones generadas,
+  fuentes internas, referencias de auditoria y advertencias fijas. Persiste de forma
+  idempotente en `basic_reports`, expone `POST /internal/reports/basic-alpha/compose` para
+  orquestacion interna y `GET /api/v1/sessions/:sessionId/report` para lectura publica. No
+  copia `raw_model_output`, prompts ni parametros de modelo al reporte.
 
 Reglas de `initial_gap_analysis`:
 
@@ -309,7 +315,6 @@ Modulos IA:
 - `brief_extraction`.
 - `problem_definition_agent`.
 - `solution_definition_agent`.
-- `basic_report_composer` (futuro Alpha).
 - `json_repair`.
 
 ## 13. Modulos del MVP Clinic Pilot
