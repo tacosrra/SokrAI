@@ -7,6 +7,7 @@ Middleware de maduracion de propuestas antes de comite, orientado a demostrar do
 Guia detallada de arranque y prueba:
 
 - [docs/INICIALIZACION_V1.md](docs/INICIALIZACION_V1.md)
+- [docs/manual-testing/mvp-alpha-local-demo-guide.md](docs/manual-testing/mvp-alpha-local-demo-guide.md) para la demo manual end-to-end del MVP Alpha y el Basic Alpha Report.
 
 ## Alcance de esta v1
 
