@@ -80,6 +80,25 @@ describe('basic report flow integration', () => {
     expect(persisted.rows[0]).toEqual({ count: '1' });
   });
 
+  it('returns the same report for concurrent compose retries', async () => {
+    ({ app } = await buildTestApp(await createReportFlowModel()));
+
+    const sessionId = await completeAlphaFlow(app);
+    const [first, second] = await Promise.all([
+      composeReport(app, 'req-report-compose-race-1', sessionId),
+      composeReport(app, 'req-report-compose-race-2', sessionId),
+    ]);
+    const persisted = await app.services.database.query<{ count: string }>(
+      'SELECT COUNT(*)::text AS count FROM basic_reports WHERE proposal_id = $1',
+      [sessionId],
+    );
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(second.body.report_id).toBe(first.body.report_id);
+    expect(persisted.rows[0]).toEqual({ count: '1' });
+  });
+
   it('returns controlled not-ready responses before compose or before solution section generation', async () => {
     ({ app } = await buildTestApp(await createProblemOnlyModel()));
 
