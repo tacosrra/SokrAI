@@ -6,6 +6,7 @@ import {
   assertAlphaGap,
   assertAlphaProposal,
   assertBasicAlphaReport,
+  assertBasicReportComposeRequest,
   assertChatTurn,
   assertGeneratedSection,
   assertModuleChat,
@@ -169,6 +170,25 @@ describe('contract schemas', () => {
   it('accepts valid Alpha aggregate and report fixtures', async () => {
     expect(assertAlphaProposal(await readFixture('alpha-model', 'alpha-proposal.valid.json'))).toBeTruthy();
     expect(assertBasicAlphaReport(await readFixture('alpha-model', 'basic-alpha-report.valid.json'))).toBeTruthy();
+  });
+
+  it('validates Basic Alpha report compose requests at the contract boundary', () => {
+    expect(
+      assertBasicReportComposeRequest({
+        request_id: 'req-report-compose',
+        workflow_version: 'basic_alpha_report_v1',
+        workflow_execution_id: 'workflow-run-1',
+        session_id: 'session-1',
+      }),
+    ).toBeTruthy();
+    expect(() => assertBasicReportComposeRequest({ request_id: 'req-report-compose' })).toThrow(AppError);
+    expect(() =>
+      assertBasicReportComposeRequest({
+        request_id: 'req-report-compose',
+        session_id: 'session-1',
+        payload: {},
+      }),
+    ).toThrow(AppError);
   });
 
   it('rejects invalid nested Alpha aggregate children through schema refs', async () => {

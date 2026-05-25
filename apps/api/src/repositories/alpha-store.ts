@@ -1026,10 +1026,8 @@ export class AlphaStore {
   }
 
   private async mapBasicReportRecord(record: BasicReportRecord, executor: SqlExecutor): Promise<BasicAlphaReport> {
-    const [problemSection, solutionSection] = await Promise.all([
-      this.getGeneratedSection(record.problem_section_id, executor),
-      this.getGeneratedSection(record.solution_section_id, executor),
-    ]);
+    const problemSection = await this.getGeneratedSection(record.problem_section_id, executor);
+    const solutionSection = await this.getGeneratedSection(record.solution_section_id, executor);
 
     return assertBasicAlphaReport({
       report_id: record.id,

@@ -313,9 +313,16 @@ Metricas Clinic Pilot:
 
 ## 20. Preguntas abiertas
 
-- Que formato exacto tendra el reporte basico Alpha en la app?
 - Que tipos de documento se aceptaran en Alpha ademas de texto/PDF con texto extraible?
 - Que criterios minimos cierran problema y solucion?
 - Que proteccion minima exigira Clinic antes de usuarios reales?
 - Quien revisara el lenguaje de `hospital_clinic_v1` antes del Clinic Pilot?
 - Cuando se decidira si el RAG de `arnau` entra como adapter opcional?
+
+## 21. Decisiones resueltas
+
+- El formato actual del reporte basico Alpha queda definido por
+  `contracts/schemas/basic-alpha-report.schema.json`. Futuras ampliaciones de
+  reporte, como modulos Clinic Pilot o exportacion PDF, deberan versionar un
+  contrato nuevo o extender explicitamente este contrato sin cambiar el alcance
+  Alpha.

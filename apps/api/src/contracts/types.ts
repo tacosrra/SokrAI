@@ -207,6 +207,13 @@ export interface BasicAlphaReport {
   generated_at: string;
 }
 
+export interface BasicReportComposeRequest {
+  request_id?: string;
+  workflow_version?: string;
+  workflow_execution_id?: string;
+  session_id: string;
+}
+
 export interface ProblemDefinitionState {
   problem_owner: string;
   problem_statement: string;

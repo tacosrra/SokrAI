@@ -9,6 +9,7 @@ import type {
 import {
   BASIC_ALPHA_REPORT_WARNINGS,
   assertNoRawModelFields,
+  buildBasicReportAuditRefs,
   collectBasicReportSources,
   composeBasicAlphaReport,
   determineBasicReportStatus,
@@ -105,6 +106,21 @@ describe('basic report domain rules', () => {
     });
 
     expect(sources).toEqual([source]);
+  });
+
+  it('builds deterministic audit refs from generated sections and audit events', () => {
+    const refs = buildBasicReportAuditRefs({
+      problemSection,
+      solutionSection,
+      auditEventIds: ['event-gap', 'event-report', 'event-gap'],
+    });
+
+    expect(refs).toEqual([
+      { kind: 'agent_run', id: 'run-problem' },
+      { kind: 'agent_run', id: 'run-solution' },
+      { kind: 'audit_event', id: 'event-gap' },
+      { kind: 'audit_event', id: 'event-report' },
+    ]);
   });
 
   it('composes fixed no-decision warnings and contract metadata', () => {

@@ -247,13 +247,18 @@ export function App() {
 
     try {
       const audit = await fetchSessionAudit(sessionId);
-      const report = await loadReportIfAvailable(audit.session.id);
       setActiveAudit(audit);
-      setActiveReport(report);
       setRecentSessions(persistRecentSession(audit));
       setDefaultSessionId(audit.session.id);
       setSessionLookupId(audit.session.id);
       writeSessionToUrl(audit.session.id);
+
+      try {
+        setActiveReport(await loadReportIfAvailable(audit.session.id));
+      } catch {
+        setActiveReport(null);
+      }
+
       setBanner({
         tone: 'success',
         text:

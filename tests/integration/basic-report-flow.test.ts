@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { FastifyInstance } from 'fastify';
 
@@ -14,6 +14,8 @@ describe('basic report flow integration', () => {
       await app.close();
       app = undefined;
     }
+
+    vi.restoreAllMocks();
   });
 
   it('composes and reads a report after problem and solution sections exist without exposing raw model output', async () => {
@@ -118,6 +120,51 @@ describe('basic report flow integration', () => {
     expect(composeBeforeSolution.statusCode).toBe(409);
     expect(composeBeforeSolution.body).toMatchObject({
       error_code: 'solution_section_required_for_report',
+    });
+  });
+
+  it('rejects malformed compose requests at the route boundary', async () => {
+    ({ app } = await buildTestApp(await createProblemOnlyModel()));
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/internal/reports/basic-alpha/compose',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+        'x-request-id': 'req-report-compose-invalid',
+      },
+      payload: {
+        request_id: 'req-report-compose-invalid',
+        workflow_version: 'basic_alpha_report_v1',
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({
+      error_code: 'invalid_basic_report_compose_request',
+    });
+  });
+
+  it('classifies invalid server-produced reports as response contract failures', async () => {
+    ({ app } = await buildTestApp(await createProblemOnlyModel()));
+
+    vi.spyOn(app.services.basicReportService, 'getForSession').mockResolvedValue({
+      report_id: 'report-1',
+      proposal_id: 'session-1',
+      report_status: 'ready',
+      schema_version: 'basic-alpha-report.v1',
+      raw_model_output: '{"not":"public"}',
+    } as never);
+
+    const response = await app.inject({
+      method: 'GET',
+      url: '/api/v1/sessions/session-1/report',
+    });
+
+    expect(response.statusCode).toBe(500);
+    expect(response.json()).toMatchObject({
+      error_code: 'invalid_response_contract',
+      session_id: 'session-1',
     });
   });
 });

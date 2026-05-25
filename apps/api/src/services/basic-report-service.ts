@@ -31,11 +31,9 @@ export class BasicReportService {
 
         const problemSection = await this.requireCurrentSection(proposal.proposal_id, 'problem', client);
         const solutionSection = await this.requireCurrentSection(proposal.proposal_id, 'solution', client);
-        const [currentGaps, proposalSources, auditEvents] = await Promise.all([
-          this.alphaStore.listGaps(proposal.proposal_id, client),
-          this.alphaStore.listSources(proposal.proposal_id, client),
-          this.alphaStore.listAuditEvents(proposal.proposal_id, client),
-        ]);
+        const currentGaps = await this.alphaStore.listGaps(proposal.proposal_id, client);
+        const proposalSources = await this.alphaStore.listSources(proposal.proposal_id, client);
+        const auditEvents = await this.alphaStore.listAuditEvents(proposal.proposal_id, client);
         const internalSources = collectBasicReportSources({
           proposalSources,
           problemSection,

@@ -5,6 +5,7 @@ import auditRefSchema from '../../../../contracts/schemas/audit-ref.schema.json'
 import alphaGapSchema from '../../../../contracts/schemas/alpha-gap.schema.json';
 import alphaProposalSchema from '../../../../contracts/schemas/alpha-proposal.schema.json';
 import basicAlphaReportSchema from '../../../../contracts/schemas/basic-alpha-report.schema.json';
+import basicReportComposeRequestSchema from '../../../../contracts/schemas/basic-report-compose.request.schema.json';
 import chatTurnSchema from '../../../../contracts/schemas/chat-turn.schema.json';
 import errorResponseSchema from '../../../../contracts/schemas/error-response.schema.json';
 import generatedSectionSchema from '../../../../contracts/schemas/generated-section.schema.json';
@@ -27,6 +28,7 @@ import type {
   AlphaGap,
   AlphaProposal,
   BasicAlphaReport,
+  BasicReportComposeRequest,
   ChatTurn,
   ErrorResponse,
   GeneratedSection,
@@ -65,6 +67,7 @@ ajv.addSchema(moduleChatSchema, moduleChatSchema.$id);
 ajv.addSchema(generatedSectionSchema, generatedSectionSchema.$id);
 ajv.addSchema(alphaProposalSchema, alphaProposalSchema.$id);
 ajv.addSchema(basicAlphaReportSchema, basicAlphaReportSchema.$id);
+ajv.addSchema(basicReportComposeRequestSchema, basicReportComposeRequestSchema.$id);
 ajv.addSchema(problemDefinitionTurnSchema, problemDefinitionTurnSchema.$id);
 ajv.addSchema(solutionDefinitionTurnSchema, solutionDefinitionTurnSchema.$id);
 ajv.addSchema(proposalStartRequestSchema, proposalStartRequestSchema.$id);
@@ -110,6 +113,7 @@ export const schemaIds = {
   alphaGap: alphaGapSchema.$id,
   alphaProposal: alphaProposalSchema.$id,
   basicAlphaReport: basicAlphaReportSchema.$id,
+  basicReportComposeRequest: basicReportComposeRequestSchema.$id,
   chatTurn: chatTurnSchema.$id,
   errorResponse: errorResponseSchema.$id,
   generatedSection: generatedSectionSchema.$id,
@@ -135,6 +139,7 @@ export const schemaDocuments = {
   alphaGap: alphaGapSchema,
   alphaProposal: alphaProposalSchema,
   basicAlphaReport: basicAlphaReportSchema,
+  basicReportComposeRequest: basicReportComposeRequestSchema,
   chatTurn: chatTurnSchema,
   errorResponse: errorResponseSchema,
   generatedSection: generatedSectionSchema,
@@ -221,6 +226,14 @@ export function assertAlphaProposal(payload: unknown): AlphaProposal {
 
 export function assertBasicAlphaReport(payload: unknown): BasicAlphaReport {
   return assertSchema<BasicAlphaReport>(schemaIds.basicAlphaReport, payload, 'invalid_basic_alpha_report');
+}
+
+export function assertBasicReportComposeRequest(payload: unknown): BasicReportComposeRequest {
+  return assertSchema<BasicReportComposeRequest>(
+    schemaIds.basicReportComposeRequest,
+    payload,
+    'invalid_basic_report_compose_request',
+  );
 }
 
 export function assertProblemDefinitionTurn(payload: unknown): ProblemDefinitionTurn {
