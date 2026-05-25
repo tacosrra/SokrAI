@@ -149,6 +149,25 @@ fs.writeFileSync(output, JSON.stringify(payload));
 NODE
 }
 
+build_report_compose_payload() {
+  local request_id_value="$1"
+  local session_id="$2"
+  local output="$3"
+
+  node - "$request_id_value" "$session_id" "$output" <<'NODE'
+const fs = require('node:fs');
+const requestId = process.argv[2];
+const sessionId = process.argv[3];
+const output = process.argv[4];
+const payload = {
+  request_id: requestId,
+  workflow_version: 'basic_alpha_report_v1',
+  session_id: sessionId,
+};
+fs.writeFileSync(output, JSON.stringify(payload));
+NODE
+}
+
 require_command curl
 require_command node
 
@@ -187,6 +206,39 @@ http_json POST "$N8N_BASE_URL/webhook/proposal-reply-v1" "$reply_response" "$rep
   -H "x-request-id: $reply_request_id"
 SESSION_ID="$session_id" json_assert "$reply_response" 'data.session_id === process.env.SESSION_ID' 'reply response session_id mismatch'
 json_assert "$reply_response" '["continue", "done", "blocked"].includes(data.agent_status)' 'reply response has invalid agent_status'
+
+post_reply_audit="$TMP_DIR/post-reply-audit.json"
+http_json GET "$API_BASE_URL/api/v1/sessions/$session_id" "$post_reply_audit"
+
+if node - "$post_reply_audit" <<'NODE'
+const fs = require('node:fs');
+const audit = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+const kinds = new Set((audit.generated_sections || []).map((section) => section.section_kind));
+process.exit(kinds.has('problem') && kinds.has('solution') ? 0 : 1);
+NODE
+then
+  report_request_id="$(request_id)"
+  report_payload="$TMP_DIR/report-compose.json"
+  report_response="$TMP_DIR/report-compose-response.json"
+  report_get_response="$TMP_DIR/report-get-response.json"
+  build_report_compose_payload "$report_request_id" "$session_id" "$report_payload"
+
+  log_step "Composing and reading Basic Alpha report"
+  http_json POST "$API_BASE_URL/internal/reports/basic-alpha/compose" "$report_response" "$report_payload" \
+    -H "x-internal-shared-secret: $INTERNAL_SHARED_SECRET" \
+    -H "x-request-id: $report_request_id"
+  json_assert "$report_response" '["ready", "needs_revision", "draft"].includes(data.report_status)' 'report response has invalid status'
+  json_assert "$report_response" 'data.problem_section && data.problem_section.section_kind === "problem"' 'report missing problem section'
+  json_assert "$report_response" 'data.solution_section && data.solution_section.section_kind === "solution"' 'report missing solution section'
+  json_assert "$report_response" 'Array.isArray(data.warnings) && data.warnings.join(" ").includes("does not approve")' 'report missing no-decision warning'
+  json_assert "$report_response" '!JSON.stringify(data).includes("raw_model_output")' 'report exposed raw model output'
+
+  http_json GET "$API_BASE_URL/api/v1/sessions/$session_id/report" "$report_get_response"
+  json_assert "$report_get_response" 'typeof data.report_id === "string" && data.report_id.length > 0' 'report GET missing report_id'
+  json_assert "$report_get_response" '!JSON.stringify(data).includes("validated_output_json")' 'report GET exposed raw validated output'
+else
+  log_step "Skipping report smoke because the current smoke flow has not generated both Alpha sections"
+fi
 
 start_status="$TMP_DIR/start-status.json"
 reply_status="$TMP_DIR/reply-status.json"

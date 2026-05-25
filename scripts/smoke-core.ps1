@@ -88,6 +88,38 @@ $replyResponse = Invoke-JsonRequest -Method 'POST' -Uri "$N8nBaseUrl/webhook/pro
 Assert-Smoke -Condition ($replyResponse.session_id -eq $sessionId) -Message 'reply response session_id mismatch'
 Assert-Smoke -Condition (@('continue', 'done', 'blocked') -contains $replyResponse.agent_status) -Message 'reply response has invalid agent_status'
 
+$postReplyAudit = Invoke-JsonRequest -Method 'GET' -Uri "$ApiBaseUrl/api/v1/sessions/$sessionId"
+$sectionKinds = @($postReplyAudit.generated_sections | ForEach-Object { $_.section_kind })
+
+if (($sectionKinds -contains 'problem') -and ($sectionKinds -contains 'solution')) {
+  $reportRequestId = New-SmokeRequestId
+  $reportPayload = @{
+    request_id = $reportRequestId
+    workflow_version = 'basic_alpha_report_v1'
+    session_id = $sessionId
+  }
+  $reportHeaders = @{
+    'x-internal-shared-secret' = $InternalSharedSecret
+    'x-request-id' = $reportRequestId
+  }
+
+  Write-Step 'Composing and reading Basic Alpha report'
+  $reportResponse = Invoke-JsonRequest -Method 'POST' -Uri "$ApiBaseUrl/internal/reports/basic-alpha/compose" -Body $reportPayload -Headers $reportHeaders
+  $reportJson = $reportResponse | ConvertTo-Json -Depth 30 -Compress
+  Assert-Smoke -Condition (@('ready', 'needs_revision', 'draft') -contains $reportResponse.report_status) -Message 'report response has invalid status'
+  Assert-Smoke -Condition ($reportResponse.problem_section.section_kind -eq 'problem') -Message 'report missing problem section'
+  Assert-Smoke -Condition ($reportResponse.solution_section.section_kind -eq 'solution') -Message 'report missing solution section'
+  Assert-Smoke -Condition (($reportResponse.warnings -join ' ') -like '*does not approve*') -Message 'report missing no-decision warning'
+  Assert-Smoke -Condition (-not $reportJson.Contains('raw_model_output')) -Message 'report exposed raw model output'
+
+  $reportGetResponse = Invoke-JsonRequest -Method 'GET' -Uri "$ApiBaseUrl/api/v1/sessions/$sessionId/report"
+  $reportGetJson = $reportGetResponse | ConvertTo-Json -Depth 30 -Compress
+  Assert-Smoke -Condition (-not [string]::IsNullOrWhiteSpace([string]$reportGetResponse.report_id)) -Message 'report GET missing report_id'
+  Assert-Smoke -Condition (-not $reportGetJson.Contains('validated_output_json')) -Message 'report GET exposed raw validated output'
+} else {
+  Write-Step 'Skipping report smoke because the current smoke flow has not generated both Alpha sections'
+}
+
 Write-Step 'Checking request execution status'
 $startStatus = Invoke-JsonRequest -Method 'GET' -Uri "$ApiBaseUrl/api/v1/requests/$startRequestId"
 $replyStatus = Invoke-JsonRequest -Method 'GET' -Uri "$ApiBaseUrl/api/v1/requests/$replyRequestId"

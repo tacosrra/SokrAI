@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 
-import type { SessionAuditView } from '../domain/contracts';
+import type { BasicAlphaReport, SessionAuditView } from '../domain/contracts';
 import type { SessionPresentation } from '../lib/session-view';
+import { BasicAlphaReportPanel } from './BasicAlphaReportPanel';
 import { StatusBadge, agentTone, sessionTone } from './StatusBadge';
 
 interface SessionWorkspaceProps {
   audit: SessionAuditView;
+  report: BasicAlphaReport | null;
   isReplying: boolean;
   onReply: (answer: string) => Promise<void>;
   onSolutionReply: (answer: string) => Promise<void>;
@@ -15,6 +17,7 @@ interface SessionWorkspaceProps {
 
 export function SessionWorkspace({
   audit,
+  report,
   isReplying,
   onReply,
   onSolutionReply,
@@ -159,6 +162,15 @@ export function SessionWorkspace({
               {isReplying ? 'Procesando…' : 'Iniciar solución'}
             </button>
           ) : null}
+        </section>
+      ) : null}
+
+      {report ? (
+        <BasicAlphaReportPanel report={report} />
+      ) : presentation.latestProblemSection && presentation.latestSolutionSection ? (
+        <section className="question-callout question-callout--muted">
+          <span className="question-callout__label">Informe Alpha</span>
+          <p>El informe estructurado todavía no está compuesto para esta sesión.</p>
         </section>
       ) : null}
 

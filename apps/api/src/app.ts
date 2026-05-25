@@ -4,6 +4,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 
 import { loadConfig, type AppConfig } from './config/env';
 import {
+  assertBasicAlphaReport,
   assertErrorResponse,
   assertProposalReplyResponse,
   assertProposalStartResponse,
@@ -17,6 +18,7 @@ import { AlphaStore } from './repositories/alpha-store';
 import { SessionStore } from './repositories/session-store';
 import type { AiProviderPort } from './services/ai-provider';
 import { createAiProvider } from './services/ai-provider-factory';
+import { BasicReportService } from './services/basic-report-service';
 import { GapAnalysisService } from './services/gap-analysis-service';
 import { LlmOrchestrator } from './services/llm-orchestrator';
 import { ProblemDefinitionService } from './services/problem-definition-service';
@@ -43,6 +45,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const alphaStore = new AlphaStore(database);
   const llmOrchestrator = new LlmOrchestrator(config, aiProvider);
   const gapAnalysisService = new GapAnalysisService(logger, alphaStore);
+  const basicReportService = new BasicReportService(logger, alphaStore);
   const proposalStartService = new ProposalStartService(
     config,
     logger,
@@ -81,6 +84,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     aiProvider,
     llmOrchestrator,
     gapAnalysisService,
+    basicReportService,
     proposalStartService,
     proposalReplyService,
     problemDefinitionService,
@@ -139,6 +143,13 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.get('/api/v1/sessions/:sessionId', async (request) => {
     const params = request.params as { sessionId: string };
     return sessionStore.getAuditView(params.sessionId);
+  });
+
+  app.get('/api/v1/sessions/:sessionId/report', async (request, reply) => {
+    const params = request.params as { sessionId: string };
+    const report = await basicReportService.getForSession(params.sessionId);
+
+    return reply.send(assertBasicAlphaReport(report));
   });
 
   app.get('/api/v1/requests/:requestId', async (request, reply) => {
@@ -347,6 +358,28 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
         });
 
     return reply.send(response);
+  });
+
+  app.post('/internal/reports/basic-alpha/compose', async (request, reply) => {
+    assertInternalSecret(request);
+
+    const body = request.body as {
+      request_id?: string;
+      workflow_version?: string;
+      workflow_execution_id?: string;
+      session_id: string;
+    };
+
+    const result = await basicReportService.composeForSession({
+      context: {
+        requestId: body.request_id ?? getRequestId(request),
+        workflowVersion: body.workflow_version ?? 'basic_alpha_report_v1',
+        workflowExecutionId: body.workflow_execution_id,
+      },
+      sessionId: body.session_id,
+    });
+
+    return reply.send(assertBasicAlphaReport(result));
   });
 
   return app;

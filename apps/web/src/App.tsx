@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 
-import type { ProposalStartRequest, RecentSession, SessionAuditView } from './domain/contracts';
+import type { BasicAlphaReport, ProposalStartRequest, RecentSession, SessionAuditView } from './domain/contracts';
 import {
   ApiError,
+  fetchBasicAlphaReport,
   fetchRequestExecution,
   recoverRequestExecution,
   fetchSessionAudit,
@@ -203,6 +204,7 @@ function ModeCard({
 
 export function App() {
   const [activeAudit, setActiveAudit] = useState<SessionAuditView | null>(null);
+  const [activeReport, setActiveReport] = useState<BasicAlphaReport | null>(null);
   const [recentSessions, setRecentSessions] = useState<RecentSession[]>([]);
   const [defaultSessionId, setDefaultSessionId] = useState('');
   const [sessionLookupId, setSessionLookupId] = useState('');
@@ -245,7 +247,9 @@ export function App() {
 
     try {
       const audit = await fetchSessionAudit(sessionId);
+      const report = await loadReportIfAvailable(audit.session.id);
       setActiveAudit(audit);
+      setActiveReport(report);
       setRecentSessions(persistRecentSession(audit));
       setDefaultSessionId(audit.session.id);
       setSessionLookupId(audit.session.id);
@@ -257,12 +261,25 @@ export function App() {
           `Sesión ${audit.session.id} cargada con ${audit.turns.length} turnos persistidos.`,
       });
     } catch (error) {
+      setActiveReport(null);
       setBanner({
         tone: 'error',
         text: mapApiError(error),
       });
     } finally {
       setIsLoadingSession(false);
+    }
+  }
+
+  async function loadReportIfAvailable(sessionId: string): Promise<BasicAlphaReport | null> {
+    try {
+      return await fetchBasicAlphaReport(sessionId);
+    } catch (error) {
+      if (error instanceof ApiError && error.errorCode === 'report_not_found') {
+        return null;
+      }
+
+      throw error;
     }
   }
 
@@ -628,6 +645,7 @@ export function App() {
 
   function handleStartFreshSession() {
     setActiveAudit(null);
+    setActiveReport(null);
     setBanner(null);
     setDefaultSessionId('');
     setSessionLookupId('');
@@ -758,6 +776,7 @@ export function App() {
           <section className="workspace-main">
             <SessionWorkspace
               audit={activeAudit}
+              report={activeReport}
               isReplying={isReplying}
               onReply={handleReply}
               onSolutionReply={handleSolutionReply}

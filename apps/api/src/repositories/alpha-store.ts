@@ -825,30 +825,52 @@ export class AlphaStore {
       warnings?: string[];
     },
   ): Promise<BasicAlphaReport> {
-    const result = await runQuery<BasicReportRecord>(
-      executor,
-      [
-        'INSERT INTO basic_reports (',
-        '  proposal_id, report_status, schema_version, structured_brief_json, current_gaps_json,',
-        '  problem_section_id, solution_section_id, internal_sources_json, audit_refs_json, warnings_json',
-        ') VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
-        'RETURNING *',
-      ].join(' '),
-      [
-        params.proposalId,
-        params.reportStatus,
-        params.schemaVersion,
-        toJson(params.structuredBrief),
-        toJson(params.currentGaps ?? []),
-        params.problemSectionId,
-        params.solutionSectionId,
-        toJson(params.internalSources ?? []),
-        toJson(params.auditRefs ?? []),
-        toJson(params.warnings ?? []),
-      ],
-    );
+    try {
+      const result = await runQuery<BasicReportRecord>(
+        executor,
+        [
+          'INSERT INTO basic_reports (',
+          '  proposal_id, report_status, schema_version, structured_brief_json, current_gaps_json,',
+          '  problem_section_id, solution_section_id, internal_sources_json, audit_refs_json, warnings_json',
+          ') VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+          'RETURNING *',
+        ].join(' '),
+        [
+          params.proposalId,
+          params.reportStatus,
+          params.schemaVersion,
+          toJson(params.structuredBrief),
+          toJson(params.currentGaps ?? []),
+          params.problemSectionId,
+          params.solutionSectionId,
+          toJson(params.internalSources ?? []),
+          toJson(params.auditRefs ?? []),
+          toJson(params.warnings ?? []),
+        ],
+      );
 
-    return this.mapBasicReportRecord(result.rows[0], executor);
+      return this.mapBasicReportRecord(result.rows[0], executor);
+    } catch (error) {
+      throw toAlphaPersistenceError(error, params.proposalId, {
+        basic_reports_proposal_id_key: [
+          409,
+          'basic_report_already_exists',
+          'A Basic Alpha report already exists for this proposal',
+        ],
+      });
+    }
+  }
+
+  async findBasicReport(proposalId: string, executor?: SqlExecutor): Promise<BasicAlphaReport | null> {
+    const queryable = executor ?? this.database;
+    const result = await runQuery<BasicReportRecord>(
+      queryable,
+      'SELECT * FROM basic_reports WHERE proposal_id = $1 LIMIT 1',
+      [proposalId],
+    );
+    const report = result.rows[0];
+
+    return report ? this.mapBasicReportRecord(report, queryable) : null;
   }
 
   async getBasicReport(proposalId: string, executor?: SqlExecutor): Promise<BasicAlphaReport> {

@@ -565,6 +565,7 @@ Si no estan publicados, el webhook no respondera como esperas.
 ### API de inspeccion
 
 - `GET http://localhost:3001/api/v1/sessions/:sessionId`
+- `GET http://localhost:3001/api/v1/sessions/:sessionId/report`
 
 ### API interna
 
@@ -576,6 +577,7 @@ Estas rutas existen, pero normalmente las usa n8n:
 - `POST /internal/sessions/solution-start`
 - `POST /internal/sessions/solution-reply`
 - `POST /internal/agents/solution-definition/run`
+- `POST /internal/reports/basic-alpha/compose`
 - `GET /api/v1/requests/:requestId`
 - `POST /api/v1/requests/:requestId/recover`
 
@@ -720,6 +722,32 @@ curl -sS \
 
 Repite hasta `agent_status = "done"`. Al completar, `GET /api/v1/sessions/:sessionId`
 debe incluir una fila en `generated_sections` con `section_kind = "solution"`.
+
+### 13.6 Componer y leer el reporte basico Alpha
+
+Cuando existan las secciones `problem` y `solution`, compón el reporte con la
+API interna:
+
+```bash
+curl -sS \
+  -X POST \
+  http://localhost:3001/internal/reports/basic-alpha/compose \
+  -H 'Content-Type: application/json' \
+  -H "x-internal-shared-secret: $INTERNAL_SHARED_SECRET" \
+  --data '{"session_id":"replace-with-session-id","workflow_version":"basic_alpha_report_v1"}'
+```
+
+Después, léelo desde la API pública de inspección:
+
+```bash
+curl -sS http://localhost:3001/api/v1/sessions/replace-with-session-id/report
+```
+
+La respuesta es un `BasicAlphaReport` con brief, gaps actuales, secciones
+generadas, fuentes internas, referencias de auditoria, `schema_version` y
+advertencias de no dictamen, no aprobacion/rechazo y no decision
+legal/clinica/regulatoria. No incluye PDF, scoring, decision de comité,
+`raw_model_output`, prompts ni parametros crudos del modelo.
 
 ## 14. Probar con PDF
 
@@ -1337,6 +1365,8 @@ Considera que la inicializacion esta bien hecha si puedes marcar todo esto:
 - `POST /webhook/solution-reply-v1` reutiliza ese `session_id`
 - `GET /api/v1/sessions/:sessionId` devuelve session, documentos, fuentes, gaps, turnos, runs,
   snapshots, eventos, `module_chats` y `generated_sections`
+- `POST /internal/reports/basic-alpha/compose` persiste un unico reporte por propuesta
+- `GET /api/v1/sessions/:sessionId/report` devuelve el reporte sin salida cruda de modelo
 - Al completar el modulo Alpha de problema, el artefacto esperado es:
   - `module_chats` contiene el chat `problem` en estado `completed` y sin turno activo
   - `generated_sections` contiene la seccion `problem` con `section_version >= 1`
@@ -1345,6 +1375,10 @@ Considera que la inicializacion esta bien hecha si puedes marcar todo esto:
   - `module_chats` contiene el chat `solution` en estado `completed` y sin turno activo
   - `generated_sections` contiene la seccion `solution` con `section_version >= 1`
   - los eventos de auditoria incluyen la generacion de la seccion con sus `source_refs` y `gap_refs`
+- Al componer el reporte basico Alpha, el artefacto esperado es:
+  - `basic_reports` contiene una fila para la propuesta
+  - el payload incluye problema, solucion, gaps, fuentes internas y advertencias
+  - el payload no incluye `raw_model_output`, `validated_output_json`, prompts ni parametros de modelo
 - `pnpm verify` pasa completo
 - `bash scripts/smoke-core.sh` pasa contra el stack vivo
 

@@ -1,4 +1,5 @@
 import type {
+  BasicAlphaReport,
   ProblemDefinitionState,
   ProposalReplyRequest,
   ProposalReplyResponse,
@@ -62,6 +63,13 @@ export interface RunSolutionDefinitionCommand {
   sessionId: string;
   trigger: 'start' | 'reply';
 }
+
+export interface ComposeBasicReportCommand {
+  context: WorkflowContext;
+  sessionId: string;
+}
+
+export type BasicReportResponse = BasicAlphaReport;
 
 export interface AgentResponseState {
   structuredBrief: StructuredBrief;

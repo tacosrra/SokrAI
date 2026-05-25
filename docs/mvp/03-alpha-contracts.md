@@ -13,7 +13,7 @@ PR 2A defines schema-backed contracts and TypeScript domain types for the MVP Al
 | `ModuleChat` | `contracts/schemas/module-chat.schema.json` | Problem or solution chat lifecycle and turns. |
 | `GeneratedSection` | `contracts/schemas/generated-section.schema.json` | Versioned generated problem or solution section. |
 | `AlphaProposal` | `contracts/schemas/alpha-proposal.schema.json` | Aggregate contract that composes brief, documents, sources, gaps, chats, sections, and audit references. |
-| `BasicAlphaReport` | `contracts/schemas/basic-alpha-report.schema.json` | In-app structured Alpha report, without PDF/export fields. |
+| `BasicAlphaReport` | `contracts/schemas/basic-alpha-report.schema.json` | Implemented in-app structured Alpha report, without PDF/export fields or raw model output. |
 | `SolutionDefinitionTurn` | `contracts/schemas/solution-definition-turn.schema.json` | Bounded model output for the solution-definition lane. |
 | `SolutionStartRequest` / `SolutionStartResponse` | `contracts/schemas/solution-start.*.schema.json` | Starts the solution lane after the problem section exists. |
 | `SolutionReplyRequest` / `SolutionReplyResponse` | `contracts/schemas/solution-reply.*.schema.json` | Persists a solution answer and returns the next solution state. |
@@ -68,6 +68,31 @@ section deterministically from persisted solution fields and internal source
 refs. It does not introduce business plan, cost, legal/regulatory,
 medical-device, RAG, PDF, scoring, ranking, approval, or committee-decision
 behavior.
+
+## Basic Alpha report
+
+PR 8 implements `BasicAlphaReport` as a deterministic composition over persisted
+Alpha state:
+
+- structured brief
+- current Alpha gaps and statuses
+- current generated problem section
+- current generated solution section
+- internal source references
+- audit references
+- fixed warnings that the payload is not a dictamen, not an approval/rejection
+  and not a legal, clinical, or regulatory decision
+- `schema_version` and `generated_at`
+
+Composition is exposed through `POST /internal/reports/basic-alpha/compose` for
+n8n/internal orchestration. The public app-facing read model is
+`GET /api/v1/sessions/:sessionId/report`. That route returns only the report
+contract; raw `agent_runs` output remains available in the audit endpoint but is
+not copied into the report payload or UI.
+
+Still excluded: PDF/export fields, Clinic Pilot modules, legal/regulatory or
+medical-device decisions, RAG citations, scoring, ranking, approval and
+rejection.
 
 ## GeneratedSection versioning
 

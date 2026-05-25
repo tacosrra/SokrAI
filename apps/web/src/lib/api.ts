@@ -1,4 +1,5 @@
 import type {
+  BasicAlphaReport,
   ErrorResponse,
   ProposalReplyRequest,
   ProposalReplyResponse,
@@ -13,6 +14,7 @@ import type {
 } from '../domain/contracts';
 import {
   parseErrorResponse,
+  parseBasicAlphaReport,
   parseProposalReplyResponse,
   parseProposalStartResponse,
   parseRequestExecutionResponse,
@@ -264,6 +266,14 @@ export async function fetchSessionAudit(sessionId: string): Promise<SessionAudit
     url: joinUrl(API_BASE_URL, `/api/v1/sessions/${encodeURIComponent(sessionId)}`),
     timeoutMs: SESSION_AUDIT_TIMEOUT_MS,
     parse: parseSessionAuditView,
+  });
+}
+
+export async function fetchBasicAlphaReport(sessionId: string): Promise<BasicAlphaReport> {
+  return requestJson({
+    url: joinUrl(API_BASE_URL, `/api/v1/sessions/${encodeURIComponent(sessionId)}/report`),
+    timeoutMs: SESSION_AUDIT_TIMEOUT_MS,
+    parse: parseBasicAlphaReport,
   });
 }
 
