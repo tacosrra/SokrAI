@@ -670,8 +670,9 @@ export class SolutionDefinitionService {
     );
   }
 
-  private buildResponseFromRun(sessionId: string, run: AgentRunRecord): SolutionDefinitionRunResponse {
+  private async buildResponseFromRun(sessionId: string, run: AgentRunRecord): Promise<SolutionDefinitionRunResponse> {
     const output = run.validated_output_json as unknown as SolutionDefinitionTurn;
+    const warnings = await this.findPersistedWarningsForRun(sessionId, run.id);
 
     return {
       session_id: sessionId,
@@ -681,9 +682,31 @@ export class SolutionDefinitionService {
       diagnosis: output.diagnosis,
       next_question: output.agent_status === 'continue' ? output.next_question : '',
       completion_reason: output.completion_reason,
-      warnings: [],
+      warnings,
       run_id: run.id,
     };
+  }
+
+  private async findPersistedWarningsForRun(sessionId: string, runId: string): Promise<string[]> {
+    const chat = await this.alphaStore.findModuleChatByProposalAndModule(sessionId, 'solution');
+
+    if (!chat) {
+      return [];
+    }
+
+    const warnings = new Set<string>();
+
+    for (const turn of chat.turns) {
+      const isRunTurn = turn.audit_refs.some((ref) => ref.kind === 'agent_run' && ref.id === runId);
+
+      if (isRunTurn) {
+        for (const warning of turn.warnings) {
+          warnings.add(warning);
+        }
+      }
+    }
+
+    return Array.from(warnings);
   }
 
   private async persistFailure(
