@@ -885,7 +885,7 @@ export function parseRequestExecutionResponse(value: unknown): RequestExecutionR
     request_kind: expectEnum(
       record.request_kind,
       'request execution response.request_kind',
-      ['proposal_start', 'proposal_reply', 'unknown'],
+      ['proposal_start', 'proposal_reply', 'solution_start', 'solution_reply', 'unknown'],
     ),
     status: expectEnum(
       record.status,

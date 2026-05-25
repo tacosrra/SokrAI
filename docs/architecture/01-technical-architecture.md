@@ -281,8 +281,8 @@ Modulos funcionales:
 - Chat problema.
 - Render deterministico de seccion problema.
 - Chat solucion.
-- Writer de seccion solucion.
-- Reporte basico en app.
+- Render deterministico de seccion solucion.
+- Reporte basico en app (futuro Alpha).
 
 Modulos deterministicos de dominio:
 
@@ -291,6 +291,10 @@ Modulos deterministicos de dominio:
 - `problem_section_renderer`: al cerrar el carril de problema, genera la seccion `problem`
   de forma deterministica desde `ProblemDefinitionState`, fuentes internas persistidas,
   `user_answer` y gaps resueltos. No usa un writer LLM separado en PR 6.
+- `solution_section_renderer`: al cerrar el carril de solucion, genera la seccion `solution`
+  de forma deterministica desde `SolutionDefinitionState`, fuentes internas persistidas,
+  `user_answer` y gaps resueltos. No introduce plan de negocio, costes, legal/regulatorio,
+  medical device, RAG, scoring, aprobacion ni reporte basico completo.
 
 Reglas de `initial_gap_analysis`:
 
@@ -304,8 +308,7 @@ Modulos IA:
 
 - `brief_extraction`.
 - `problem_definition_agent`.
-- `solution_definition_agent` (futuro Alpha).
-- `solution_section_writer` (futuro Alpha).
+- `solution_definition_agent`.
 - `basic_report_composer` (futuro Alpha).
 - `json_repair`.
 

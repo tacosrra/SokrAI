@@ -672,6 +672,24 @@ describe('parseRequestExecutionResponse', () => {
     expect(response.retryable).toBe(true);
   });
 
+  it('accepts solution recovery request kinds', () => {
+    const startResponse = parseRequestExecutionResponse({
+      request_id: 'web-solution-start-1',
+      request_kind: 'solution_start',
+      status: 'completed',
+      session_id: 'session-1',
+    });
+    const replyResponse = parseRequestExecutionResponse({
+      request_id: 'web-solution-reply-1',
+      request_kind: 'solution_reply',
+      status: 'pending',
+      session_id: 'session-1',
+    });
+
+    expect(startResponse.request_kind).toBe('solution_start');
+    expect(replyResponse.request_kind).toBe('solution_reply');
+  });
+
   it('unwraps response envelopes when the recovery endpoint is proxied', () => {
     const response = parseRequestExecutionResponse({
       response: {

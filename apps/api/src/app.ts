@@ -152,6 +152,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     const status = await recoverRequestExecution({
       requestId: params.requestId,
       problemDefinitionService,
+      solutionDefinitionService,
       sessionStore,
     });
 
@@ -374,6 +375,7 @@ async function recoverRequestExecution(params: {
   requestId: string;
   sessionStore: SessionStore;
   problemDefinitionService: ProblemDefinitionService;
+  solutionDefinitionService: SolutionDefinitionService;
 }) {
   const currentStatus = await params.sessionStore.getRequestExecutionStatus(params.requestId);
 
@@ -435,6 +437,39 @@ async function recoverRequestExecution(params: {
       if (
         error instanceof AppError &&
         (error.errorCode === 'reply_not_ready_for_agent' || error.errorCode === 'session_completed')
+      ) {
+        return refreshedStatus;
+      }
+
+      throw error;
+    }
+
+    return params.sessionStore.getRequestExecutionStatus(params.requestId);
+  }
+
+  if (currentStatus.request_kind === 'solution_reply' && currentStatus.session_id) {
+    try {
+      await params.solutionDefinitionService.execute({
+        context: {
+          requestId: params.requestId,
+          workflowVersion: 'request_recovery_v1',
+        },
+        sessionId: currentStatus.session_id,
+        trigger: 'reply',
+      });
+    } catch (error) {
+      const refreshedStatus = await params.sessionStore.getRequestExecutionStatus(params.requestId);
+
+      if (refreshedStatus.status !== 'pending') {
+        return refreshedStatus;
+      }
+
+      if (
+        error instanceof AppError &&
+        (
+          error.errorCode === 'solution_reply_not_ready_for_agent' ||
+          error.errorCode === 'solution_start_already_completed'
+        )
       ) {
         return refreshedStatus;
       }

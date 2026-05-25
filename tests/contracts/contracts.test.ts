@@ -128,12 +128,13 @@ describe('contract schemas', () => {
   it('accepts canonical request recovery envelopes', () => {
     const recovered = assertRequestExecutionResponse({
       request_id: 'web-start-1',
-      request_kind: 'proposal_start',
+      request_kind: 'solution_reply',
       status: 'completed',
       session_id: 'session-1',
     });
 
     expect(recovered.status).toBe('completed');
+    expect(recovered.request_kind).toBe('solution_reply');
   });
 
   it('accepts a valid proposal reply request fixture', async () => {

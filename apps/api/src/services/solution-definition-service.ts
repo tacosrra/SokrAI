@@ -53,6 +53,8 @@ export class SolutionDefinitionService {
     const chat = await this.ensureSolutionChat(session);
     const activeTurn = this.getActiveTurn(chat.turns, chat.active_turn_id);
 
+    this.assertStartDoesNotReopenCompletedChat(command, chat.chat_status);
+
     if (command.trigger === 'start' && activeTurn) {
       throw new AppError(
         409,
@@ -125,6 +127,8 @@ export class SolutionDefinitionService {
           const lockedProblemSection = await this.requireProblemSection(lockedSession.id, client);
           const lockedChat = await this.ensureSolutionChat(lockedSession, client);
           const lockedActiveTurn = this.getActiveTurn(lockedChat.turns, lockedChat.active_turn_id);
+
+          this.assertStartDoesNotReopenCompletedChat(command, lockedChat.chat_status);
 
           if (command.trigger === 'start' && lockedActiveTurn) {
             throw new AppError(
@@ -201,11 +205,39 @@ export class SolutionDefinitionService {
           });
         });
     } catch (error) {
+      const recoveredAfterConflict = await this.recoverExistingResponseAfterConflict(
+        command.sessionId,
+        requestId,
+        error,
+      );
+
+      if (recoveredAfterConflict) {
+        return recoveredAfterConflict;
+      }
+
       if (error instanceof ModelOutputError || error instanceof AppError) {
         await this.persistFailure(command, session, activeTurn, error);
       }
 
       throw error;
+    }
+  }
+
+  private assertStartDoesNotReopenCompletedChat(
+    command: RunSolutionDefinitionCommand,
+    chatStatus: string,
+  ): void {
+    if (
+      command.trigger === 'start' &&
+      (chatStatus === 'completed' || chatStatus === 'ready_to_generate')
+    ) {
+      throw new AppError(
+        409,
+        'solution_start_already_completed',
+        'The solution chat has already completed',
+        false,
+        command.sessionId,
+      );
     }
   }
 
@@ -614,6 +646,18 @@ export class SolutionDefinitionService {
     return this.buildResponseFromRun(sessionId, existingRun);
   }
 
+  private async recoverExistingResponseAfterConflict(
+    sessionId: string,
+    requestId: string | undefined,
+    error: unknown,
+  ): Promise<SolutionDefinitionRunResponse | null> {
+    if (!requestId || !isUniqueViolation(error)) {
+      return null;
+    }
+
+    return this.findExistingResponse(sessionId, requestId);
+  }
+
   private toStoredAgentRunError(run: AgentRunRecord, sessionId: string): AppError {
     const statusCode = run.status === 'model_failed' ? 504 : 502;
 
@@ -755,5 +799,14 @@ function isUniqueViolationForConstraint(error: unknown, constraintName: string):
       (error as { code?: unknown }).code === '23505' &&
       'constraint' in error &&
       (error as { constraint?: unknown }).constraint === constraintName,
+  );
+}
+
+function isUniqueViolation(error: unknown): error is { code: string } {
+  return Boolean(
+    error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      (error as { code?: unknown }).code === '23505',
   );
 }

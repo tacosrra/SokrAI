@@ -136,7 +136,7 @@ export interface ProposalSourceRecord {
 
 export interface RequestExecutionLookup {
   request_id: string;
-  request_kind: 'proposal_start' | 'proposal_reply' | 'unknown';
+  request_kind: 'proposal_start' | 'proposal_reply' | 'solution_start' | 'solution_reply' | 'unknown';
   status: 'pending' | 'completed' | 'failed' | 'not_found';
   session_id?: string;
   error_code?: string;
@@ -149,6 +149,11 @@ interface AgentRunStatusLookup {
   status: AgentRunRecord['status'];
   error_code: string | null;
   error_message: string | null;
+}
+
+interface AlphaChatTurnStatusLookup {
+  proposal_id: string;
+  turn_status: 'awaiting_user' | 'processing' | 'resolved' | 'failed' | 'skipped';
 }
 
 export class SessionStore {
@@ -884,6 +889,50 @@ export class SessionStore {
       };
     }
 
+    const solutionReplyTurn = await this.findAlphaTurnByAnswerRequestId(requestId, 'solution');
+
+    if (solutionReplyTurn) {
+      const solutionDefinitionRun = await this.findLatestAgentRunStatus(requestId, 'solution_definition');
+
+      if (solutionDefinitionRun) {
+        return toRequestExecutionFromRun(requestId, 'solution_reply', solutionDefinitionRun);
+      }
+
+      if (solutionReplyTurn.turn_status === 'resolved') {
+        return {
+          request_id: requestId,
+          request_kind: 'solution_reply',
+          status: 'completed',
+          session_id: solutionReplyTurn.proposal_id,
+        };
+      }
+
+      if (solutionReplyTurn.turn_status === 'failed') {
+        return {
+          request_id: requestId,
+          request_kind: 'solution_reply',
+          status: 'failed',
+          session_id: solutionReplyTurn.proposal_id,
+          error_code: 'solution_reply_processing_failed',
+          safe_message: 'The solution reply was persisted but the turn failed before completing',
+          retryable: true,
+        };
+      }
+
+      return {
+        request_id: requestId,
+        request_kind: 'solution_reply',
+        status: 'pending',
+        session_id: solutionReplyTurn.proposal_id,
+      };
+    }
+
+    const solutionDefinitionRun = await this.findLatestAgentRunStatus(requestId, 'solution_definition');
+
+    if (solutionDefinitionRun) {
+      return toRequestExecutionFromRun(requestId, 'solution_start', solutionDefinitionRun);
+    }
+
     return {
       request_id: requestId,
       request_kind: 'unknown',
@@ -904,6 +953,23 @@ export class SessionStore {
         'LIMIT 1',
       ].join(' '),
       [requestId, runPurpose],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+  private async findAlphaTurnByAnswerRequestId(
+    requestId: string,
+    module: 'problem' | 'solution',
+  ): Promise<AlphaChatTurnStatusLookup | null> {
+    const result = await this.database.query<AlphaChatTurnStatusLookup>(
+      [
+        'SELECT proposal_id, turn_status',
+        'FROM chat_turns',
+        'WHERE answer_request_id = $1 AND module = $2',
+        'LIMIT 1',
+      ].join(' '),
+      [requestId, module],
     );
 
     return result.rows[0] ?? null;

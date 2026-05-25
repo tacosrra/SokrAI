@@ -419,6 +419,19 @@ describe('proposal flow integration', () => {
       method: 'GET',
       url: `/api/v1/sessions/${startResult.body.session_id}`,
     });
+    const solutionStartStatus = await app.inject({
+      method: 'GET',
+      url: '/api/v1/requests/req-solution-start',
+    });
+    const solutionReplyStatus = await app.inject({
+      method: 'GET',
+      url: '/api/v1/requests/req-solution-reply',
+    });
+    const duplicateSolutionStart = await solutionStartFlow(
+      app,
+      'req-solution-start-after-complete',
+      startResult.body.session_id,
+    );
 
     expect(generatedSections.rows.map((section) => section.section_kind)).toEqual(['problem', 'solution']);
     expect(generatedSections.rows.find((section) => section.section_kind === 'solution')?.content_markdown).toContain('## Solution summary');
@@ -436,6 +449,113 @@ describe('proposal flow integration', () => {
     expect(audit.json().generated_sections.map((section: { section_kind: string }) => section.section_kind)).toEqual(
       expect.arrayContaining(['problem', 'solution']),
     );
+    expect(solutionStartStatus.json()).toMatchObject({
+      request_id: 'req-solution-start',
+      request_kind: 'solution_start',
+      status: 'completed',
+      session_id: startResult.body.session_id,
+    });
+    expect(solutionReplyStatus.json()).toMatchObject({
+      request_id: 'req-solution-reply',
+      request_kind: 'solution_reply',
+      status: 'completed',
+      session_id: startResult.body.session_id,
+    });
+    expect(duplicateSolutionStart.statusCode).toBe(409);
+    expect(duplicateSolutionStart.body).toMatchObject({
+      error_code: 'solution_start_already_completed',
+    });
+  });
+
+  it('replays solution reply request ids without duplicating answer side effects', async () => {
+    const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
+    const doneProblemTurn = await readFixture('expected', 'problem-definition.done.json');
+    const continueSolutionTurn = await readFixture('expected', 'solution-definition.continue.json');
+    const doneSolutionTurn = await readFixture('expected', 'solution-definition.done.json');
+    const startAgentTurn = {
+      agent_status: 'continue',
+      diagnosis: ['Falta identificar con precision quien responde hoy por el problema'],
+      updated_problem_definition: {
+        problem_owner: '',
+        problem_statement: structuredBrief.problem_statement,
+        evidence_of_problem: structuredBrief.evidence_of_problem,
+        scope: structuredBrief.scope,
+        current_alternatives: structuredBrief.current_alternatives,
+        assumptions: structuredBrief.assumptions,
+        ambiguities_remaining: structuredBrief.ambiguities,
+      },
+      next_question: '¿Qué equipo o responsable responde hoy por este problema en urgencias?',
+      completion_reason: '',
+    };
+
+    ({ app } = await buildTestApp(
+      new QueueLanguageModelClient([
+        JSON.stringify(structuredBrief),
+        JSON.stringify(startAgentTurn),
+        JSON.stringify(doneProblemTurn),
+        JSON.stringify(continueSolutionTurn),
+        JSON.stringify(doneSolutionTurn),
+      ]),
+    ));
+
+    const strongProposal = await readFixture('start', 'strong-proposal.json');
+    const strongAnswer = await readFixture('reply', 'strong-answer.json');
+    const solutionAnswer = await readFixture('reply', 'solution-workflow-change.json');
+
+    const startResult = await startFlow(app, 'req-start-solution-retry', strongProposal);
+    await replyFlow(app, 'req-problem-done-solution-retry', startResult.body.session_id, strongAnswer);
+    await solutionStartFlow(app, 'req-solution-start-retry', startResult.body.session_id);
+
+    const first = await solutionReplyFlow(
+      app,
+      'req-solution-retry',
+      startResult.body.session_id,
+      solutionAnswer,
+    );
+    const secondAppend = await appendSolutionReply(app, 'req-solution-retry', {
+      request_id: 'req-solution-retry',
+      session_id: startResult.body.session_id,
+      answer: solutionAnswer.answer,
+    });
+    const secondRun = await app.inject({
+      method: 'POST',
+      url: '/internal/agents/solution-definition/run',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+        'x-request-id': 'req-solution-retry',
+      },
+      payload: {
+        request_id: 'req-solution-retry',
+        workflow_version: 'agent_solution_definition_v1',
+        session_id: startResult.body.session_id,
+        trigger: 'reply',
+      },
+    });
+
+    expect(first.body.agent_status).toBe('done');
+    expect(secondAppend.statusCode).toBe(200);
+    expect(secondRun.statusCode).toBe(200);
+    expect(secondRun.json().agent_status).toBe('done');
+
+    const rows = await app.services.database.query<{
+      solution_answer_sources_count: string;
+      solution_sections_count: string;
+      solution_runs_count: string;
+    }>(
+      [
+        'SELECT',
+        '  (SELECT COUNT(*)::text FROM proposal_sources WHERE proposal_id = $1 AND source_kind = \'user_answer\' AND label LIKE \'Solution answer%\') AS solution_answer_sources_count,',
+        '  (SELECT COUNT(*)::text FROM generated_sections WHERE proposal_id = $1 AND section_kind = \'solution\') AS solution_sections_count,',
+        '  (SELECT COUNT(*)::text FROM agent_runs WHERE session_id = $1 AND request_id = $2 AND run_purpose = \'solution_definition\') AS solution_runs_count',
+      ].join(' '),
+      [startResult.body.session_id, 'req-solution-retry'],
+    );
+
+    expect(rows.rows[0]).toEqual({
+      solution_answer_sources_count: '1',
+      solution_sections_count: '1',
+      solution_runs_count: '1',
+    });
   });
 
   it('reformulates after a low-information reply instead of advancing to done', async () => {

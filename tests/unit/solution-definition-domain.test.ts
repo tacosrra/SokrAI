@@ -90,6 +90,49 @@ describe('solution definition domain rules', () => {
     expect(guarded.warnings).toContain('Model drifted into a forbidden solution topic; question was replaced with a fallback');
   });
 
+  it('forces clarification when forbidden content appears in solution fields', () => {
+    const turn: SolutionDefinitionTurn = {
+      agent_status: 'done',
+      diagnosis: ['The model drifted into excluded planning.'],
+      updated_solution_definition: {
+        ...doneState,
+        value_differential: 'The solution enables pricing and market planning for the committee.',
+      },
+      next_question: '',
+      completion_reason: 'solution sufficiently defined',
+    };
+
+    const guarded = enforceSolutionTurnGuardrails(turn);
+
+    expect(guarded.turn.agent_status).toBe('continue');
+    expect(guarded.turn.next_question).toContain('?');
+    expect(guarded.turn.completion_reason).toBe('');
+    expect(guarded.warnings).toContain('Model drifted into forbidden solution content; forcing clarification');
+  });
+
+  it('forces continue when the model marks an incomplete solution as done', () => {
+    const turn: SolutionDefinitionTurn = {
+      agent_status: 'done',
+      diagnosis: ['The model thinks the solution is clear.'],
+      updated_solution_definition: {
+        ...emptySolutionDefinition(),
+        solution_summary: 'A guided intake assistant prepares structured triage handoff notes.',
+        target_user: 'Admission nursing staff',
+      },
+      next_question: '',
+      completion_reason: 'solution sufficiently defined',
+    };
+
+    const guarded = enforceSolutionTurnGuardrails(turn, 'It is used by admission nurses.');
+
+    expect(guarded.turn.agent_status).toBe('continue');
+    expect(guarded.turn.next_question).toContain('?');
+    expect(guarded.turn.completion_reason).toBe('');
+    expect(guarded.warnings).toContain(
+      'Model marked solution lane as done before completion criteria were met',
+    );
+  });
+
   it('selects solution-only gap refs and caps them at three', () => {
     const gaps: AlphaGap[] = [
       baseGap,

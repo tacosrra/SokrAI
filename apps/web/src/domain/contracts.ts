@@ -327,7 +327,7 @@ export interface ErrorResponse {
 
 export interface RequestExecutionResponse {
   request_id: string;
-  request_kind: 'proposal_start' | 'proposal_reply' | 'unknown';
+  request_kind: 'proposal_start' | 'proposal_reply' | 'solution_start' | 'solution_reply' | 'unknown';
   status: 'pending' | 'completed' | 'failed' | 'not_found';
   session_id?: string;
   error_code?: string;

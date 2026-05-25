@@ -15,9 +15,10 @@ El objetivo de esta guia es que puedas:
 
 ## 1. Que levanta esta v1
 
-La v1 implementa un unico carril operativo real:
+La v1 implementa dos carriles operativos Alpha:
 
 - `problem_definition_agent`
+- `solution_definition_agent`
 
 Y un flujo end-to-end con estos componentes:
 
@@ -125,6 +126,9 @@ Estos son los paths importantes para arrancar y probar la v1:
 - `infra/n8n/workflows/proposal_start_v1.json`
 - `infra/n8n/workflows/proposal_reply_v1.json`
 - `infra/n8n/workflows/agent_problem_definition_v1.json`
+- `infra/n8n/workflows/solution_start_v1.json`
+- `infra/n8n/workflows/solution_reply_v1.json`
+- `infra/n8n/workflows/agent_solution_definition_v1.json`
 - `contracts/schemas/`
 - `prompts/v1/`
 - `examples/proposal-start.payload.json`
@@ -498,13 +502,16 @@ Usa las credenciales:
 - usuario: valor de `N8N_BASIC_AUTH_USER`
 - password: valor de `N8N_BASIC_AUTH_PASSWORD`
 
-### 11.2 Importar los tres workflows
+### 11.2 Importar los seis workflows
 
 Importa estos archivos:
 
 - `infra/n8n/workflows/proposal_start_v1.json`
 - `infra/n8n/workflows/proposal_reply_v1.json`
 - `infra/n8n/workflows/agent_problem_definition_v1.json`
+- `infra/n8n/workflows/solution_start_v1.json`
+- `infra/n8n/workflows/solution_reply_v1.json`
+- `infra/n8n/workflows/agent_solution_definition_v1.json`
 
 ### 11.3 Que hace cada workflow
 
@@ -524,6 +531,22 @@ Importa estos archivos:
   - ejecuta un turno del agente
   - valida y persiste el resultado
 
+- `solution_start_v1`
+  - recibe `session_id` cuando el problema ya esta cerrado
+  - llama a la API interna del agente de solucion
+  - devuelve la primera pregunta del carril de solucion o el cierre si ya queda definido
+
+- `solution_reply_v1`
+  - recibe `session_id + answer`
+  - persiste la respuesta del usuario en el chat Alpha de solucion
+  - invoca la API interna del agente de solucion
+  - devuelve el nuevo estado del carril
+
+- `agent_solution_definition_v1`
+  - ejecuta un turno del agente de solucion
+  - valida y persiste el resultado
+  - al completar, genera la seccion `solution` de forma deterministica
+
 ### 11.4 Publicar workflows
 
 Despues de importarlos, publicalos en n8n.
@@ -536,6 +559,8 @@ Si no estan publicados, el webhook no respondera como esperas.
 
 - `POST http://localhost:5678/webhook/proposal-start-v1`
 - `POST http://localhost:5678/webhook/proposal-reply-v1`
+- `POST http://localhost:5678/webhook/solution-start-v1`
+- `POST http://localhost:5678/webhook/solution-reply-v1`
 
 ### API de inspeccion
 
@@ -548,6 +573,9 @@ Estas rutas existen, pero normalmente las usa n8n:
 - `POST /internal/sessions/start-context`
 - `POST /internal/sessions/append-reply`
 - `POST /internal/agents/problem-definition/run`
+- `POST /internal/sessions/solution-start`
+- `POST /internal/sessions/solution-reply`
+- `POST /internal/agents/solution-definition/run`
 - `GET /api/v1/requests/:requestId`
 - `POST /api/v1/requests/:requestId/recover`
 
@@ -645,6 +673,53 @@ Cuando el problema este suficientemente definido, el sistema devolvera:
 
 - `agent_status = "done"`
 - `next_question = ""`
+
+### 13.4 Iniciar el carril de solucion
+
+Cuando `proposal_reply_v1` devuelva `agent_status = "done"` para el problema,
+llama a `solution-start-v1` con el mismo `session_id`.
+
+```bash
+curl -sS \
+  -X POST \
+  http://localhost:5678/webhook/solution-start-v1 \
+  -H 'Content-Type: application/json' \
+  --data '{"session_id":"replace-with-session-id"}'
+```
+
+Respuesta esperada:
+
+```json
+{
+  "session_id": "uuid",
+  "stage": "solution_definition",
+  "agent_status": "continue|done|blocked",
+  "updated_solution_definition": {
+    "...": "..."
+  },
+  "diagnosis": [
+    "..."
+  ],
+  "next_question": "¿...?",
+  "completion_reason": "",
+  "warnings": []
+}
+```
+
+### 13.5 Responder turnos de solucion
+
+Llama a `solution-reply-v1` con:
+
+```bash
+curl -sS \
+  -X POST \
+  http://localhost:5678/webhook/solution-reply-v1 \
+  -H 'Content-Type: application/json' \
+  --data '{"session_id":"replace-with-session-id","answer":"La solucion prepara un resumen estructurado para el triaje y cambia el flujo de admision antes de derivar al profesional responsable."}'
+```
+
+Repite hasta `agent_status = "done"`. Al completar, `GET /api/v1/sessions/:sessionId`
+debe incluir una fila en `generated_sections` con `section_kind = "solution"`.
 
 ## 14. Probar con PDF
 
@@ -807,13 +882,14 @@ curl -i http://localhost:3001/healthz
 Luego:
 
 1. abre `http://localhost:5678`
-2. importa y publica los 3 workflows
+2. importa y publica los 6 workflows
 3. abre `http://localhost:3000`
 4. crea una propuesta nueva desde la UI
 5. guarda `session_id`
 6. responde el siguiente turno desde la UI o por webhook
-7. consulta `GET /api/v1/sessions/:sessionId`
-8. ejecuta `bash scripts/smoke-core.sh`
+7. cuando el problema quede completo, inicia y responde el carril de solucion
+8. consulta `GET /api/v1/sessions/:sessionId`
+9. ejecuta `bash scripts/smoke-core.sh`
 
 ## 18. Prueba minima esperada de negocio
 
@@ -1196,6 +1272,10 @@ Si `http://localhost:3000` carga pero al enviar una propuesta o una respuesta ap
 3. si tenias workflows importados de una version anterior, reimporta:
    - `infra/n8n/workflows/proposal_start_v1.json`
    - `infra/n8n/workflows/proposal_reply_v1.json`
+   - `infra/n8n/workflows/agent_problem_definition_v1.json`
+   - `infra/n8n/workflows/solution_start_v1.json`
+   - `infra/n8n/workflows/solution_reply_v1.json`
+   - `infra/n8n/workflows/agent_solution_definition_v1.json`
 
 Motivo:
 
@@ -1250,14 +1330,20 @@ Considera que la inicializacion esta bien hecha si puedes marcar todo esto:
 - `curl http://localhost:3001/healthz` devuelve `{"status":"ok"}`
 - `docker compose exec ollama ollama list` muestra el modelo configurado
 - `docker compose exec api pnpm migrate` termina sin error
-- has importado y publicado los 3 workflows
+- has importado y publicado los 6 workflows
 - `POST /webhook/proposal-start-v1` devuelve `session_id`
 - `POST /webhook/proposal-reply-v1` reutiliza ese `session_id`
+- `POST /webhook/solution-start-v1` inicia el carril de solucion tras completar el problema
+- `POST /webhook/solution-reply-v1` reutiliza ese `session_id`
 - `GET /api/v1/sessions/:sessionId` devuelve session, documentos, fuentes, gaps, turnos, runs,
   snapshots, eventos, `module_chats` y `generated_sections`
 - Al completar el modulo Alpha de problema, el artefacto esperado es:
   - `module_chats` contiene el chat `problem` en estado `completed` y sin turno activo
   - `generated_sections` contiene la seccion `problem` con `section_version >= 1`
+  - los eventos de auditoria incluyen la generacion de la seccion con sus `source_refs` y `gap_refs`
+- Al completar el modulo Alpha de solucion, el artefacto esperado es:
+  - `module_chats` contiene el chat `solution` en estado `completed` y sin turno activo
+  - `generated_sections` contiene la seccion `solution` con `section_version >= 1`
   - los eventos de auditoria incluyen la generacion de la seccion con sus `source_refs` y `gap_refs`
 - `pnpm verify` pasa completo
 - `bash scripts/smoke-core.sh` pasa contra el stack vivo

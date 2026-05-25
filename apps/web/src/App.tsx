@@ -38,7 +38,7 @@ const REQUEST_RECOVERY_POLL_INTERVAL_MS = 4000;
 const ACTIVE_RECOVERY_AFTER_MS = readTimeout('VITE_ACTIVE_RECOVERY_AFTER_MS', 60000);
 const MAX_CONSECUTIVE_RECOVERY_TRANSPORT_ERRORS = 5;
 
-type RecoverableRequestKind = 'proposal_start' | 'proposal_reply';
+type RecoverableRequestKind = 'proposal_start' | 'proposal_reply' | 'solution_start' | 'solution_reply';
 
 interface ModeCardProps {
   activeMode: ModeView;
@@ -514,6 +514,41 @@ export function App() {
         skipBannerOnStart: true,
       });
     } catch (error) {
+      if (isRecoverableWorkflowDeliveryError(error)) {
+        setBanner({
+          tone: 'info',
+          text:
+            error.errorCode === 'request_timeout'
+              ? `La llamada para iniciar solución venció en el navegador. Recuperando el resultado del workflow para request_id ${requestId}…`
+              : `La respuesta de inicio de solución llegó con un formato inesperado. Intentando recuperar el estado real con request_id ${requestId}…`,
+        });
+
+        try {
+          const sessionId = await recoverTimedOutRequest(requestId, 'solution_start');
+          await loadSession(sessionId, {
+            successMessage: 'Carril de solución recuperado tras completar el workflow fuera del tiempo de espera inicial.',
+            skipBannerOnStart: true,
+          });
+          return;
+        } catch (recoveryError) {
+          try {
+            await loadSession(activeAudit.session.id, {
+              successMessage: 'Se recuperó el estado de la sesión directamente desde la API tras expirar el inicio de solución.',
+              skipBannerOnStart: true,
+            });
+            return;
+          } catch {
+            // Preserve the original recovery error when the direct session refresh also fails.
+          }
+
+          setBanner({
+            tone: 'error',
+            text: mapApiError(recoveryError),
+          });
+          return;
+        }
+      }
+
       setBanner({
         tone: 'error',
         text: mapApiError(error),
@@ -547,6 +582,41 @@ export function App() {
         skipBannerOnStart: true,
       });
     } catch (error) {
+      if (isRecoverableWorkflowDeliveryError(error)) {
+        setBanner({
+          tone: 'info',
+          text:
+            error.errorCode === 'request_timeout'
+              ? `La llamada del turno de solución venció en el navegador. Recuperando el resultado del workflow para request_id ${requestId}…`
+              : `La respuesta del turno de solución llegó con un formato inesperado. Intentando recuperar el estado real con request_id ${requestId}…`,
+        });
+
+        try {
+          const sessionId = await recoverTimedOutRequest(requestId, 'solution_reply');
+          await loadSession(sessionId, {
+            successMessage: 'Turno de solución recuperado tras completar el workflow fuera del tiempo de espera inicial.',
+            skipBannerOnStart: true,
+          });
+          return;
+        } catch (recoveryError) {
+          try {
+            await loadSession(activeAudit.session.id, {
+              successMessage: 'Se recuperó el estado de la sesión directamente desde la API tras expirar el turno de solución.',
+              skipBannerOnStart: true,
+            });
+            return;
+          } catch {
+            // Preserve the original recovery error when the direct session refresh also fails.
+          }
+
+          setBanner({
+            tone: 'error',
+            text: mapApiError(recoveryError),
+          });
+          return;
+        }
+      }
+
       setBanner({
         tone: 'error',
         text: mapApiError(error),

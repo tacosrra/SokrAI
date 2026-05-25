@@ -55,6 +55,24 @@ function dedupe(items: string[]): string[] {
   return Array.from(new Set(items.map((item) => item.trim()).filter(Boolean)));
 }
 
+function solutionStateContainsForbiddenTopic(state: SolutionDefinitionState): boolean {
+  const values = [
+    state.solution_summary,
+    state.target_user,
+    state.how_it_works,
+    state.workflow_change,
+    state.current_solutions,
+    state.value_differential,
+    state.scope_limits,
+    ...state.assumptions,
+    ...state.ambiguities_remaining,
+  ];
+
+  return values.some((value) =>
+    FORBIDDEN_TOPIC_PATTERNS.some((pattern) => pattern.test(value)),
+  );
+}
+
 function isAllowedSolutionSource(source: ProposalSource): boolean {
   return source.source_kind === 'pasted_text' ||
     source.source_kind === 'uploaded_file' ||
@@ -371,6 +389,13 @@ export function enforceSolutionTurnGuardrails(
 
   if (questionContainsForbiddenTopic) {
     warnings.push('Model drifted into a forbidden solution topic; question was replaced with a fallback');
+    normalizedTurn.next_question = buildSolutionFallbackQuestion(normalizedTurn.updated_solution_definition);
+  }
+
+  if (solutionStateContainsForbiddenTopic(normalizedTurn.updated_solution_definition)) {
+    warnings.push('Model drifted into forbidden solution content; forcing clarification');
+    normalizedTurn.agent_status = 'continue';
+    normalizedTurn.completion_reason = '';
     normalizedTurn.next_question = buildSolutionFallbackQuestion(normalizedTurn.updated_solution_definition);
   }
 
