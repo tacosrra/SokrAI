@@ -37,6 +37,16 @@ const SOLUTION_FIELD_PRIORITY = [
   'assumptions',
 ] as const;
 
+const MIN_SOLUTION_SUMMARY_LENGTH = 12;
+const MIN_TARGET_USER_LENGTH = 3;
+const MIN_HOW_IT_WORKS_LENGTH = 12;
+const MIN_WORKFLOW_CHANGE_LENGTH = 12;
+const MIN_CURRENT_SOLUTIONS_LENGTH = 8;
+const MIN_VALUE_DIFFERENTIAL_LENGTH = 8;
+const MIN_SCOPE_LIMITS_LENGTH = 8;
+const MIN_ASSUMPTIONS_COUNT = 1;
+const MAX_OPEN_AMBIGUITIES_FOR_COMPLETION = 1;
+
 export interface SolutionGapStatusChange {
   gapId: string;
   gapStatus: 'in_progress' | 'resolved';
@@ -165,16 +175,18 @@ export function computeSolutionMissingInformation(solutionDefinition: SolutionDe
 }
 
 export function evaluateSolutionCompletion(solutionDefinition: SolutionDefinitionState): boolean {
+  // Alpha v1 completion is a deterministic guardrail for safe section rendering,
+  // not a qualitative score of the proposed solution.
   return (
-    hasEnoughText(solutionDefinition.solution_summary, 12) &&
-    hasEnoughText(solutionDefinition.target_user, 3) &&
-    hasEnoughText(solutionDefinition.how_it_works, 12) &&
-    hasEnoughText(solutionDefinition.workflow_change, 12) &&
-    hasEnoughText(solutionDefinition.current_solutions, 8) &&
-    hasEnoughText(solutionDefinition.value_differential, 8) &&
-    hasEnoughText(solutionDefinition.scope_limits, 8) &&
-    solutionDefinition.assumptions.length >= 1 &&
-    solutionDefinition.ambiguities_remaining.length <= 1
+    hasEnoughText(solutionDefinition.solution_summary, MIN_SOLUTION_SUMMARY_LENGTH) &&
+    hasEnoughText(solutionDefinition.target_user, MIN_TARGET_USER_LENGTH) &&
+    hasEnoughText(solutionDefinition.how_it_works, MIN_HOW_IT_WORKS_LENGTH) &&
+    hasEnoughText(solutionDefinition.workflow_change, MIN_WORKFLOW_CHANGE_LENGTH) &&
+    hasEnoughText(solutionDefinition.current_solutions, MIN_CURRENT_SOLUTIONS_LENGTH) &&
+    hasEnoughText(solutionDefinition.value_differential, MIN_VALUE_DIFFERENTIAL_LENGTH) &&
+    hasEnoughText(solutionDefinition.scope_limits, MIN_SCOPE_LIMITS_LENGTH) &&
+    solutionDefinition.assumptions.length >= MIN_ASSUMPTIONS_COUNT &&
+    solutionDefinition.ambiguities_remaining.length <= MAX_OPEN_AMBIGUITIES_FOR_COMPLETION
   );
 }
 

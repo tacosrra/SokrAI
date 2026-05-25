@@ -192,7 +192,7 @@ describe('requestJson transport options', () => {
     );
     stubGlobal('fetch', fetchMock);
 
-    await replySolution({
+    const result = await replySolution({
       request_id: 'web-solution-reply-1',
       session_id: 'session-1',
       answer: 'The solution changes intake by preparing a structured handoff.',
@@ -201,9 +201,48 @@ describe('requestJson transport options', () => {
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
 
     expect(url).toBe('/webhook/solution-reply-v1');
+    expect(init.method).toBe('POST');
     expect(init.headers).toEqual({
       'Content-Type': 'application/json',
       'x-request-id': 'web-solution-reply-1',
+    });
+    expect(JSON.parse(String(init.body))).toEqual({
+      request_id: 'web-solution-reply-1',
+      session_id: 'session-1',
+      answer: 'The solution changes intake by preparing a structured handoff.',
+    });
+    expect(result).toEqual(SOLUTION_REPLY_RESPONSE);
+  });
+
+  it('rejects solution reply responses that do not match the response parser', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ...SOLUTION_REPLY_RESPONSE,
+          updated_solution_definition: {
+            ...SOLUTION_REPLY_RESPONSE.updated_solution_definition,
+            assumptions: 'not-an-array',
+          },
+        }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      ),
+    );
+    stubGlobal('fetch', fetchMock);
+
+    await expect(
+      replySolution({
+        request_id: 'web-solution-reply-2',
+        session_id: 'session-1',
+        answer: 'The solution changes intake by preparing a structured handoff.',
+      }),
+    ).rejects.toMatchObject({
+      errorCode: 'invalid_response_contract',
+      statusCode: 502,
     });
   });
 });
