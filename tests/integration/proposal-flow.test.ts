@@ -343,6 +343,89 @@ describe('proposal flow integration', () => {
     expect(lastRun.rows[0]?.validated_output_json.diagnosis.length).toBeLessThanOrEqual(3);
   });
 
+  it('blocks premature initial problem completion and opens a clarification question', async () => {
+    const demoBrief = {
+      project_title: 'Asistente administrativo ficticio',
+      goal: 'Ordenar solicitudes administrativas antes de revision humana',
+      target_user: 'Personal administrativo interno',
+      problem_owner: '',
+      problem_statement: 'Solicitudes administrativas mezclan tramites y sintomas imprecisos.',
+      evidence_of_problem: 'En una semana simulada hubo 240 solicitudes y derivaciones innecesarias a enfermeria.',
+      current_alternatives: 'El personal administrativo lee cada mensaje y deriva a enfermeria cuando duda.',
+      scope: 'Centro de salud ficticio, adultos y mensajes administrativos internos.',
+      constraints_known: ['No usar datos reales de pacientes'],
+      assumptions: [],
+      ambiguities: [
+        'No esta claro cual es exactamente el cuello de botella principal',
+        'No esta claro quien debe ser el owner del problema',
+        'No esta claro que evidencia minima necesitan',
+      ],
+      missing_information: ['problem_owner', 'assumptions'],
+    };
+    const prematureDone = {
+      agent_status: 'done',
+      diagnosis: ['El modelo intenta cerrar desde la propuesta inicial.'],
+      updated_problem_definition: {
+        problem_owner: 'Personal administrativo del centro de salud',
+        problem_statement: demoBrief.problem_statement,
+        evidence_of_problem: demoBrief.evidence_of_problem,
+        scope: demoBrief.scope,
+        current_alternatives: demoBrief.current_alternatives,
+        assumptions: ['El cuello de botella puede ser clasificacion, falta de datos o ausencia de flujo comun.'],
+        ambiguities_remaining: [],
+      },
+      next_question: '',
+      completion_reason: 'problem sufficiently defined',
+    };
+
+    ({ app } = await buildTestApp(
+      new QueueLanguageModelClient([
+        JSON.stringify(demoBrief),
+        JSON.stringify(prematureDone),
+      ]),
+    ));
+
+    const demoProposal = {
+      project_title: 'Asistente administrativo ficticio',
+      goal: 'Ordenar solicitudes administrativas antes de revision humana',
+      proposal_text: [
+        'Un centro de salud ficticio recibe muchas consultas administrativas por telefono y por portal digital.',
+        'Algunas son simples, pero otras mencionan sintomas de forma imprecisa.',
+        'La idea inicial es usar IA para ordenar estas solicitudes antes de que una persona las revise.',
+        'Aun no sabemos cual es exactamente el cuello de botella principal, quien debe ser el owner del problema, que evidencia minima necesitamos ni que parte del flujo deberia cambiar.',
+      ].join(' '),
+    };
+
+    const startResult = await startFlow(app, 'req-start-premature-problem', demoProposal);
+
+    expect(startResult.statusCode).toBe(200);
+    expect(startResult.body.agent_status).toBe('continue');
+    expect(startResult.body.next_question).toContain('?');
+    expect(startResult.body.warnings).toContain(
+      'Model marked the lane as done while unresolved clarification signals remained',
+    );
+
+    const sideEffects = await app.services.database.query<{
+      generated_sections_count: string;
+      problem_turns_count: string;
+      problem_chat_status: string;
+    }>(
+      [
+        'SELECT',
+        '  (SELECT COUNT(*)::text FROM generated_sections WHERE proposal_id = $1 AND section_kind = \'problem\') AS generated_sections_count,',
+        '  (SELECT COUNT(*)::text FROM chat_turns WHERE proposal_id = $1 AND module = \'problem\') AS problem_turns_count,',
+        '  (SELECT chat_status FROM module_chats WHERE proposal_id = $1 AND module = \'problem\') AS problem_chat_status',
+      ].join(' '),
+      [startResult.body.session_id],
+    );
+
+    expect(sideEffects.rows[0]).toEqual({
+      generated_sections_count: '0',
+      problem_turns_count: '1',
+      problem_chat_status: 'waiting_for_user',
+    });
+  });
+
   it('continues from generated problem section into generated solution section', async () => {
     const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
     const doneProblemTurn = await readFixture('expected', 'problem-definition.done.json');
@@ -464,6 +547,97 @@ describe('proposal flow integration', () => {
     expect(duplicateSolutionStart.statusCode).toBe(409);
     expect(duplicateSolutionStart.body).toMatchObject({
       error_code: 'solution_start_already_completed',
+    });
+  });
+
+  it('blocks premature initial solution completion when raw output asks for clarification', async () => {
+    const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
+    const doneProblemTurn = await readFixture('expected', 'problem-definition.done.json');
+    const startAgentTurn = {
+      agent_status: 'continue',
+      diagnosis: ['Falta identificar con precision quien responde hoy por el problema'],
+      updated_problem_definition: {
+        problem_owner: '',
+        problem_statement: structuredBrief.problem_statement,
+        evidence_of_problem: structuredBrief.evidence_of_problem,
+        scope: structuredBrief.scope,
+        current_alternatives: structuredBrief.current_alternatives,
+        assumptions: structuredBrief.assumptions,
+        ambiguities_remaining: structuredBrief.ambiguities,
+      },
+      next_question: '¿Qué equipo o responsable responde hoy por este problema en urgencias?',
+      completion_reason: '',
+    };
+    const contradictorySolutionDone = {
+      agent_status: 'done',
+      diagnosis: [
+        'The solution summary is not clear yet.',
+        'Target users need clarification.',
+        'Operational steps need details.',
+      ],
+      updated_solution_definition: {
+        solution_summary: 'A guided assistant prepares structured administrative request summaries.',
+        target_user: 'Administrative intake staff',
+        how_it_works: 'It reads a fictitious request, asks bounded clarification questions, and prepares a review summary.',
+        workflow_change: 'Staff review the structured summary before deciding whether to resolve or escalate.',
+        current_solutions: 'Current work relies on manual message reading and informal escalation.',
+        value_differential: 'The assistant makes review more consistent without taking clinical decisions.',
+        scope_limits: 'The first version covers fictitious adult administrative messages and excludes diagnosis.',
+        assumptions: ['Staff can review every suggested classification before acting.'],
+        ambiguities_remaining: [],
+      },
+      next_question: 'Who exactly uses the assistant and what operational step changes first?',
+      completion_reason: 'The next step is to provide more details.',
+    };
+
+    ({ app } = await buildTestApp(
+      new QueueLanguageModelClient([
+        JSON.stringify(structuredBrief),
+        JSON.stringify(startAgentTurn),
+        JSON.stringify(doneProblemTurn),
+        JSON.stringify(contradictorySolutionDone),
+      ]),
+    ));
+
+    const strongProposal = await readFixture('start', 'strong-proposal.json');
+    const strongAnswer = await readFixture('reply', 'strong-answer.json');
+
+    const startResult = await startFlow(app, 'req-start-premature-solution', strongProposal);
+    await replyFlow(app, 'req-problem-done-premature-solution', startResult.body.session_id, strongAnswer);
+
+    const solutionStartResult = await solutionStartFlow(
+      app,
+      'req-solution-premature-start',
+      startResult.body.session_id,
+    );
+
+    expect(solutionStartResult.statusCode).toBe(200);
+    expect(solutionStartResult.body.agent_status).toBe('continue');
+    expect(solutionStartResult.body.next_question).toBe(
+      'Who exactly uses the assistant and what operational step changes first?',
+    );
+    expect(solutionStartResult.body.warnings).toContain(
+      'Model marked solution lane as done while unresolved clarification signals remained',
+    );
+
+    const sideEffects = await app.services.database.query<{
+      solution_sections_count: string;
+      solution_turns_count: string;
+      solution_chat_status: string;
+    }>(
+      [
+        'SELECT',
+        '  (SELECT COUNT(*)::text FROM generated_sections WHERE proposal_id = $1 AND section_kind = \'solution\') AS solution_sections_count,',
+        '  (SELECT COUNT(*)::text FROM chat_turns WHERE proposal_id = $1 AND module = \'solution\') AS solution_turns_count,',
+        '  (SELECT chat_status FROM module_chats WHERE proposal_id = $1 AND module = \'solution\') AS solution_chat_status',
+      ].join(' '),
+      [startResult.body.session_id],
+    );
+
+    expect(sideEffects.rows[0]).toEqual({
+      solution_sections_count: '0',
+      solution_turns_count: '1',
+      solution_chat_status: 'waiting_for_user',
     });
   });
 

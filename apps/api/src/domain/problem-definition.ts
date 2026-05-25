@@ -25,6 +25,48 @@ const FORBIDDEN_TOPIC_PATTERNS = [
   /\bimplement/i,
 ];
 
+const PROBLEM_CLARIFICATION_DIAGNOSIS_TERMS = [
+  'not clear',
+  'unclear',
+  'needs clarification',
+  'needs details',
+  'missing detail',
+  'missing information',
+  'clarify',
+  'ambiguous',
+  'not specified',
+  'falta',
+  'no esta claro',
+  'no queda claro',
+  'necesita aclar',
+  'requiere aclar',
+  'ambiguo',
+  'ambigua',
+  'no se especific',
+];
+
+const INITIAL_BLOCKING_PROBLEM_GAP_TERMS = [
+  'problem_owner',
+  'evidence_of_problem',
+  'assumptions',
+  'responsable',
+  'owner',
+  'cuello de botella',
+  'bottleneck',
+  'evidencia',
+  'evidence',
+  'validacion',
+  'validation',
+  'medicion',
+  'medida',
+  'metrica',
+  'metric',
+  'supuesto',
+  'assumption',
+  'datos minimos',
+  'minimum data',
+];
+
 const PROBLEM_FIELD_PRIORITY = [
   'problem_owner',
   'problem_statement',
@@ -164,6 +206,49 @@ function removeResolvedStaleAmbiguities(
     ...problemDefinition,
     ambiguities_remaining: filteredAmbiguities,
   };
+}
+
+function problemStateFromBrief(brief: StructuredBrief): ProblemDefinitionState {
+  return {
+    problem_owner: brief.problem_owner,
+    problem_statement: brief.problem_statement,
+    evidence_of_problem: brief.evidence_of_problem,
+    scope: brief.scope,
+    current_alternatives: brief.current_alternatives,
+    assumptions: [...brief.assumptions],
+    ambiguities_remaining: [...brief.ambiguities],
+  };
+}
+
+function diagnosisRequestsProblemClarification(diagnosis: string[]): boolean {
+  return containsAny(diagnosis.join(' '), PROBLEM_CLARIFICATION_DIAGNOSIS_TERMS);
+}
+
+function initialBriefHasBlockingProblemGaps(brief: StructuredBrief): boolean {
+  return containsAny(
+    [...brief.ambiguities, ...brief.missing_information].join(' '),
+    INITIAL_BLOCKING_PROBLEM_GAP_TERMS,
+  );
+}
+
+function isResolvedStaleProblemQuestion(
+  question: string,
+  problemDefinition: ProblemDefinitionState,
+  latestAnswer?: string,
+): boolean {
+  if (!latestAnswer || !evaluateCompletion(problemDefinition)) {
+    return false;
+  }
+
+  return containsAny(question, [
+    'cuello de botella',
+    'bottleneck',
+    'datos minimos',
+    'minimum data',
+    'parte del flujo',
+    'workflow',
+    'flujo',
+  ]);
 }
 
 function isInternalSource(source: ProposalSource): boolean {
@@ -486,6 +571,7 @@ export function enforceTurnGuardrails(
   brief: StructuredBrief,
   turn: ProblemDefinitionTurn,
   latestAnswer?: string,
+  options: { isInitialRun?: boolean } = {},
 ): {
   turn: ProblemDefinitionTurn;
   warnings: string[];
@@ -508,6 +594,7 @@ export function enforceTurnGuardrails(
     updatedProblemDefinition,
     detectedGaps,
   } = applyTurnToBrief(brief, normalizedTurn, latestAnswer);
+  normalizedTurn.updated_problem_definition = updatedProblemDefinition;
 
   const latestAnswerIsVague = latestAnswer ? isVagueAnswer(latestAnswer) : false;
   const nextQuestionContainsForbiddenTopic = FORBIDDEN_TOPIC_PATTERNS.some((pattern) =>
@@ -526,6 +613,30 @@ export function enforceTurnGuardrails(
   }
 
   const isComplete = evaluateCompletion(updatedProblemDefinition);
+  const rawDoneHadMeaningfulQuestion =
+    turn.agent_status === 'done' &&
+    nextQuestion.length > 0 &&
+    !isResolvedStaleProblemQuestion(nextQuestion, updatedProblemDefinition, latestAnswer);
+  const rawDoneHadMissingDetailsDiagnosis =
+    turn.agent_status === 'done' &&
+    diagnosisRequestsProblemClarification(normalizedTurn.diagnosis);
+  const initialRunHasOpenBlockingGaps =
+    turn.agent_status === 'done' &&
+    options.isInitialRun === true &&
+    !latestAnswer &&
+    initialBriefHasBlockingProblemGaps(brief);
+
+  if (
+    normalizedTurn.agent_status === 'done' &&
+    (rawDoneHadMeaningfulQuestion || rawDoneHadMissingDetailsDiagnosis || initialRunHasOpenBlockingGaps)
+  ) {
+    warnings.push('Model marked the lane as done while unresolved clarification signals remained');
+    normalizedTurn.agent_status = 'continue';
+    normalizedTurn.completion_reason = '';
+    normalizedTurn.next_question = normalizedTurn.next_question || buildFallbackQuestion(
+      initialRunHasOpenBlockingGaps ? problemStateFromBrief(brief) : updatedProblemDefinition,
+    );
+  }
 
   if (normalizedTurn.agent_status === 'done' && !isComplete) {
     warnings.push('Model marked the lane as done before completion criteria were met');
