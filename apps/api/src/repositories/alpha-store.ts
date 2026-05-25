@@ -123,6 +123,7 @@ export interface ChatTurnRecord {
   turn_seq: number;
   question_text: string;
   answer_text: string | null;
+  answer_request_id: string | null;
   turn_status: ChatTurnStatus;
   agent_status: 'continue' | 'done' | 'blocked' | null;
   diagnosis_json: string[];
@@ -609,12 +610,17 @@ export class AlphaStore {
 
   async updateChatTurnAnswer(
     executor: SqlExecutor,
-    params: { turnId: string; answerText: string },
+    params: { turnId: string; answerText: string; answerRequestId?: string },
   ): Promise<ChatTurn> {
     const result = await runQuery<ChatTurnRecord>(
       executor,
-      'UPDATE chat_turns SET answer_text = $2, turn_status = \'processing\' WHERE id = $1 RETURNING *',
-      [params.turnId, params.answerText],
+      [
+        'UPDATE chat_turns',
+        'SET answer_text = $2, answer_request_id = COALESCE($3, answer_request_id), turn_status = \'processing\'',
+        'WHERE id = $1',
+        'RETURNING *',
+      ].join(' '),
+      [params.turnId, params.answerText, params.answerRequestId ?? null],
     );
     const turn = result.rows[0];
 
@@ -623,6 +629,20 @@ export class AlphaStore {
     }
 
     return mapChatTurn(turn);
+  }
+
+  async findChatTurnByAnswerRequestId(
+    requestId: string,
+    executor?: SqlExecutor,
+  ): Promise<ChatTurn | null> {
+    const queryable = executor ?? this.database;
+    const result = await runQuery<ChatTurnRecord>(
+      queryable,
+      'SELECT * FROM chat_turns WHERE answer_request_id = $1 LIMIT 1',
+      [requestId],
+    );
+
+    return result.rows[0] ? mapChatTurn(result.rows[0]) : null;
   }
 
   async resolveChatTurn(

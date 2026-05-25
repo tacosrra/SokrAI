@@ -68,7 +68,7 @@ export interface AgentRunRecord {
   session_id: string;
   turn_seq: number | null;
   request_id: string | null;
-  run_purpose: 'brief_extraction' | 'problem_definition' | 'json_repair';
+  run_purpose: 'brief_extraction' | 'problem_definition' | 'solution_definition' | 'json_repair';
   agent_name: string;
   prompt_name: string;
   prompt_version: string;
@@ -362,7 +362,7 @@ export class SessionStore {
       turnSeq?: number;
       parentRunId?: string;
       requestId?: string;
-      runPurpose: 'brief_extraction' | 'problem_definition' | 'json_repair';
+      runPurpose: AgentRunRecord['run_purpose'];
       agentName: string;
       workflowName: string;
       workflowVersion: string;

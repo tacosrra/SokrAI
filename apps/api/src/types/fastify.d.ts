@@ -8,6 +8,8 @@ import type { LlmOrchestrator } from '../services/llm-orchestrator';
 import type { ProblemDefinitionService } from '../services/problem-definition-service';
 import type { ProposalReplyService } from '../services/proposal-reply-service';
 import type { ProposalStartService } from '../services/proposal-start-service';
+import type { SolutionDefinitionService } from '../services/solution-definition-service';
+import type { SolutionReplyService } from '../services/solution-reply-service';
 import type { Logger } from '../utils/logger';
 
 declare module 'fastify' {
@@ -24,6 +26,8 @@ declare module 'fastify' {
       proposalStartService: ProposalStartService;
       proposalReplyService: ProposalReplyService;
       problemDefinitionService: ProblemDefinitionService;
+      solutionReplyService: SolutionReplyService;
+      solutionDefinitionService: SolutionDefinitionService;
     };
   }
 }

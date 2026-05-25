@@ -18,6 +18,11 @@ import {
   assertProposalStartResponse,
   assertRequestExecutionResponse,
   assertSchema,
+  assertSolutionDefinitionTurn,
+  assertSolutionReplyRequest,
+  assertSolutionReplyResponse,
+  assertSolutionStartRequest,
+  assertSolutionStartResponse,
   assertStructuredBrief,
   schemaDocuments,
   schemaIds,
@@ -55,6 +60,11 @@ describe('contract schemas', () => {
     expect(assertProblemDefinitionTurn(fixture)).toBeTruthy();
   });
 
+  it('accepts solution-definition turn fixtures', async () => {
+    expect(assertSolutionDefinitionTurn(await readFixture('expected', 'solution-definition.done.json'))).toBeTruthy();
+    expect(assertSolutionDefinitionTurn(await readFixture('expected', 'solution-definition.continue.json'))).toBeTruthy();
+  });
+
   it('accepts canonical response envelopes', async () => {
     const startResponse = assertProposalStartResponse({
       session_id: 'session-1',
@@ -78,6 +88,40 @@ describe('contract schemas', () => {
     });
 
     expect(startResponse.stage).toBe('problem_definition');
+    expect(replyResponse.agent_status).toBe('done');
+  });
+
+  it('accepts canonical solution request and response envelopes', async () => {
+    const solutionDefinition = (await readFixture('expected', 'solution-definition.done.json')).updated_solution_definition;
+
+    expect(assertSolutionStartRequest({
+      request_id: 'solution-start-1',
+      session_id: 'session-1',
+    })).toBeTruthy();
+    expect(assertSolutionReplyRequest(await readFixture('reply', 'solution-workflow-change.json'))).toBeTruthy();
+
+    const startResponse = assertSolutionStartResponse({
+      session_id: 'session-1',
+      stage: 'solution_definition',
+      agent_status: 'continue',
+      updated_solution_definition: solutionDefinition,
+      diagnosis: ['Solution lane started'],
+      next_question: 'What does the solution do?',
+      completion_reason: '',
+      warnings: [],
+    });
+    const replyResponse = assertSolutionReplyResponse({
+      session_id: 'session-1',
+      stage: 'solution_definition',
+      agent_status: 'done',
+      updated_solution_definition: solutionDefinition,
+      diagnosis: ['Solution is clear'],
+      next_question: '',
+      completion_reason: 'solution sufficiently defined',
+      warnings: [],
+    });
+
+    expect(startResponse.stage).toBe('solution_definition');
     expect(replyResponse.agent_status).toBe('done');
   });
 
@@ -214,6 +258,9 @@ describe('contract schemas', () => {
       ['proposal_start_v1.json', 'Webhook_StartProposal'],
       ['proposal_reply_v1.json', 'Webhook_ProposalReply'],
       ['agent_problem_definition_v1.json', 'Webhook_AgentProblemDefinition'],
+      ['solution_start_v1.json', 'Webhook_SolutionStart'],
+      ['solution_reply_v1.json', 'Webhook_SolutionReply'],
+      ['agent_solution_definition_v1.json', 'Webhook_AgentSolutionDefinition'],
     ];
 
     for (const [file, webhookNodeName] of workflowExpectations) {

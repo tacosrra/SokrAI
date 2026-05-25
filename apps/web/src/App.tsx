@@ -6,7 +6,9 @@ import {
   fetchRequestExecution,
   recoverRequestExecution,
   fetchSessionAudit,
+  replySolution,
   replySession,
+  startSolution,
   startSession,
 } from './lib/api';
 import { mapApiError } from './lib/feedback';
@@ -60,7 +62,7 @@ function writeSessionToUrl(sessionId: string) {
   window.history.replaceState({}, '', url);
 }
 
-function createClientRequestId(prefix: 'start' | 'reply'): string {
+function createClientRequestId(prefix: 'start' | 'reply' | 'solution-start' | 'solution-reply'): string {
   return `web-${prefix}-${crypto.randomUUID()}`;
 }
 
@@ -489,6 +491,71 @@ export function App() {
     }
   }
 
+  async function handleStartSolution() {
+    if (!activeAudit) {
+      return;
+    }
+
+    const requestId = createClientRequestId('solution-start');
+    setIsReplying(true);
+    setBanner({
+      tone: 'info',
+      text: 'Iniciando el carril de solución y generando la primera pregunta…',
+    });
+
+    try {
+      const result = await startSolution({
+        request_id: requestId,
+        session_id: activeAudit.session.id,
+      });
+
+      await loadSession(result.session_id, {
+        successMessage: `Carril de solución iniciado. Agent status: ${result.agent_status}.`,
+        skipBannerOnStart: true,
+      });
+    } catch (error) {
+      setBanner({
+        tone: 'error',
+        text: mapApiError(error),
+      });
+    } finally {
+      setIsReplying(false);
+    }
+  }
+
+  async function handleSolutionReply(answer: string) {
+    if (!activeAudit) {
+      return;
+    }
+
+    const requestId = createClientRequestId('solution-reply');
+    setIsReplying(true);
+    setBanner({
+      tone: 'info',
+      text: 'Respuesta de solución enviada. Actualizando el carril y sus fuentes internas…',
+    });
+
+    try {
+      const result = await replySolution({
+        request_id: requestId,
+        session_id: activeAudit.session.id,
+        answer,
+      });
+
+      await loadSession(result.session_id, {
+        successMessage: `Turno de solución procesado. Agent status: ${result.agent_status}.`,
+        skipBannerOnStart: true,
+      });
+    } catch (error) {
+      setBanner({
+        tone: 'error',
+        text: mapApiError(error),
+      });
+    } finally {
+      setIsReplying(false);
+    }
+  }
+
   function handleStartFreshSession() {
     setActiveAudit(null);
     setBanner(null);
@@ -623,6 +690,8 @@ export function App() {
               audit={activeAudit}
               isReplying={isReplying}
               onReply={handleReply}
+              onSolutionReply={handleSolutionReply}
+              onStartSolution={handleStartSolution}
               presentation={presentation}
             />
           </section>

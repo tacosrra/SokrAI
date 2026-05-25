@@ -8,6 +8,9 @@ import {
   assertProposalReplyResponse,
   assertProposalStartResponse,
   assertRequestExecutionResponse,
+  assertSolutionReplyResponse,
+  assertSolutionStartRequest,
+  assertSolutionStartResponse,
 } from './contracts/schema-registry';
 import { Database } from './repositories/database';
 import { AlphaStore } from './repositories/alpha-store';
@@ -19,6 +22,8 @@ import { LlmOrchestrator } from './services/llm-orchestrator';
 import { ProblemDefinitionService } from './services/problem-definition-service';
 import { ProposalReplyService } from './services/proposal-reply-service';
 import { ProposalStartService } from './services/proposal-start-service';
+import { SolutionDefinitionService } from './services/solution-definition-service';
+import { SolutionReplyService } from './services/solution-reply-service';
 import { AppError } from './utils/errors';
 import { JsonLogger, type Logger } from './utils/logger';
 
@@ -54,6 +59,14 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     alphaStore,
     llmOrchestrator,
   );
+  const solutionReplyService = new SolutionReplyService(config, logger, sessionStore, alphaStore);
+  const solutionDefinitionService = new SolutionDefinitionService(
+    config,
+    logger,
+    sessionStore,
+    alphaStore,
+    llmOrchestrator,
+  );
 
   const app = Fastify({
     logger: false,
@@ -71,6 +84,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     proposalStartService,
     proposalReplyService,
     problemDefinitionService,
+    solutionReplyService,
+    solutionDefinitionService,
   });
 
   app.addHook('onClose', async () => {
@@ -223,6 +238,107 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
           stage: 'problem_definition',
           agent_status: result.agent_status,
           updated_problem_definition: result.updated_problem_definition,
+          diagnosis: result.diagnosis,
+          next_question: result.next_question,
+          completion_reason: result.completion_reason,
+          warnings: result.warnings,
+        });
+
+    return reply.send(response);
+  });
+
+  app.post('/internal/sessions/solution-start', async (request, reply) => {
+    assertInternalSecret(request);
+
+    const body = request.body as {
+      request_id?: string;
+      workflow_version?: string;
+      workflow_execution_id?: string;
+      payload: unknown;
+    };
+    const payload = assertSolutionStartRequest(body.payload);
+
+    const result = await solutionDefinitionService.execute({
+      context: {
+        requestId: body.request_id ?? payload.request_id ?? getRequestId(request),
+        workflowVersion: body.workflow_version ?? 'solution_start_v1',
+        workflowExecutionId: body.workflow_execution_id,
+      },
+      sessionId: payload.session_id,
+      trigger: 'start',
+    });
+
+    return reply.send(assertSolutionStartResponse({
+      session_id: result.session_id,
+      stage: 'solution_definition',
+      agent_status: result.agent_status,
+      updated_solution_definition: result.updated_solution_definition,
+      diagnosis: result.diagnosis,
+      next_question: result.next_question,
+      completion_reason: result.completion_reason,
+      warnings: result.warnings,
+    }));
+  });
+
+  app.post('/internal/sessions/solution-reply', async (request, reply) => {
+    assertInternalSecret(request);
+
+    const body = request.body as {
+      request_id?: string;
+      workflow_version?: string;
+      workflow_execution_id?: string;
+      payload: unknown;
+    };
+
+    const result = await solutionReplyService.execute({
+      context: {
+        requestId: body.request_id ?? getRequestId(request),
+        workflowVersion: body.workflow_version ?? 'solution_reply_v1',
+        workflowExecutionId: body.workflow_execution_id,
+      },
+      payload: body.payload as never,
+    });
+
+    return reply.send(result);
+  });
+
+  app.post('/internal/agents/solution-definition/run', async (request, reply) => {
+    assertInternalSecret(request);
+
+    const body = request.body as {
+      request_id?: string;
+      workflow_version?: string;
+      workflow_execution_id?: string;
+      session_id: string;
+      trigger: 'start' | 'reply';
+    };
+
+    const result = await solutionDefinitionService.execute({
+      context: {
+        requestId: body.request_id ?? getRequestId(request),
+        workflowVersion: body.workflow_version ?? 'agent_solution_definition_v1',
+        workflowExecutionId: body.workflow_execution_id,
+      },
+      sessionId: body.session_id,
+      trigger: body.trigger,
+    });
+
+    const response = body.trigger === 'start'
+      ? assertSolutionStartResponse({
+          session_id: result.session_id,
+          stage: 'solution_definition',
+          agent_status: result.agent_status,
+          updated_solution_definition: result.updated_solution_definition,
+          diagnosis: result.diagnosis,
+          next_question: result.next_question,
+          completion_reason: result.completion_reason,
+          warnings: result.warnings,
+        })
+      : assertSolutionReplyResponse({
+          session_id: result.session_id,
+          stage: 'solution_definition',
+          agent_status: result.agent_status,
+          updated_solution_definition: result.updated_solution_definition,
           diagnosis: result.diagnosis,
           next_question: result.next_question,
           completion_reason: result.completion_reason,

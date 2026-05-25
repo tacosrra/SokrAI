@@ -17,6 +17,11 @@ import proposalSourceSchema from '../../../../contracts/schemas/proposal-source.
 import proposalStartRequestSchema from '../../../../contracts/schemas/proposal-start.request.schema.json';
 import proposalStartResponseSchema from '../../../../contracts/schemas/proposal-start.response.schema.json';
 import requestExecutionResponseSchema from '../../../../contracts/schemas/request-execution.response.schema.json';
+import solutionDefinitionTurnSchema from '../../../../contracts/schemas/solution-definition-turn.schema.json';
+import solutionReplyRequestSchema from '../../../../contracts/schemas/solution-reply.request.schema.json';
+import solutionReplyResponseSchema from '../../../../contracts/schemas/solution-reply.response.schema.json';
+import solutionStartRequestSchema from '../../../../contracts/schemas/solution-start.request.schema.json';
+import solutionStartResponseSchema from '../../../../contracts/schemas/solution-start.response.schema.json';
 import structuredBriefSchema from '../../../../contracts/schemas/structured-brief.schema.json';
 import type {
   AlphaGap,
@@ -34,6 +39,11 @@ import type {
   ProposalStartRequest,
   ProposalStartResponse,
   RequestExecutionResponse,
+  SolutionDefinitionTurn,
+  SolutionReplyRequest,
+  SolutionReplyResponse,
+  SolutionStartRequest,
+  SolutionStartResponse,
   StructuredBrief,
 } from './types';
 import { AppError } from '../utils/errors';
@@ -56,10 +66,15 @@ ajv.addSchema(generatedSectionSchema, generatedSectionSchema.$id);
 ajv.addSchema(alphaProposalSchema, alphaProposalSchema.$id);
 ajv.addSchema(basicAlphaReportSchema, basicAlphaReportSchema.$id);
 ajv.addSchema(problemDefinitionTurnSchema, problemDefinitionTurnSchema.$id);
+ajv.addSchema(solutionDefinitionTurnSchema, solutionDefinitionTurnSchema.$id);
 ajv.addSchema(proposalStartRequestSchema, proposalStartRequestSchema.$id);
 ajv.addSchema(proposalStartResponseSchema, proposalStartResponseSchema.$id);
 ajv.addSchema(proposalReplyRequestSchema, proposalReplyRequestSchema.$id);
 ajv.addSchema(proposalReplyResponseSchema, proposalReplyResponseSchema.$id);
+ajv.addSchema(solutionStartRequestSchema, solutionStartRequestSchema.$id);
+ajv.addSchema(solutionStartResponseSchema, solutionStartResponseSchema.$id);
+ajv.addSchema(solutionReplyRequestSchema, solutionReplyRequestSchema.$id);
+ajv.addSchema(solutionReplyResponseSchema, solutionReplyResponseSchema.$id);
 ajv.addSchema(requestExecutionResponseSchema, requestExecutionResponseSchema.$id);
 ajv.addSchema(errorResponseSchema, errorResponseSchema.$id);
 
@@ -107,6 +122,11 @@ export const schemaIds = {
   proposalStartRequest: proposalStartRequestSchema.$id,
   proposalStartResponse: proposalStartResponseSchema.$id,
   requestExecutionResponse: requestExecutionResponseSchema.$id,
+  solutionDefinitionTurn: solutionDefinitionTurnSchema.$id,
+  solutionReplyRequest: solutionReplyRequestSchema.$id,
+  solutionReplyResponse: solutionReplyResponseSchema.$id,
+  solutionStartRequest: solutionStartRequestSchema.$id,
+  solutionStartResponse: solutionStartResponseSchema.$id,
   structuredBrief: structuredBriefSchema.$id,
 } as const;
 
@@ -127,6 +147,11 @@ export const schemaDocuments = {
   proposalStartRequest: proposalStartRequestSchema,
   proposalStartResponse: proposalStartResponseSchema,
   requestExecutionResponse: requestExecutionResponseSchema,
+  solutionDefinitionTurn: solutionDefinitionTurnSchema,
+  solutionReplyRequest: solutionReplyRequestSchema,
+  solutionReplyResponse: solutionReplyResponseSchema,
+  solutionStartRequest: solutionStartRequestSchema,
+  solutionStartResponse: solutionStartResponseSchema,
   structuredBrief: structuredBriefSchema,
 } as const;
 
@@ -144,6 +169,22 @@ export function assertProposalReplyRequest(payload: unknown): ProposalReplyReque
 
 export function assertProposalReplyResponse(payload: unknown): ProposalReplyResponse {
   return assertSchema<ProposalReplyResponse>(schemaIds.proposalReplyResponse, payload, 'invalid_reply_response');
+}
+
+export function assertSolutionStartRequest(payload: unknown): SolutionStartRequest {
+  return assertSchema<SolutionStartRequest>(schemaIds.solutionStartRequest, payload, 'invalid_solution_start_request');
+}
+
+export function assertSolutionStartResponse(payload: unknown): SolutionStartResponse {
+  return assertSchema<SolutionStartResponse>(schemaIds.solutionStartResponse, payload, 'invalid_solution_start_response');
+}
+
+export function assertSolutionReplyRequest(payload: unknown): SolutionReplyRequest {
+  return assertSchema<SolutionReplyRequest>(schemaIds.solutionReplyRequest, payload, 'invalid_solution_reply_request');
+}
+
+export function assertSolutionReplyResponse(payload: unknown): SolutionReplyResponse {
+  return assertSchema<SolutionReplyResponse>(schemaIds.solutionReplyResponse, payload, 'invalid_solution_reply_response');
 }
 
 export function assertStructuredBrief(payload: unknown): StructuredBrief {
@@ -184,6 +225,14 @@ export function assertBasicAlphaReport(payload: unknown): BasicAlphaReport {
 
 export function assertProblemDefinitionTurn(payload: unknown): ProblemDefinitionTurn {
   return assertSchema<ProblemDefinitionTurn>(schemaIds.problemDefinitionTurn, payload, 'invalid_problem_definition_turn');
+}
+
+export function assertSolutionDefinitionTurn(payload: unknown): SolutionDefinitionTurn {
+  return assertSchema<SolutionDefinitionTurn>(
+    schemaIds.solutionDefinitionTurn,
+    payload,
+    'invalid_solution_definition_turn',
+  );
 }
 
 export function assertErrorResponse(payload: unknown): ErrorResponse {

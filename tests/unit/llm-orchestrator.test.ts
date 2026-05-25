@@ -234,4 +234,140 @@ describe('LlmOrchestrator', () => {
     });
     expect(client.calls).toHaveLength(2);
   });
+
+  it('passes the solution-definition schema to the language model', async () => {
+    const client = new QueueLanguageModelClient([
+      JSON.stringify({
+        agent_status: 'continue',
+        diagnosis: ['solution workflow needs detail'],
+        updated_solution_definition: {
+          solution_summary: 'A guided intake assistant prepares structured triage context.',
+          target_user: 'Admission nursing staff',
+          how_it_works: '',
+          workflow_change: '',
+          current_solutions: 'Manual notes and protocol sheets.',
+          value_differential: '',
+          scope_limits: '',
+          assumptions: [],
+          ambiguities_remaining: ['workflow change is unclear'],
+        },
+        next_question: 'How does the assistant change the current intake workflow?',
+        completion_reason: '',
+      }),
+    ]);
+    const orchestrator = new LlmOrchestrator(createConfig(), client);
+
+    await orchestrator.runSolutionDefinition({
+      structuredBrief: {
+        project_title: 'Proyecto',
+        goal: 'Aclarar la solucion',
+        target_user: 'Urgencias',
+        problem_owner: 'Direccion medica',
+        problem_statement: 'El triaje se retrasa',
+        evidence_of_problem: 'Esperas frecuentes',
+        current_alternatives: 'Proceso manual',
+        scope: 'Urgencias hospitalarias',
+        constraints_known: [],
+        assumptions: [],
+        ambiguities: [],
+        missing_information: [],
+      },
+      problemSection: {
+        title: 'Problem definition',
+        content_markdown: 'El triaje se retrasa en horas punta.',
+        source_refs: [],
+      },
+      recentTurns: [],
+    });
+
+    expect(client.calls).toHaveLength(1);
+    expect(client.calls[0].responseSchema).toMatchObject({
+      $id: schemaDocuments.solutionDefinitionTurn.$id,
+      title: schemaDocuments.solutionDefinitionTurn.title,
+    });
+  });
+
+  it('repairs malformed solution-definition JSON once', async () => {
+    const client = new QueueLanguageModelClient([
+      'not json',
+      JSON.stringify({
+        agent_status: 'done',
+        diagnosis: ['solution is sufficiently defined'],
+        updated_solution_definition: {
+          solution_summary: 'A guided intake assistant prepares structured triage handoff notes.',
+          target_user: 'Admission nursing staff',
+          how_it_works: 'The assistant asks bounded questions and creates a structured intake summary.',
+          workflow_change: 'Nurses review a structured summary before continuing the normal triage protocol.',
+          current_solutions: 'Current work relies on manual notes and static protocol sheets.',
+          value_differential: 'The solution makes intake notes more consistent without replacing judgement.',
+          scope_limits: 'The first version covers adult emergency intake and excludes diagnosis.',
+          assumptions: ['Nursing staff can answer guided questions during intake.'],
+          ambiguities_remaining: [],
+        },
+        next_question: '',
+        completion_reason: 'solution sufficiently defined',
+      }),
+    ]);
+    const orchestrator = new LlmOrchestrator(createConfig(), client);
+
+    const result = await orchestrator.runSolutionDefinition({
+      structuredBrief: {
+        project_title: 'Proyecto',
+        goal: 'Aclarar la solucion',
+        target_user: 'Urgencias',
+        problem_owner: 'Direccion medica',
+        problem_statement: 'El triaje se retrasa',
+        evidence_of_problem: 'Esperas frecuentes',
+        current_alternatives: 'Proceso manual',
+        scope: 'Urgencias hospitalarias',
+        constraints_known: [],
+        assumptions: [],
+        ambiguities: [],
+        missing_information: [],
+      },
+      problemSection: {
+        title: 'Problem definition',
+        content_markdown: 'El triaje se retrasa en horas punta.',
+        source_refs: [],
+      },
+      recentTurns: [],
+    });
+
+    expect(result.repairAttempted).toBe(true);
+    expect(client.calls).toHaveLength(2);
+  });
+
+  it('reports schema-invalid repaired solution output with the schema error code', async () => {
+    const client = new QueueLanguageModelClient(['not json', JSON.stringify({ agent_status: 'continue' })]);
+    const orchestrator = new LlmOrchestrator(createConfig(), client);
+
+    await expect(
+      orchestrator.runSolutionDefinition({
+        structuredBrief: {
+          project_title: 'Proyecto',
+          goal: 'Aclarar la solucion',
+          target_user: 'Urgencias',
+          problem_owner: 'Direccion medica',
+          problem_statement: 'El triaje se retrasa',
+          evidence_of_problem: 'Esperas frecuentes',
+          current_alternatives: 'Proceso manual',
+          scope: 'Urgencias hospitalarias',
+          constraints_known: [],
+          assumptions: [],
+          ambiguities: [],
+          missing_information: [],
+        },
+        problemSection: {
+          title: 'Problem definition',
+          content_markdown: 'El triaje se retrasa en horas punta.',
+          source_refs: [],
+        },
+        recentTurns: [],
+      }),
+    ).rejects.toMatchObject({
+      name: 'ModelOutputError',
+      errorCode: 'invalid_solution_definition_turn',
+      repairAttempted: true,
+    });
+  });
 });

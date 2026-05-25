@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { recoverRequestExecution, startSession } from './api';
+import { recoverRequestExecution, startSession, startSolution } from './api';
 
 const REQUEST_STATUS_RESPONSE = {
   request_id: 'web-start-1',
@@ -28,6 +28,27 @@ const START_RESPONSE = {
   detected_gaps: ['problem_owner'],
   next_question: 'Que equipo responde hoy por este problema?',
   agent_status: 'continue',
+  warnings: [],
+};
+
+const SOLUTION_START_RESPONSE = {
+  session_id: 'session-1',
+  stage: 'solution_definition',
+  agent_status: 'continue',
+  updated_solution_definition: {
+    solution_summary: '',
+    target_user: 'Enfermeria de admision',
+    how_it_works: '',
+    workflow_change: '',
+    current_solutions: '',
+    value_differential: '',
+    scope_limits: '',
+    assumptions: [],
+    ambiguities_remaining: [],
+  },
+  diagnosis: ['Falta definir la solucion.'],
+  next_question: 'Que hace la solucion propuesta?',
+  completion_reason: '',
   warnings: [],
 };
 
@@ -112,5 +133,30 @@ describe('requestJson transport options', () => {
       'x-request-id': 'web-start-1',
     });
     expect(typeof init.body).toBe('string');
+  });
+
+  it('posts solution start payloads to the solution webhook', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(SOLUTION_START_RESPONSE), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }),
+    );
+    stubGlobal('fetch', fetchMock);
+
+    await startSolution({
+      request_id: 'web-solution-start-1',
+      session_id: 'session-1',
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toBe('/webhook/solution-start-v1');
+    expect(init.headers).toEqual({
+      'Content-Type': 'application/json',
+      'x-request-id': 'web-solution-start-1',
+    });
   });
 });

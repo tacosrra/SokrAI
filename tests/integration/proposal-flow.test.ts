@@ -343,6 +343,101 @@ describe('proposal flow integration', () => {
     expect(lastRun.rows[0]?.validated_output_json.diagnosis.length).toBeLessThanOrEqual(3);
   });
 
+  it('continues from generated problem section into generated solution section', async () => {
+    const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
+    const doneProblemTurn = await readFixture('expected', 'problem-definition.done.json');
+    const continueSolutionTurn = await readFixture('expected', 'solution-definition.continue.json');
+    const doneSolutionTurn = await readFixture('expected', 'solution-definition.done.json');
+    const startAgentTurn = {
+      agent_status: 'continue',
+      diagnosis: ['Falta identificar con precision quien responde hoy por el problema'],
+      updated_problem_definition: {
+        problem_owner: '',
+        problem_statement: structuredBrief.problem_statement,
+        evidence_of_problem: structuredBrief.evidence_of_problem,
+        scope: structuredBrief.scope,
+        current_alternatives: structuredBrief.current_alternatives,
+        assumptions: structuredBrief.assumptions,
+        ambiguities_remaining: structuredBrief.ambiguities,
+      },
+      next_question: '¿Qué equipo o responsable responde hoy por este problema en urgencias?',
+      completion_reason: '',
+    };
+
+    ({ app } = await buildTestApp(
+      new QueueLanguageModelClient([
+        JSON.stringify(structuredBrief),
+        JSON.stringify(startAgentTurn),
+        JSON.stringify(doneProblemTurn),
+        JSON.stringify(continueSolutionTurn),
+        JSON.stringify(doneSolutionTurn),
+      ]),
+    ));
+
+    const strongProposal = await readFixture('start', 'strong-proposal.json');
+    const strongAnswer = await readFixture('reply', 'strong-answer.json');
+    const solutionAnswer = await readFixture('reply', 'solution-workflow-change.json');
+
+    const startResult = await startFlow(app, 'req-start-solution-path', strongProposal);
+    const problemReplyResult = await replyFlow(app, 'req-problem-done-solution-path', startResult.body.session_id, strongAnswer);
+    expect(problemReplyResult.body.agent_status).toBe('done');
+
+    const solutionStartResult = await solutionStartFlow(app, 'req-solution-start', startResult.body.session_id);
+    expect(solutionStartResult.statusCode).toBe(200);
+    expect(solutionStartResult.body.stage).toBe('solution_definition');
+    expect(solutionStartResult.body.agent_status).toBe('continue');
+
+    const solutionReplyResult = await solutionReplyFlow(app, 'req-solution-reply', startResult.body.session_id, solutionAnswer);
+    expect(solutionReplyResult.statusCode).toBe(200);
+    expect(solutionReplyResult.body.agent_status).toBe('done');
+
+    const generatedSections = await app.services.database.query<{
+      section_kind: string;
+      content_markdown: string;
+      source_refs_json: Array<{ source_kind: string }>;
+    }>(
+      [
+        'SELECT section_kind, content_markdown, source_refs_json',
+        'FROM generated_sections',
+        'WHERE proposal_id = $1 AND section_status = \'generated\'',
+        'ORDER BY section_kind ASC',
+      ].join(' '),
+      [startResult.body.session_id],
+    );
+    const solutionChat = await app.services.database.query<{
+      chat_status: string;
+      active_turn_id: string | null;
+    }>(
+      'SELECT chat_status, active_turn_id FROM module_chats WHERE proposal_id = $1 AND module = \'solution\'',
+      [startResult.body.session_id],
+    );
+    const solutionRuns = await app.services.database.query<{ count: string }>(
+      'SELECT COUNT(*)::text AS count FROM agent_runs WHERE session_id = $1 AND run_purpose = \'solution_definition\'',
+      [startResult.body.session_id],
+    );
+    const audit = await app.inject({
+      method: 'GET',
+      url: `/api/v1/sessions/${startResult.body.session_id}`,
+    });
+
+    expect(generatedSections.rows.map((section) => section.section_kind)).toEqual(['problem', 'solution']);
+    expect(generatedSections.rows.find((section) => section.section_kind === 'solution')?.content_markdown).toContain('## Solution summary');
+    expect(generatedSections.rows.find((section) => section.section_kind === 'solution')?.content_markdown).not.toMatch(/pricing|budget|regulatory|medical device|RAG|ranking/i);
+    expect(generatedSections.rows.find((section) => section.section_kind === 'solution')?.source_refs_json).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source_kind: 'user_answer' }),
+      ]),
+    );
+    expect(solutionChat.rows[0]).toEqual({
+      chat_status: 'completed',
+      active_turn_id: null,
+    });
+    expect(solutionRuns.rows[0]).toEqual({ count: '2' });
+    expect(audit.json().generated_sections.map((section: { section_kind: string }) => section.section_kind)).toEqual(
+      expect.arrayContaining(['problem', 'solution']),
+    );
+  });
+
   it('reformulates after a low-information reply instead of advancing to done', async () => {
     const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
     const startAgentTurn = {
@@ -683,6 +778,59 @@ async function replyFlow(app: FastifyInstance, requestId: string, sessionId: str
   };
 }
 
+async function solutionStartFlow(app: FastifyInstance, requestId: string, sessionId: string) {
+  const agentResponse = await app.inject({
+    method: 'POST',
+    url: '/internal/sessions/solution-start',
+    headers: {
+      'x-internal-shared-secret': 'test-secret',
+      'x-request-id': requestId,
+    },
+    payload: {
+      request_id: requestId,
+      workflow_version: 'solution_start_v1',
+      payload: {
+        request_id: requestId,
+        session_id: sessionId,
+      },
+    },
+  });
+
+  return {
+    statusCode: agentResponse.statusCode,
+    body: agentResponse.json(),
+  };
+}
+
+async function solutionReplyFlow(app: FastifyInstance, requestId: string, sessionId: string, replyFixture: { answer: string }) {
+  const appendReplyResponse = await appendSolutionReply(app, requestId, {
+    request_id: requestId,
+    session_id: sessionId,
+    answer: replyFixture.answer,
+  });
+  expect(appendReplyResponse.statusCode).toBe(200);
+
+  const agentResponse = await app.inject({
+    method: 'POST',
+    url: '/internal/agents/solution-definition/run',
+    headers: {
+      'x-internal-shared-secret': 'test-secret',
+      'x-request-id': requestId,
+    },
+    payload: {
+      request_id: requestId,
+      workflow_version: 'agent_solution_definition_v1',
+      session_id: sessionId,
+      trigger: 'reply',
+    },
+  });
+
+  return {
+    statusCode: agentResponse.statusCode,
+    body: agentResponse.json(),
+  };
+}
+
 async function startContext(app: FastifyInstance, requestId: string, payload: unknown) {
   return app.inject({
     method: 'POST',
@@ -710,6 +858,22 @@ async function appendReply(app: FastifyInstance, requestId: string, payload: unk
     payload: {
       request_id: requestId,
       workflow_version: 'proposal_reply_v1',
+      payload,
+    },
+  });
+}
+
+async function appendSolutionReply(app: FastifyInstance, requestId: string, payload: unknown) {
+  return app.inject({
+    method: 'POST',
+    url: '/internal/sessions/solution-reply',
+    headers: {
+      'x-internal-shared-secret': 'test-secret',
+      'x-request-id': requestId,
+    },
+    payload: {
+      request_id: requestId,
+      workflow_version: 'solution_reply_v1',
       payload,
     },
   });

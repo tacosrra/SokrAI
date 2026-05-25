@@ -14,6 +14,7 @@ const PROMPT_FILES = {
   'extract-initial-brief': 'extract-initial-brief.md',
   'json-repair': 'json-repair.md',
   'problem-definition-agent': 'problem-definition-agent.md',
+  'solution-definition-agent': 'solution-definition-agent.md',
 } as const;
 
 export async function loadPrompt(

@@ -1,10 +1,11 @@
 import {
   assertProblemDefinitionTurn,
+  assertSolutionDefinitionTurn,
   assertStructuredBrief,
   schemaDocuments,
   schemaIds,
 } from '../contracts/schema-registry';
-import type { ProblemDefinitionTurn, StructuredBrief } from '../contracts/types';
+import type { GeneratedSection, ProblemDefinitionTurn, SolutionDefinitionTurn, StructuredBrief } from '../contracts/types';
 import type { AppConfig } from '../config/env';
 import { AppError, ModelOutputError } from '../utils/errors';
 import type { AiCompletionResult, AiProviderName, AiProviderPort } from './ai-provider';
@@ -86,6 +87,43 @@ export class LlmOrchestrator {
       userPrompt,
       validate: assertProblemDefinitionTurn,
       responseSchema: schemaDocuments.problemDefinitionTurn,
+    });
+  }
+
+  async runSolutionDefinition(input: {
+    structuredBrief: StructuredBrief;
+    problemSection: Pick<GeneratedSection, 'title' | 'content_markdown' | 'source_refs'>;
+    recentTurns: Array<{ question_text: string; answer_text: string | null; diagnosis: string[] }>;
+    latestAnswer?: string;
+  }): Promise<GenerationResult<SolutionDefinitionTurn>> {
+    const prompt = await loadPrompt('solution-definition-agent');
+    const userPrompt = [
+      'Return a single bounded solution-definition turn.',
+      '',
+      `Output schema id: ${schemaIds.solutionDefinitionTurn}`,
+      '',
+      'Input JSON:',
+      JSON.stringify(
+        {
+          structured_brief: input.structuredBrief,
+          problem_section: {
+            title: input.problemSection.title,
+            content_markdown: input.problemSection.content_markdown,
+            source_refs: input.problemSection.source_refs.map((source) => source.source_id),
+          },
+          recent_turns: input.recentTurns,
+          latest_user_answer: input.latestAnswer ?? null,
+        },
+        null,
+        2,
+      ),
+    ].join('\n');
+
+    return this.generateWithRepair<SolutionDefinitionTurn>({
+      prompt,
+      userPrompt,
+      validate: assertSolutionDefinitionTurn,
+      responseSchema: schemaDocuments.solutionDefinitionTurn,
     });
   }
 

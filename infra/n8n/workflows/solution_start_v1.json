@@ -1,0 +1,144 @@
+{
+  "id": "aac6f913-86ac-48cd-858c-dd0b39f35820",
+  "name": "solution_start_v1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "solution-start-v1",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "328e058a-934e-4806-8ad1-9db4524706b7",
+      "name": "Webhook_SolutionStart",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        260,
+        300
+      ],
+      "webhookId": "solution-start-v1"
+    },
+    {
+      "parameters": {
+        "keepOnlySet": false,
+        "values": {
+          "string": [
+            {
+              "name": "request_id",
+              "value": "={{ $node[\"Webhook_SolutionStart\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_SolutionStart\"].json.body?.request_id || $execution.id }}"
+            },
+            {
+              "name": "workflow_version",
+              "value": "solution_start_v1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d57c354d-c058-48ed-bbd5-c0c0a3e16ed1",
+      "name": "Set_StartPayload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:3001/internal/sessions/solution-start",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-shared-secret",
+              "value": "={{ $env.INTERNAL_SHARED_SECRET }}"
+            },
+            {
+              "name": "x-request-id",
+              "value": "={{ $node[\"Webhook_SolutionStart\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_SolutionStart\"].json.body?.request_id || $execution.id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { request_id: ($node[\"Webhook_SolutionStart\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_SolutionStart\"].json.body?.request_id || $execution.id), workflow_version: $json.workflow_version, workflow_execution_id: $execution.id, payload: $node[\"Webhook_SolutionStart\"].json.body } }}",
+        "options": {
+          "timeout": 450000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "adcced32-161f-4f71-b136-91a44a77dc8a",
+      "name": "HTTP_StartSolution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.body ?? $json }}",
+        "options": {
+          "responseCode": "={{ Number($json.statusCode ?? 200) }}"
+        }
+      },
+      "id": "e6c434a3-c434-4663-9335-58375416f937",
+      "name": "Respond_Start",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1080,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook_SolutionStart": {
+      "main": [
+        [
+          {
+            "node": "Set_StartPayload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set_StartPayload": {
+      "main": [
+        [
+          {
+            "node": "HTTP_StartSolution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP_StartSolution": {
+      "main": [
+        [
+          {
+            "node": "Respond_Start",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "solution_start_v1"
+}

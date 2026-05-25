@@ -9,6 +9,11 @@ import type {
   ModuleChat as ApiModuleChat,
   ProposalDocument as ApiProposalDocument,
   ProposalSource as ApiProposalSource,
+  SolutionDefinitionState as ApiSolutionDefinitionState,
+  SolutionReplyRequest as ApiSolutionReplyRequest,
+  SolutionReplyResponse as ApiSolutionReplyResponse,
+  SolutionStartRequest as ApiSolutionStartRequest,
+  SolutionStartResponse as ApiSolutionStartResponse,
 } from '../../apps/api/src/contracts/types.ts';
 import type {
   AlphaGap as WebAlphaGap,
@@ -19,6 +24,11 @@ import type {
   ModuleChat as WebModuleChat,
   ProposalDocument as WebProposalDocument,
   ProposalSource as WebProposalSource,
+  SolutionDefinitionState as WebSolutionDefinitionState,
+  SolutionReplyRequest as WebSolutionReplyRequest,
+  SolutionReplyResponse as WebSolutionReplyResponse,
+  SolutionStartRequest as WebSolutionStartRequest,
+  SolutionStartResponse as WebSolutionStartResponse,
 } from '../../apps/web/src/domain/contracts.ts';
 
 describe('Alpha contract type mirrors', () => {
@@ -31,5 +41,10 @@ describe('Alpha contract type mirrors', () => {
     expectTypeOf<ApiGeneratedSection>().toEqualTypeOf<WebGeneratedSection>();
     expectTypeOf<ApiAlphaProposal>().toEqualTypeOf<WebAlphaProposal>();
     expectTypeOf<ApiBasicAlphaReport>().toEqualTypeOf<WebBasicAlphaReport>();
+    expectTypeOf<ApiSolutionDefinitionState>().toEqualTypeOf<WebSolutionDefinitionState>();
+    expectTypeOf<ApiSolutionStartRequest>().toEqualTypeOf<WebSolutionStartRequest>();
+    expectTypeOf<ApiSolutionStartResponse>().toEqualTypeOf<WebSolutionStartResponse>();
+    expectTypeOf<ApiSolutionReplyRequest>().toEqualTypeOf<WebSolutionReplyRequest>();
+    expectTypeOf<ApiSolutionReplyResponse>().toEqualTypeOf<WebSolutionReplyResponse>();
   });
 });

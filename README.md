@@ -356,6 +356,8 @@ Payloads listos para prueba:
 
 - `examples/proposal-start.payload.json`
 - `examples/proposal-reply.payload.json`
+- `POST /webhook/solution-start-v1`
+- `POST /webhook/solution-reply-v1`
 
 El flujo normal es:
 
@@ -363,6 +365,8 @@ El flujo normal es:
 2. guardar `session_id`
 3. responder con `proposal_reply_v1`
 4. repetir hasta `agent_status = "done"`
+5. iniciar `solution_start_v1`
+6. responder con `solution_reply_v1` hasta `agent_status = "done"`
 
 Al cerrar el carril de problema, la API conserva la compatibilidad de resume con
 `conversation_turns`, `session_snapshots` y `agent_runs`, y tambien escribe el
@@ -373,7 +377,13 @@ modelo Alpha trazable: `module_chats`, `chat_turns`, `alpha_gaps`,
 determinista desde el brief y las respuestas persistidas; no usa un writer LLM
 separado.
 
-Siguen fuera de alcance en esta PR: modulo de solucion, legal/regulatorio,
+Tras cerrar el problema, el carril de solucion usa `module = "solution"` y genera
+una fila `generated_sections` con `section_kind = "solution"`. La seccion de
+solucion tambien se renderiza de forma determinista desde respuestas persistidas
+y fuentes internas; el reporte basico queda preparado para consumir ambas
+secciones en una PR posterior.
+
+Siguen fuera de alcance en esta PR: plan de negocio, costes, legal/regulatorio,
 medical device, PDF export, RAG, scoring, aprobacion/rechazo y reporte basico.
 
 ## Tests

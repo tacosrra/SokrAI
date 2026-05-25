@@ -1,4 +1,4 @@
-export type Stage = 'problem_definition';
+export type Stage = 'problem_definition' | 'solution_definition';
 
 export type AgentStatus = 'continue' | 'done' | 'blocked';
 
@@ -228,6 +228,18 @@ export interface ProblemDefinitionState {
   ambiguities_remaining: string[];
 }
 
+export interface SolutionDefinitionState {
+  solution_summary: string;
+  target_user: string;
+  how_it_works: string;
+  workflow_change: string;
+  current_solutions: string;
+  value_differential: string;
+  scope_limits: string;
+  assumptions: string[];
+  ambiguities_remaining: string[];
+}
+
 export interface ProposalStartFile {
   file_name: string;
   mime_type: 'application/pdf';
@@ -266,6 +278,39 @@ export interface ProposalReplyResponse {
   stage: Stage;
   agent_status: AgentStatus;
   updated_problem_definition: ProblemDefinitionState;
+  diagnosis: string[];
+  next_question: string;
+  completion_reason: string;
+  warnings: string[];
+}
+
+export interface SolutionStartRequest {
+  request_id?: string;
+  session_id: string;
+}
+
+export interface SolutionStartResponse {
+  session_id: string;
+  stage: 'solution_definition';
+  agent_status: AgentStatus;
+  updated_solution_definition: SolutionDefinitionState;
+  diagnosis: string[];
+  next_question: string;
+  completion_reason: string;
+  warnings: string[];
+}
+
+export interface SolutionReplyRequest {
+  request_id?: string;
+  session_id: string;
+  answer: string;
+}
+
+export interface SolutionReplyResponse {
+  session_id: string;
+  stage: 'solution_definition';
+  agent_status: AgentStatus;
+  updated_solution_definition: SolutionDefinitionState;
   diagnosis: string[];
   next_question: string;
   completion_reason: string;
@@ -324,7 +369,7 @@ export interface AgentRun {
   session_id: string;
   turn_seq: number | null;
   request_id: string | null;
-  run_purpose: 'brief_extraction' | 'problem_definition' | 'json_repair';
+  run_purpose: 'brief_extraction' | 'problem_definition' | 'solution_definition' | 'json_repair';
   agent_name: string;
   prompt_name: string;
   prompt_version: string;

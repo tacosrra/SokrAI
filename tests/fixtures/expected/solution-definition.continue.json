@@ -1,0 +1,21 @@
+{
+  "agent_status": "continue",
+  "diagnosis": [
+    "The solution workflow is still underspecified."
+  ],
+  "updated_solution_definition": {
+    "solution_summary": "A guided intake assistant prepares structured triage context.",
+    "target_user": "Admission nursing staff",
+    "how_it_works": "",
+    "workflow_change": "",
+    "current_solutions": "Manual notes and protocol sheets.",
+    "value_differential": "",
+    "scope_limits": "",
+    "assumptions": [],
+    "ambiguities_remaining": [
+      "The exact workflow change is not clear yet."
+    ]
+  },
+  "next_question": "How does the proposed assistant change the current intake workflow?",
+  "completion_reason": ""
+}
