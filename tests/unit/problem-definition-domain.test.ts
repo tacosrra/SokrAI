@@ -164,6 +164,106 @@ describe('problem definition domain rules', () => {
     ]);
   });
 
+  it('keeps structured brief ambiguity gaps unresolved while the ambiguity remains', () => {
+    const ambiguityGap: AlphaGap = {
+      ...baseGap,
+      gap_id: 'gap-ambiguity',
+      gap_kind: 'ambiguous_information',
+      origin: 'structured_brief_ambiguity',
+      field: 'problem_owner',
+      description: 'No esta claro quien responde hoy por el problema',
+    };
+
+    const changes = classifyProblemGapStatuses(
+      [ambiguityGap],
+      {
+        problem_owner: 'Direccion de Urgencias',
+        problem_statement: 'El triaje inicial se retrasa en horas punta',
+        evidence_of_problem: 'Se registran esperas medias de 27 minutos',
+        scope: 'Urgencias de adultos',
+        current_alternatives: 'Protocolo manual',
+        assumptions: ['El cuello de botella esta en admision'],
+        ambiguities_remaining: ['No esta claro quien responde hoy por el problema'],
+      },
+      'turn-1',
+    );
+
+    expect(changes).toEqual([
+      {
+        gapId: 'gap-ambiguity',
+        gapStatus: 'in_progress',
+      },
+    ]);
+  });
+
+  it('resolves structured brief ambiguity gaps when the ambiguity is removed', () => {
+    const ambiguityGap: AlphaGap = {
+      ...baseGap,
+      gap_id: 'gap-ambiguity',
+      gap_kind: 'ambiguous_information',
+      origin: 'structured_brief_ambiguity',
+      field: 'problem_owner',
+      description: 'No esta claro quien responde hoy por el problema',
+      gap_status: 'in_progress',
+    };
+
+    const changes = classifyProblemGapStatuses(
+      [ambiguityGap],
+      {
+        problem_owner: 'Direccion de Urgencias',
+        problem_statement: 'El triaje inicial se retrasa en horas punta',
+        evidence_of_problem: 'Se registran esperas medias de 27 minutos',
+        scope: 'Urgencias de adultos',
+        current_alternatives: 'Protocolo manual',
+        assumptions: ['El cuello de botella esta en admision'],
+        ambiguities_remaining: [],
+      },
+      'turn-1',
+    );
+
+    expect(changes).toEqual([
+      {
+        gapId: 'gap-ambiguity',
+        gapStatus: 'resolved',
+        resolvedByTurnId: 'turn-1',
+      },
+    ]);
+  });
+
+  it('caps selected problem gap refs at three', () => {
+    const gaps: AlphaGap[] = [
+      baseGap,
+      {
+        ...baseGap,
+        gap_id: 'gap-statement',
+        field: 'problem_statement',
+        description: 'Problem statement is missing.',
+      },
+      {
+        ...baseGap,
+        gap_id: 'gap-evidence',
+        field: 'evidence_of_problem',
+        description: 'Evidence is missing.',
+      },
+      {
+        ...baseGap,
+        gap_id: 'gap-scope',
+        field: 'scope',
+        description: 'Scope is missing.',
+      },
+    ];
+
+    expect(selectProblemGapRefs(gaps, {
+      problem_owner: '',
+      problem_statement: '',
+      evidence_of_problem: '',
+      scope: '',
+      current_alternatives: '',
+      assumptions: [],
+      ambiguities_remaining: [],
+    })).toEqual(['gap-owner', 'gap-statement', 'gap-evidence']);
+  });
+
   it('renders the problem section only from persisted problem fields and source refs', () => {
     const source: ProposalSource = {
       source_id: 'source-answer-1',

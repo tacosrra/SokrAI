@@ -68,6 +68,53 @@ const validAlphaGap = {
   updated_at: '2026-05-24T20:00:00.000Z',
 };
 
+const validModuleChat = {
+  chat_id: 'chat-1',
+  proposal_id: 'session-1',
+  module: 'problem',
+  chat_status: 'completed',
+  turns: [
+    {
+      turn_id: 'chat-turn-1',
+      chat_id: 'chat-1',
+      proposal_id: 'session-1',
+      module: 'problem',
+      turn_seq: 1,
+      question_text: '¿Qué equipo vive hoy este problema?',
+      answer_text: 'Enfermeria de admision vive el retraso durante las horas punta.',
+      turn_status: 'resolved',
+      agent_status: 'done',
+      diagnosis: ['El responsable operativo queda definido.'],
+      source_refs: [],
+      gap_refs: ['gap-1'],
+      audit_refs: [{ kind: 'agent_run', id: 'run-1' }],
+      warnings: [],
+      created_at: '2026-05-24T20:00:00.000Z',
+      completed_at: '2026-05-24T20:05:00.000Z',
+    },
+  ],
+  active_turn_id: null,
+  started_at: '2026-05-24T20:00:00.000Z',
+  completed_at: '2026-05-24T20:05:00.000Z',
+  warnings: [],
+};
+
+const validGeneratedSection = {
+  section_id: 'section-1',
+  proposal_id: 'session-1',
+  section_kind: 'problem',
+  section_status: 'generated',
+  section_version: 1,
+  title: 'Problem definition',
+  content_markdown: '## Problem owner\nEnfermeria de admision',
+  source_refs: [],
+  gap_refs: ['gap-1'],
+  generated_by_run_id: 'run-1',
+  supersedes_section_id: null,
+  warnings: [],
+  created_at: '2026-05-24T20:05:00.000Z',
+};
+
 function createAuditView(runs: unknown[] = []) {
   return {
     session: {
@@ -88,6 +135,8 @@ function createAuditView(runs: unknown[] = []) {
     documents: [],
     sources: [],
     gaps: [],
+    module_chats: [],
+    generated_sections: [],
     turns: [],
     runs,
     snapshots: [],
@@ -267,6 +316,8 @@ describe('parseSessionAuditView', () => {
       documents: [],
       sources: [],
       gaps: [],
+      module_chats: [],
+      generated_sections: [],
       turns: [],
       runs: [],
       snapshots: [
@@ -314,6 +365,8 @@ describe('parseSessionAuditView', () => {
           turn_seq: null,
           run_id: null,
           event_seq: '1',
+          event_stream: 'session_events',
+          stream_event_seq: '1',
           event_type: 'session_created',
           actor_type: 'workflow',
           request_id: 'req-1',
@@ -361,6 +414,8 @@ describe('parseSessionAuditView', () => {
         documents: [],
         sources: [],
         gaps: [],
+        module_chats: [],
+        generated_sections: [],
       },
     });
 
@@ -387,6 +442,14 @@ describe('parseSessionAuditView', () => {
     const { gaps: _gaps, ...payload } = createAuditView();
 
     expect(() => parseSessionAuditView(payload)).toThrow(/session audit view\.gaps/);
+  });
+
+  it('rejects audit payloads missing required Alpha module chats and generated sections', () => {
+    const { module_chats: _moduleChats, ...withoutModuleChats } = createAuditView();
+    const { generated_sections: _generatedSections, ...withoutGeneratedSections } = createAuditView();
+
+    expect(() => parseSessionAuditView(withoutModuleChats)).toThrow(/session audit view\.module_chats/);
+    expect(() => parseSessionAuditView(withoutGeneratedSections)).toThrow(/session audit view\.generated_sections/);
   });
 
   it('parses valid structured gaps', () => {
@@ -421,6 +484,52 @@ describe('parseSessionAuditView', () => {
         ],
       }),
     ).toThrow(/session audit view\.gaps\[0\]\.absence\.is_absent/);
+  });
+
+  it('parses valid module chats and generated sections', () => {
+    const audit = parseSessionAuditView({
+      ...createAuditView(),
+      module_chats: [validModuleChat],
+      generated_sections: [validGeneratedSection],
+    });
+
+    expect(audit.module_chats[0]).toMatchObject({
+      chat_id: 'chat-1',
+      chat_status: 'completed',
+      turns: [expect.objectContaining({ turn_status: 'resolved' })],
+    });
+    expect(audit.generated_sections[0]).toMatchObject({
+      section_id: 'section-1',
+      section_kind: 'problem',
+      section_version: 1,
+    });
+  });
+
+  it('rejects generated sections missing section_version', () => {
+    const { section_version: _sectionVersion, ...sectionWithoutVersion } = validGeneratedSection;
+
+    expect(() =>
+      parseSessionAuditView({
+        ...createAuditView(),
+        generated_sections: [sectionWithoutVersion],
+      }),
+    ).toThrow(/session audit view\.generated_sections\[0\]\.section_version/);
+  });
+
+  it('rejects malformed module chat and generated section payloads', () => {
+    expect(() =>
+      parseSessionAuditView({
+        ...createAuditView(),
+        module_chats: [{ ...validModuleChat, chat_status: 'paused' }],
+      }),
+    ).toThrow(/session audit view\.module_chats\[0\]\.chat_status/);
+
+    expect(() =>
+      parseSessionAuditView({
+        ...createAuditView(),
+        generated_sections: [{ ...validGeneratedSection, section_kind: 'clinic_pilot' }],
+      }),
+    ).toThrow(/session audit view\.generated_sections\[0\]\.section_kind/);
   });
 
   it('parses document and source audit sections', () => {
@@ -479,6 +588,8 @@ describe('parseSessionAuditView', () => {
         },
       ],
       gaps: [],
+      module_chats: [],
+      generated_sections: [],
       turns: [],
       runs: [],
       snapshots: [],

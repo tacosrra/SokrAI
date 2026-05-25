@@ -99,6 +99,12 @@ export interface SnapshotRecord {
   warnings_json: string[];
 }
 
+type AuditTimelineEvent = Record<string, unknown> & {
+  event_stream: 'audit_events' | 'session_events';
+  stream_event_seq: number;
+  created_at?: unknown;
+};
+
 export interface ProposalDocumentRecord {
   id: string;
   proposal_id: string;
@@ -793,7 +799,7 @@ export class SessionStore {
       turns: turns.rows,
       runs: runs.rows,
       snapshots: snapshots.rows,
-      events: [...sessionEvents.rows, ...alphaEvents.rows],
+      events: buildAuditTimelineEvents(sessionEvents.rows, alphaEvents.rows),
     };
   }
 
@@ -932,6 +938,56 @@ async function runQuery<T extends QueryResultRow>(
 
 function toJson(value: unknown): string {
   return JSON.stringify(value);
+}
+
+function buildAuditTimelineEvents(
+  sessionEvents: Array<Record<string, unknown>>,
+  auditEvents: Array<Record<string, unknown>>,
+): AuditTimelineEvent[] {
+  return [
+    ...sessionEvents.map((event) => toAuditTimelineEvent(event, 'session_events')),
+    ...auditEvents.map((event) => toAuditTimelineEvent(event, 'audit_events')),
+  ].sort(compareAuditTimelineEvents);
+}
+
+function toAuditTimelineEvent(
+  event: Record<string, unknown>,
+  eventStream: AuditTimelineEvent['event_stream'],
+): AuditTimelineEvent {
+  return {
+    ...event,
+    event_stream: eventStream,
+    stream_event_seq: Number(event.event_seq),
+  };
+}
+
+function compareAuditTimelineEvents(left: AuditTimelineEvent, right: AuditTimelineEvent): number {
+  const createdAtCompare = getCreatedAtMillis(left.created_at) - getCreatedAtMillis(right.created_at);
+
+  if (createdAtCompare !== 0) {
+    return createdAtCompare;
+  }
+
+  const streamCompare = left.event_stream.localeCompare(right.event_stream);
+
+  if (streamCompare !== 0) {
+    return streamCompare;
+  }
+
+  return left.stream_event_seq - right.stream_event_seq;
+}
+
+function getCreatedAtMillis(value: unknown): number {
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsed = new Date(value).getTime();
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+
+  return 0;
 }
 
 function toProposalDocument(record: ProposalDocumentRecord): ProposalDocument {

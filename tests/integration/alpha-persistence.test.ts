@@ -614,6 +614,57 @@ describe('alpha persistence integration', () => {
     expect(events.map((event) => event.event_seq)).toEqual([1, 2, 3, 4, 5]);
   });
 
+  it('returns a deterministic audit timeline across session and Alpha event streams', async () => {
+    ({ app } = await buildTestApp(new QueueLanguageModelClient([])));
+    const structuredBrief = await readFixture<StructuredBrief>('expected', 'structured-brief.strong.json');
+    const session = await createLegacySession(app.services.database, app.services.sessionStore, structuredBrief);
+    const store = app.services.alphaStore;
+
+    await store.createProposal(app.services.database, {
+      proposalId: session.id,
+      sessionId: session.id,
+      proposalStatus: 'active',
+      projectTitle: structuredBrief.project_title,
+      goal: structuredBrief.goal,
+      structuredBrief,
+      schemaVersion: 'alpha-model.v1',
+    });
+
+    await app.services.database.query(
+      [
+        'INSERT INTO session_events',
+        '(session_id, event_seq, event_type, actor_type, payload_json, created_at)',
+        'VALUES',
+        '($1, 1, \'session_created\', \'workflow\', \'{}\'::jsonb, $2),',
+        '($1, 2, \'brief_extracted\', \'system\', \'{}\'::jsonb, $2)',
+      ].join(' '),
+      [session.id, '2026-05-24T20:00:00.000Z'],
+    );
+    await app.services.database.query(
+      [
+        'INSERT INTO audit_events',
+        '(proposal_id, session_id, event_seq, event_type, actor_type, payload_json, created_at)',
+        'VALUES',
+        '($1, $1, 1, \'proposal_created\', \'system\', \'{}\'::jsonb, $2),',
+        '($1, $1, 2, \'problem_question_opened\', \'agent\', \'{}\'::jsonb, $2)',
+      ].join(' '),
+      [session.id, '2026-05-24T20:00:00.000Z'],
+    );
+
+    const auditView = await app.services.sessionStore.getAuditView(session.id);
+
+    expect(auditView.events.map((event) => ({
+      event_stream: event.event_stream,
+      event_type: event.event_type,
+      stream_event_seq: event.stream_event_seq,
+    }))).toEqual([
+      { event_stream: 'audit_events', event_type: 'proposal_created', stream_event_seq: 1 },
+      { event_stream: 'audit_events', event_type: 'problem_question_opened', stream_event_seq: 2 },
+      { event_stream: 'session_events', event_type: 'session_created', stream_event_seq: 1 },
+      { event_stream: 'session_events', event_type: 'brief_extracted', stream_event_seq: 2 },
+    ]);
+  });
+
   it('creates initial Alpha rows during the existing start transaction', async () => {
     const structuredBrief = await readFixture<StructuredBrief>('expected', 'structured-brief.strong.json');
 

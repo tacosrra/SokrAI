@@ -684,6 +684,11 @@ function parseSessionEvent(value: unknown, label: string): SessionEvent {
         : expectNumber(record.turn_seq, `${label}.turn_seq`),
     run_id: expectNullableString(record.run_id, `${label}.run_id`),
     event_seq: expectNumber(record.event_seq, `${label}.event_seq`),
+    event_stream: expectEnum(record.event_stream, `${label}.event_stream`, [
+      'audit_events',
+      'session_events',
+    ]),
+    stream_event_seq: expectNumber(record.stream_event_seq, `${label}.stream_event_seq`),
     event_type: expectString(record.event_type, `${label}.event_type`),
     actor_type: expectString(record.actor_type, `${label}.actor_type`),
     request_id: expectNullableString(record.request_id, `${label}.request_id`),
@@ -818,10 +823,10 @@ export function parseSessionAuditView(value: unknown): SessionAuditView {
     gaps: expectArray(record.gaps, 'session audit view.gaps').map((item, index) =>
       parseAlphaGap(item, `session audit view.gaps[${index}]`),
     ),
-    module_chats: expectOptionalArray(record.module_chats, [], 'session audit view.module_chats').map((item, index) =>
+    module_chats: expectArray(record.module_chats, 'session audit view.module_chats').map((item, index) =>
       parseModuleChat(item, `session audit view.module_chats[${index}]`),
     ),
-    generated_sections: expectOptionalArray(record.generated_sections, [], 'session audit view.generated_sections').map((item, index) =>
+    generated_sections: expectArray(record.generated_sections, 'session audit view.generated_sections').map((item, index) =>
       parseGeneratedSection(item, `session audit view.generated_sections[${index}]`),
     ),
     turns: expectOptionalArray(record.turns, [], 'session audit view.turns').map((item, index) =>

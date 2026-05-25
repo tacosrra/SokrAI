@@ -129,16 +129,56 @@ describe('proposal flow integration', () => {
       ].join(' '),
       [startResult.body.session_id],
     );
+    const moduleChats = await app.services.database.query<{
+      chat_status: string;
+      active_turn_id: string | null;
+    }>(
+      [
+        'SELECT chat_status, active_turn_id',
+        'FROM module_chats',
+        'WHERE proposal_id = $1 AND module = \'problem\'',
+      ].join(' '),
+      [startResult.body.session_id],
+    );
+    const activeLegacyTurns = await app.services.database.query<{ count: string }>(
+      [
+        'SELECT COUNT(*)::text AS count',
+        'FROM conversation_turns',
+        'WHERE session_id = $1 AND status IN (\'awaiting_user\', \'processing\')',
+      ].join(' '),
+      [startResult.body.session_id],
+    );
     const generatedSections = await app.services.database.query<{
+      section_id: string;
+      section_kind: string;
+      section_status: string;
       section_version: number;
-      source_refs_json: unknown[];
+      title: string;
+      content_markdown: string;
+      source_refs_json: Array<{ source_kind: string }>;
       gap_refs_json: string[];
       generated_by_run_id: string | null;
     }>(
       [
-        'SELECT section_version, source_refs_json, gap_refs_json, generated_by_run_id',
+        'SELECT id AS section_id, section_kind, section_status, section_version, title, content_markdown, source_refs_json, gap_refs_json, generated_by_run_id',
         'FROM generated_sections',
         'WHERE proposal_id = $1 AND section_kind = \'problem\'',
+      ].join(' '),
+      [startResult.body.session_id],
+    );
+    const sectionAuditEvents = await app.services.database.query<{
+      event_type: string;
+      payload_json: {
+        section_id?: string;
+        section_version?: number;
+        source_refs?: string[];
+        gap_refs?: string[];
+      };
+    }>(
+      [
+        'SELECT event_type, payload_json',
+        'FROM audit_events',
+        'WHERE proposal_id = $1 AND event_type = \'problem_section_generated\'',
       ].join(' '),
       [startResult.body.session_id],
     );
@@ -182,6 +222,11 @@ describe('proposal flow integration', () => {
       user_answer_sources_count: '1',
     });
     expect(Number(alphaRows.rows[0]?.resolved_gaps_count)).toBeGreaterThan(0);
+    expect(moduleChats.rows[0]).toEqual({
+      chat_status: 'completed',
+      active_turn_id: null,
+    });
+    expect(activeLegacyTurns.rows[0]).toEqual({ count: '0' });
     expect(alphaChatTurns.rows[0]).toMatchObject({
       turn_seq: 1,
       turn_status: 'resolved',
@@ -193,12 +238,44 @@ describe('proposal flow integration', () => {
       expect.objectContaining({ source_kind: 'user_answer' }),
     ]);
     expect(generatedSections.rows[0]).toMatchObject({
+      section_kind: 'problem',
+      section_status: 'generated',
       section_version: 1,
+      title: 'Problem definition',
       generated_by_run_id: runs.rows[2] ? expect.any(String) : null,
     });
-    expect(generatedSections.rows[0]?.source_refs_json.length).toBeGreaterThan(0);
+    expect(generatedSections.rows[0]?.source_refs_json).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source_kind: 'pasted_text' }),
+        expect.objectContaining({ source_kind: 'user_answer' }),
+      ]),
+    );
+    expect(generatedSections.rows[0]?.source_refs_json).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source_kind: 'generated_section' }),
+      ]),
+    );
     expect(generatedSections.rows[0]?.gap_refs_json.length).toBeGreaterThan(0);
+    expect(generatedSections.rows[0]?.content_markdown).toContain('## Problem owner');
+    expect(generatedSections.rows[0]?.content_markdown).not.toMatch(/solution|Clinic Pilot|piloto clinico|soluci[oó]n/i);
+    expect(sectionAuditEvents.rows).toEqual([
+      {
+        event_type: 'problem_section_generated',
+        payload_json: expect.objectContaining({
+          section_id: generatedSections.rows[0]?.section_id,
+          section_version: 1,
+          source_refs: expect.any(Array),
+          gap_refs: expect.any(Array),
+        }),
+      },
+    ]);
+    expect(sectionAuditEvents.rows[0]?.payload_json.source_refs?.length).toBeGreaterThan(0);
+    expect(sectionAuditEvents.rows[0]?.payload_json.gap_refs?.length).toBeGreaterThan(0);
     expect(audit.statusCode).toBe(200);
+    expect(audit.json().module_chats[0]).toMatchObject({
+      chat_status: 'completed',
+    });
+    expect(audit.json().module_chats[0].active_turn_id ?? null).toBeNull();
     expect(audit.json().module_chats[0].turns[0].gap_refs.length).toBeGreaterThan(0);
     expect(audit.json().generated_sections[0]).toMatchObject({
       section_kind: 'problem',
@@ -287,13 +364,13 @@ describe('proposal flow integration', () => {
       agent_status: 'done',
       diagnosis: ['La respuesta es suficiente'],
       updated_problem_definition: {
-        problem_owner: '',
+        problem_owner: 'Enfermeria de admision',
         problem_statement: structuredBrief.problem_statement,
-        evidence_of_problem: '',
-        scope: '',
-        current_alternatives: '',
-        assumptions: [],
-        ambiguities_remaining: ['Falta evidencia'],
+        evidence_of_problem: structuredBrief.evidence_of_problem,
+        scope: structuredBrief.scope,
+        current_alternatives: structuredBrief.current_alternatives,
+        assumptions: structuredBrief.assumptions,
+        ambiguities_remaining: [],
       },
       next_question: '',
       completion_reason: 'problem sufficiently defined',

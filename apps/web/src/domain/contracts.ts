@@ -364,6 +364,8 @@ export interface SessionEvent {
   turn_seq: number | null;
   run_id: string | null;
   event_seq: number;
+  event_stream: 'audit_events' | 'session_events';
+  stream_event_seq: number;
   event_type: string;
   actor_type: string;
   request_id: string | null;

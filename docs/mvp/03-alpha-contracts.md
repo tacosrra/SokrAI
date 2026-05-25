@@ -48,6 +48,12 @@ PR 5 extends `AlphaGap` so initial gaps can be audited without inventing evidenc
 
 Initial gap analysis is deterministic API/domain code. It does not add scoring, ranking, approval, legal/regulatory conclusions, medical-device classification, cost/resource analysis, RAG, or PDF export.
 
+## GeneratedSection versioning
+
+`GeneratedSection.section_version` is required and must be an integer starting at `1`.
+Consumers must preserve it when reading, replaying, or rendering generated sections.
+Persistence orders versions by `section_kind`, `section_version`, `created_at`, and id; callers must not infer currentness from array position alone or omit `section_version` from cached payloads.
+
 ## PR2A exclusions
 
 - No `db/migrations` changes or SQL constraints.

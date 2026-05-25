@@ -178,6 +178,10 @@ export function buildFallbackQuestion(problemDefinition: ProblemDefinitionState)
   return '¿Qué detalle falta para que el problema quede claramente definido antes de hablar de soluciones?';
 }
 
+/**
+ * Selects the highest-priority open Alpha problem gaps that should be attached
+ * to the next clarification turn. The cap keeps each turn focused and auditable.
+ */
 export function selectProblemGapRefs(
   gaps: AlphaGap[],
   problemDefinition: ProblemDefinitionState,
@@ -200,6 +204,10 @@ export function selectProblemGapRefs(
     .map((gap) => gap.gap_id);
 }
 
+/**
+ * Classifies persisted Alpha problem gaps after a user answer. Completed fields
+ * resolve their gaps; still-missing or ambiguous fields stay open/in progress.
+ */
 export function classifyProblemGapStatuses(
   gaps: AlphaGap[],
   problemDefinition: ProblemDefinitionState,
@@ -233,6 +241,10 @@ export function classifyProblemGapStatuses(
   return changes;
 }
 
+/**
+ * Builds the internal source refs allowed for deterministic problem sections.
+ * External, generated, or unrelated sources are intentionally excluded.
+ */
 export function buildProblemSectionSourceRefs(
   initialSources: ProposalSource[],
   userAnswerSources: ProposalSource[],
@@ -248,6 +260,10 @@ export function buildProblemSectionSourceRefs(
   return Array.from(sourcesById.values());
 }
 
+/**
+ * Renders the terminal Alpha problem section from persisted problem state only.
+ * It does not introduce solution, pilot, legal, cost, or retrieval content.
+ */
 export function renderProblemSection(
   problemDefinition: ProblemDefinitionState,
   params: { sourceCount: number; gapCount: number },
@@ -360,6 +376,7 @@ export function enforceTurnGuardrails(
   updatedBrief: StructuredBrief;
   updatedProblemDefinition: ProblemDefinitionState;
   detectedGaps: string[];
+  latestAnswerWasVague: boolean;
 } {
   const warnings: string[] = [];
   const nextQuestion = enforceSingleQuestion(turn.next_question);
@@ -428,5 +445,6 @@ export function enforceTurnGuardrails(
     },
     updatedProblemDefinition,
     detectedGaps: dedupe([...updatedBrief.ambiguities, ...updatedBrief.missing_information]),
+    latestAnswerWasVague: latestAnswerIsVague,
   };
 }

@@ -203,6 +203,7 @@ export class ProblemDefinitionService {
             updatedBrief: guarded.updatedBrief,
             updatedProblemDefinition: guarded.updatedProblemDefinition,
             detectedGaps: guarded.detectedGaps,
+            latestAnswerWasVague: guarded.latestAnswerWasVague,
             warnings: guarded.warnings,
             runId: run.id,
             requestId,
@@ -302,6 +303,7 @@ export class ProblemDefinitionService {
     updatedBrief: StructuredBrief;
     updatedProblemDefinition: ProblemDefinitionState;
     detectedGaps: string[];
+    latestAnswerWasVague: boolean;
     warnings: string[];
     runId: string;
     requestId: string;
@@ -358,6 +360,7 @@ export class ProblemDefinitionService {
       openedTurn,
       guardedTurn: params.guardedTurn,
       updatedProblemDefinition: params.updatedProblemDefinition,
+      latestAnswerWasVague: params.latestAnswerWasVague,
       warnings: params.warnings,
       runId: params.runId,
       requestId: params.requestId,
@@ -460,6 +463,7 @@ export class ProblemDefinitionService {
     openedTurn: ConversationTurnRecord | null;
     guardedTurn: ProblemDefinitionTurn;
     updatedProblemDefinition: ProblemDefinitionState;
+    latestAnswerWasVague: boolean;
     warnings: string[];
     runId: string;
     requestId: string;
@@ -552,8 +556,7 @@ export class ProblemDefinitionService {
       answerText: params.activeTurn.answer_text,
     });
 
-    const shouldResolveGaps = !params.warnings.some((warning) => warning.toLocaleLowerCase().includes('vague'));
-    const gapStatusChanges = shouldResolveGaps
+    const gapStatusChanges = !params.latestAnswerWasVague
       ? classifyProblemGapStatuses(
           existingGaps,
           params.updatedProblemDefinition,
