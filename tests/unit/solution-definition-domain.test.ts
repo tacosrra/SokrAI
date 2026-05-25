@@ -133,6 +133,65 @@ describe('solution definition domain rules', () => {
     );
   });
 
+  it('normalizes raw done to continue when the solution output still asks for details', () => {
+    const turn: SolutionDefinitionTurn = {
+      agent_status: 'done',
+      diagnosis: [
+        'The solution summary is not clear yet.',
+        'Target users need clarification.',
+        'Operational steps need details.',
+      ],
+      updated_solution_definition: doneState,
+      next_question: 'Who exactly uses the assistant and what are the operational steps?',
+      completion_reason: 'The next step is to provide more details.',
+    };
+
+    const guarded = enforceSolutionTurnGuardrails(turn, undefined, { isInitialRun: true });
+
+    expect(guarded.turn.agent_status).toBe('continue');
+    expect(guarded.turn.next_question).toBe(
+      'Who exactly uses the assistant and what are the operational steps?',
+    );
+    expect(guarded.turn.completion_reason).toBe('');
+    expect(guarded.warnings).toContain(
+      'Model marked solution lane as done while unresolved clarification signals remained',
+    );
+  });
+
+  it('keeps raw done blocked when solution fields are missing or the latest answer is vague', () => {
+    const missingField: SolutionDefinitionTurn = {
+      agent_status: 'done',
+      diagnosis: ['The model attempts to close without workflow details.'],
+      updated_solution_definition: {
+        ...doneState,
+        workflow_change: '',
+      },
+      next_question: '',
+      completion_reason: 'solution sufficiently defined',
+    };
+
+    const missing = enforceSolutionTurnGuardrails(missingField, 'Admission nurses use it before triage.');
+
+    expect(missing.turn.agent_status).toBe('continue');
+    expect(missing.turn.next_question).toContain('?');
+    expect(missing.turn.completion_reason).toBe('');
+
+    const vague: SolutionDefinitionTurn = {
+      agent_status: 'done',
+      diagnosis: ['The model attempts to close with a vague answer.'],
+      updated_solution_definition: doneState,
+      next_question: '',
+      completion_reason: 'solution sufficiently defined',
+    };
+
+    const vagueResult = enforceSolutionTurnGuardrails(vague, 'not sure');
+
+    expect(vagueResult.turn.agent_status).toBe('continue');
+    expect(vagueResult.turn.next_question).toContain('?');
+    expect(vagueResult.turn.completion_reason).toBe('');
+    expect(vagueResult.warnings).toContain('Latest solution answer was vague; clarification was narrowed');
+  });
+
   it('selects solution-only gap refs and caps them at three', () => {
     const gaps: AlphaGap[] = [
       baseGap,

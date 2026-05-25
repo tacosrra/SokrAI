@@ -26,6 +26,29 @@ const FORBIDDEN_TOPIC_PATTERNS = [
   /\bapproval\b/i,
 ];
 
+const SOLUTION_CLARIFICATION_DIAGNOSIS_TERMS = [
+  'not clear',
+  'unclear',
+  'needs detail',
+  'needs details',
+  'needs clarification',
+  'clarify',
+  'who exactly',
+  'missing detail',
+  'missing information',
+  'not specified',
+  'falta',
+  'no esta claro',
+  'no queda claro',
+  'necesita detalle',
+  'necesita aclar',
+  'requiere aclar',
+  'quien exactamente',
+  'ambiguo',
+  'ambigua',
+  'no se especific',
+];
+
 const SOLUTION_FIELD_PRIORITY = [
   'solution_summary',
   'target_user',
@@ -63,6 +86,22 @@ function hasEnoughText(value: string, minLength: number): boolean {
 
 function dedupe(items: string[]): string[] {
   return Array.from(new Set(items.map((item) => item.trim()).filter(Boolean)));
+}
+
+function normalizeForSearch(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase();
+}
+
+function containsAny(value: string, terms: string[]): boolean {
+  const normalized = normalizeForSearch(value);
+  return terms.some((term) => normalized.includes(normalizeForSearch(term)));
+}
+
+function diagnosisRequestsSolutionClarification(diagnosis: string[]): boolean {
+  return containsAny(diagnosis.join(' '), SOLUTION_CLARIFICATION_DIAGNOSIS_TERMS);
 }
 
 function solutionStateContainsForbiddenTopic(state: SolutionDefinitionState): boolean {
@@ -362,6 +401,7 @@ export function renderSolutionSection(
 export function enforceSolutionTurnGuardrails(
   turn: SolutionDefinitionTurn,
   latestAnswer?: string,
+  options: { isInitialRun?: boolean } = {},
 ): {
   turn: SolutionDefinitionTurn;
   warnings: string[];
@@ -412,6 +452,26 @@ export function enforceSolutionTurnGuardrails(
   }
 
   const isComplete = evaluateSolutionCompletion(normalizedTurn.updated_solution_definition);
+  const rawDoneHadMeaningfulQuestion = turn.agent_status === 'done' && nextQuestion.length > 0;
+  const rawDoneHadMissingDetailsDiagnosis =
+    turn.agent_status === 'done' &&
+    diagnosisRequestsSolutionClarification(normalizedTurn.diagnosis);
+  const initialRunHasUnresolvedSolutionSignals =
+    turn.agent_status === 'done' &&
+    options.isInitialRun === true &&
+    !latestAnswer &&
+    (rawDoneHadMeaningfulQuestion || rawDoneHadMissingDetailsDiagnosis);
+
+  if (
+    normalizedTurn.agent_status === 'done' &&
+    (rawDoneHadMeaningfulQuestion || rawDoneHadMissingDetailsDiagnosis || initialRunHasUnresolvedSolutionSignals)
+  ) {
+    warnings.push('Model marked solution lane as done while unresolved clarification signals remained');
+    normalizedTurn.agent_status = 'continue';
+    normalizedTurn.completion_reason = '';
+    normalizedTurn.next_question =
+      normalizedTurn.next_question || buildSolutionFallbackQuestion(normalizedTurn.updated_solution_definition);
+  }
 
   if (normalizedTurn.agent_status === 'done' && !isComplete) {
     warnings.push('Model marked solution lane as done before completion criteria were met');

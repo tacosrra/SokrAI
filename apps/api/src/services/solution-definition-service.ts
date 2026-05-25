@@ -101,7 +101,11 @@ export class SolutionDefinitionService {
         recentTurns,
         latestAnswer: activeTurn?.answer_text,
       });
-      const guarded = enforceSolutionTurnGuardrails(modelTurn.output, activeTurn?.answer_text);
+      const guarded = enforceSolutionTurnGuardrails(
+        modelTurn.output,
+        activeTurn?.answer_text,
+        { isInitialRun: command.trigger === 'start' },
+      );
 
       if (
         guarded.turn.agent_status !== 'done' &&

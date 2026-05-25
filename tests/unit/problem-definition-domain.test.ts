@@ -157,6 +157,89 @@ describe('problem definition domain rules', () => {
     expect(guarded.updatedBrief.ambiguities).toEqual([]);
   });
 
+  it('does not repeat a stale ambiguity question after a concrete answer resolved it', () => {
+    const staleBottleneck = 'No se especificó qué es exactamente el cuello de botella principal.';
+    const staleMinimumData = 'No se determinaron los datos mínimos necesarios ni qué parte del flujo debería cambiar.';
+    const turn: ProblemDefinitionTurn = {
+      agent_status: 'done',
+      diagnosis: ['La respuesta concreta el cuello de botella y el cambio de flujo.'],
+      updated_problem_definition: {
+        ...completeProblemDefinition,
+        current_alternatives: 'Hoy se decide manualmente si resolver, pedir mas datos o derivar a enfermeria.',
+        ambiguities_remaining: [staleBottleneck, staleMinimumData],
+      },
+      next_question: '¿Puedes concretar de nuevo el cuello de botella y los datos mínimos del flujo?',
+      completion_reason: 'problem sufficiently defined',
+    };
+    const latestAnswer = [
+      'El cuello de botella es la clasificacion inicial de solicitudes administrativas ambiguas.',
+      'Se decide si resolver administrativamente, pedir mas datos o escalar a enfermeria.',
+      'Los datos minimos son motivo, canal, sintomas, procedimiento administrativo solicitado y criterio de escalado.',
+      'El cambio de flujo es un primer triaje administrativo con ficha estructurada y revision humana.',
+    ].join(' ');
+
+    const guarded = enforceTurnGuardrails(baseBrief, turn, latestAnswer);
+
+    expect(guarded.turn.agent_status).toBe('done');
+    expect(guarded.turn.next_question).toBe('');
+    expect(guarded.updatedProblemDefinition.ambiguities_remaining).toEqual([]);
+  });
+
+  it('blocks premature initial completion when intake still has important problem gaps', () => {
+    const demoBrief: StructuredBrief = {
+      ...baseBrief,
+      problem_statement: 'Las solicitudes administrativas mezclan tramites y sintomas imprecisos.',
+      evidence_of_problem: 'En una semana simulada hubo 240 solicitudes y derivaciones innecesarias a enfermeria.',
+      scope: 'Centro de salud ficticio, adultos y mensajes administrativos internos.',
+      current_alternatives: 'El personal administrativo lee cada mensaje y deriva a enfermeria cuando duda.',
+      ambiguities: [
+        'No esta claro cual es exactamente el cuello de botella principal',
+        'No esta claro quien debe ser el owner del problema',
+      ],
+      missing_information: ['problem_owner', 'assumptions'],
+    };
+    const prematureDone: ProblemDefinitionTurn = {
+      agent_status: 'done',
+      diagnosis: ['El modelo intenta cerrar desde la propuesta inicial.'],
+      updated_problem_definition: {
+        problem_owner: 'Personal administrativo del centro de salud',
+        problem_statement: demoBrief.problem_statement,
+        evidence_of_problem: demoBrief.evidence_of_problem,
+        scope: demoBrief.scope,
+        current_alternatives: demoBrief.current_alternatives,
+        assumptions: ['El cuello de botella principal puede estar en clasificacion o falta de datos.'],
+        ambiguities_remaining: [],
+      },
+      next_question: '',
+      completion_reason: 'problem sufficiently defined',
+    };
+
+    const guarded = enforceTurnGuardrails(demoBrief, prematureDone, undefined, { isInitialRun: true });
+
+    expect(guarded.turn.agent_status).toBe('continue');
+    expect(guarded.turn.next_question).toContain('?');
+    expect(guarded.turn.completion_reason).toBe('');
+    expect(guarded.warnings).toContain(
+      'Model marked the lane as done while unresolved clarification signals remained',
+    );
+  });
+
+  it('normalizes raw done to continue when a problem question or diagnosis still asks for clarification', () => {
+    const turn: ProblemDefinitionTurn = {
+      agent_status: 'done',
+      diagnosis: ['No esta claro quien responde por medir la eficiencia del problema.'],
+      updated_problem_definition: completeProblemDefinition,
+      next_question: '¿Quien debe validar la metrica minima de eficiencia?',
+      completion_reason: 'problem sufficiently defined',
+    };
+
+    const guarded = enforceTurnGuardrails(baseBrief, turn);
+
+    expect(guarded.turn.agent_status).toBe('continue');
+    expect(guarded.turn.next_question).toBe('¿Quien debe validar la metrica minima de eficiencia?');
+    expect(guarded.turn.completion_reason).toBe('');
+  });
+
   it('still blocks done turns when required fields are missing or the latest answer is vague', () => {
     const incompleteTurn: ProblemDefinitionTurn = {
       agent_status: 'done',

@@ -106,7 +106,12 @@ export class ProblemDefinitionService {
         latestAnswer: openTurn?.answer_text ?? undefined,
       });
 
-      const guarded = this.prepareGuardedTurn(session.latest_structured_brief_json, modelTurn.output, openTurn?.answer_text ?? undefined);
+      const guarded = this.prepareGuardedTurn(
+        session.latest_structured_brief_json,
+        modelTurn.output,
+        openTurn?.answer_text ?? undefined,
+        { isInitialRun: command.trigger === 'start' },
+      );
 
       if (
         guarded.turn.agent_status !== 'done' &&
@@ -233,8 +238,9 @@ export class ProblemDefinitionService {
     brief: StructuredBrief,
     turn: ProblemDefinitionTurn,
     latestAnswer?: string,
+    options?: { isInitialRun?: boolean },
   ) {
-    return enforceTurnGuardrails(brief, turn, latestAnswer);
+    return enforceTurnGuardrails(brief, turn, latestAnswer, options);
   }
 
   private async findExistingResponse(
