@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type {
   AlphaGap,
+  ProblemDefinitionState,
   ProblemDefinitionTurn,
   ProposalSource,
   StructuredBrief,
@@ -53,6 +54,16 @@ const baseGap: AlphaGap = {
   updated_at: '2026-05-24T14:00:00.000Z',
 };
 
+const completeProblemDefinition: ProblemDefinitionState = {
+  problem_owner: 'Equipo administrativo de admision',
+  problem_statement: 'El cuello de botella es la clasificacion inicial de solicitudes administrativas ambiguas.',
+  evidence_of_problem: 'Las solicitudes ambiguas generan reprocesos y esperas antes de decidir la ruta correcta.',
+  scope: 'Primer contacto administrativo en admision de pacientes adultos.',
+  current_alternatives: 'Hoy se revisa manualmente cada solicitud y se pregunta caso a caso.',
+  assumptions: [],
+  ambiguities_remaining: [],
+};
+
 describe('problem definition domain rules', () => {
   it('marks low-information answers as vague', () => {
     expect(isVagueAnswer('no lo se')).toBe(true);
@@ -74,6 +85,8 @@ describe('problem definition domain rules', () => {
         ambiguities_remaining: [],
       }),
     ).toBe(true);
+
+    expect(evaluateCompletion(completeProblemDefinition)).toBe(true);
 
     expect(
       evaluateCompletion({
@@ -110,6 +123,76 @@ describe('problem definition domain rules', () => {
     expect(guarded.turn.agent_status).toBe('continue');
     expect(guarded.turn.next_question).toBe(buildFallbackQuestion(guarded.updatedProblemDefinition));
     expect(guarded.warnings.length).toBeGreaterThan(0);
+  });
+
+  it('allows completion when the latest answer resolves copied stale problem ambiguities', () => {
+    const staleBottleneck = 'No se especificó qué es exactamente el cuello de botella principal.';
+    const staleMinimumData = 'No se determinaron los datos mínimos necesarios ni qué parte del flujo debería cambiar con la implementación del asistente.';
+    const turn: ProblemDefinitionTurn = {
+      agent_status: 'done',
+      diagnosis: ['La respuesta concreta el cuello de botella, los datos necesarios y el cambio de flujo.'],
+      updated_problem_definition: {
+        ...completeProblemDefinition,
+        problem_statement: 'El cuello de botella es la clasificacion inicial de solicitudes administrativas ambiguas.',
+        current_alternatives: 'Hoy se decide manualmente si resolver, pedir mas datos o derivar a enfermeria.',
+        ambiguities_remaining: [staleBottleneck, staleMinimumData],
+      },
+      next_question: '',
+      completion_reason: 'problem sufficiently defined',
+    };
+    const latestAnswer = [
+      'El cuello de botella es la clasificacion inicial de solicitudes administrativas ambiguas.',
+      'No es solo volumen: hay que decidir si resolver administrativamente, pedir mas datos o escalar a enfermeria.',
+      'Los datos minimos son motivo, canal, mencion de sintomas o empeoramiento, procedimiento administrativo solicitado, datos faltantes y criterio de escalado.',
+      'El cambio de flujo es el primer triaje administrativo con una ficha estructurada para revision humana.',
+    ].join(' ');
+
+    const guarded = enforceTurnGuardrails(baseBrief, turn, latestAnswer);
+
+    expect(guarded.turn.agent_status).toBe('done');
+    expect(guarded.turn.next_question).toBe('');
+    expect(guarded.warnings).not.toContain('Model marked the lane as done before completion criteria were met');
+    expect(guarded.updatedProblemDefinition.ambiguities_remaining).not.toContain(staleBottleneck);
+    expect(guarded.updatedProblemDefinition.ambiguities_remaining).not.toContain(staleMinimumData);
+    expect(guarded.updatedBrief.ambiguities).toEqual([]);
+  });
+
+  it('still blocks done turns when required fields are missing or the latest answer is vague', () => {
+    const incompleteTurn: ProblemDefinitionTurn = {
+      agent_status: 'done',
+      diagnosis: ['El modelo intenta cerrar sin propietario.'],
+      updated_problem_definition: {
+        ...completeProblemDefinition,
+        problem_owner: '',
+      },
+      next_question: '',
+      completion_reason: 'problem sufficiently defined',
+    };
+
+    const incomplete = enforceTurnGuardrails(
+      baseBrief,
+      incompleteTurn,
+      'Lo vive admision administrativa durante el primer contacto con pacientes.',
+    );
+
+    expect(incomplete.turn.agent_status).toBe('continue');
+    expect(incomplete.turn.next_question).toBe(buildFallbackQuestion(incomplete.updatedProblemDefinition));
+    expect(incomplete.warnings).toContain('Model marked the lane as done before completion criteria were met');
+
+    const vagueTurn: ProblemDefinitionTurn = {
+      agent_status: 'done',
+      diagnosis: ['El modelo intenta cerrar con una respuesta vaga.'],
+      updated_problem_definition: completeProblemDefinition,
+      next_question: '',
+      completion_reason: 'problem sufficiently defined',
+    };
+
+    const vague = enforceTurnGuardrails(baseBrief, vagueTurn, 'no lo se');
+
+    expect(vague.turn.agent_status).toBe('continue');
+    expect(vague.turn.next_question).toBe(buildFallbackQuestion(vague.updatedProblemDefinition));
+    expect(vague.turn.completion_reason).toBe('');
+    expect(vague.warnings).toContain('Latest answer was vague; clarification was narrowed');
   });
 
   it('selects unresolved problem gap refs by field priority', () => {

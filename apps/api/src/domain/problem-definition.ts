@@ -52,6 +52,120 @@ function dedupe(items: string[]): string[] {
   return Array.from(new Set(items.map((item) => item.trim()).filter(Boolean)));
 }
 
+function normalizeForSearch(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase();
+}
+
+function containsAny(value: string, terms: string[]): boolean {
+  const normalized = normalizeForSearch(value);
+  return terms.some((term) => normalized.includes(normalizeForSearch(term)));
+}
+
+function countContainedTerms(value: string, terms: string[]): number {
+  const normalized = normalizeForSearch(value);
+  return terms.filter((term) => normalized.includes(normalizeForSearch(term))).length;
+}
+
+function removeResolvedStaleAmbiguities(
+  problemDefinition: ProblemDefinitionState,
+  latestAnswer?: string,
+): ProblemDefinitionState {
+  const explicitEvidence = [
+    latestAnswer ?? '',
+    problemDefinition.problem_statement,
+    problemDefinition.evidence_of_problem,
+    problemDefinition.scope,
+    problemDefinition.current_alternatives,
+    ...problemDefinition.assumptions,
+  ].join(' ');
+
+  const bottleneckResolutionTerms = [
+    'clasificacion inicial',
+    'initial classification',
+    'triaje administrativo',
+    'administrative triage',
+    'solicitudes ambiguas',
+    'ambiguous administrative requests',
+    'pedir mas datos',
+    'request more data',
+    'escalar',
+    'escalate',
+    'derivar',
+    'enfermeria',
+    'nursing',
+    'resolver administr',
+  ];
+
+  const minimumDataTerms = [
+    'motivo',
+    'reason',
+    'canal',
+    'channel',
+    'sintomas',
+    'symptoms',
+    'empeoramiento',
+    'worsening',
+    'procedimiento administrativo',
+    'administrative procedure',
+    'datos faltantes',
+    'missing fields',
+    'criterio de escalado',
+    'criterios de escalado',
+    'escalation criteria',
+  ];
+
+  const workflowChangeTerms = [
+    'ficha estructurada',
+    'structured card',
+    'primer triaje',
+    'first administrative triage',
+    'triaje administrativo',
+    'administrative triage',
+    'revision humana',
+    'human review',
+    'confirmacion humana',
+    'human confirmation',
+  ];
+
+  const filteredAmbiguities = problemDefinition.ambiguities_remaining.filter((ambiguity) => {
+    const normalizedAmbiguity = normalizeForSearch(ambiguity);
+
+    if (
+      (normalizedAmbiguity.includes('cuello de botella') || normalizedAmbiguity.includes('bottleneck')) &&
+      containsAny(explicitEvidence, bottleneckResolutionTerms)
+    ) {
+      return false;
+    }
+
+    if (
+      (
+        normalizedAmbiguity.includes('datos minimos') ||
+        normalizedAmbiguity.includes('parte del flujo') ||
+        normalizedAmbiguity.includes('workflow') ||
+        normalizedAmbiguity.includes('flujo')
+      ) &&
+      countContainedTerms(explicitEvidence, minimumDataTerms) >= 2 &&
+      containsAny(explicitEvidence, workflowChangeTerms)
+    ) {
+      return false;
+    }
+
+    return true;
+  });
+
+  if (filteredAmbiguities.length === problemDefinition.ambiguities_remaining.length) {
+    return problemDefinition;
+  }
+
+  return {
+    ...problemDefinition,
+    ambiguities_remaining: filteredAmbiguities,
+  };
+}
+
 function isInternalSource(source: ProposalSource): boolean {
   return source.source_kind === 'pasted_text' ||
     source.source_kind === 'uploaded_file' ||
@@ -131,13 +245,14 @@ export function computeMissingInformation(problemDefinition: ProblemDefinitionSt
 }
 
 export function evaluateCompletion(problemDefinition: ProblemDefinitionState): boolean {
+  // Assumptions are preserved when present, but Alpha problem completion only
+  // blocks on the required problem fields and open ambiguities.
   return (
     hasEnoughText(problemDefinition.problem_owner, 3) &&
     hasEnoughText(problemDefinition.problem_statement, 12) &&
     hasEnoughText(problemDefinition.evidence_of_problem, 12) &&
     hasEnoughText(problemDefinition.scope, 8) &&
     hasEnoughText(problemDefinition.current_alternatives, 8) &&
-    problemDefinition.assumptions.length >= 1 &&
     problemDefinition.ambiguities_remaining.length <= 1
   );
 }
@@ -332,12 +447,13 @@ export function enforceSingleQuestion(question: string): string {
 export function applyTurnToBrief(
   brief: StructuredBrief,
   turn: ProblemDefinitionTurn,
+  latestAnswer?: string,
 ): {
   updatedBrief: StructuredBrief;
   updatedProblemDefinition: ProblemDefinitionState;
   detectedGaps: string[];
 } {
-  const updatedProblemDefinition: ProblemDefinitionState = {
+  const updatedProblemDefinition = removeResolvedStaleAmbiguities({
     problem_owner: turn.updated_problem_definition.problem_owner.trim(),
     problem_statement: turn.updated_problem_definition.problem_statement.trim(),
     evidence_of_problem: turn.updated_problem_definition.evidence_of_problem.trim(),
@@ -345,7 +461,7 @@ export function applyTurnToBrief(
     current_alternatives: turn.updated_problem_definition.current_alternatives.trim(),
     assumptions: dedupe(turn.updated_problem_definition.assumptions),
     ambiguities_remaining: dedupe(turn.updated_problem_definition.ambiguities_remaining),
-  };
+  }, latestAnswer);
 
   const updatedBrief: StructuredBrief = {
     ...brief,
@@ -391,7 +507,7 @@ export function enforceTurnGuardrails(
     updatedBrief,
     updatedProblemDefinition,
     detectedGaps,
-  } = applyTurnToBrief(brief, normalizedTurn);
+  } = applyTurnToBrief(brief, normalizedTurn, latestAnswer);
 
   const latestAnswerIsVague = latestAnswer ? isVagueAnswer(latestAnswer) : false;
   const nextQuestionContainsForbiddenTopic = FORBIDDEN_TOPIC_PATTERNS.some((pattern) =>
