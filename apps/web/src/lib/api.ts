@@ -6,6 +6,10 @@ import type {
   ProposalStartResponse,
   RequestExecutionResponse,
   SessionAuditView,
+  SolutionReplyRequest,
+  SolutionReplyResponse,
+  SolutionStartRequest,
+  SolutionStartResponse,
 } from '../domain/contracts';
 import {
   parseErrorResponse,
@@ -13,6 +17,8 @@ import {
   parseProposalStartResponse,
   parseRequestExecutionResponse,
   parseSessionAuditView,
+  parseSolutionReplyResponse,
+  parseSolutionStartResponse,
 } from './validation';
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
@@ -216,6 +222,40 @@ export async function replySession(
       : undefined,
     timeoutMs: REPLY_SESSION_TIMEOUT_MS,
     parse: parseProposalReplyResponse,
+  });
+}
+
+export async function startSolution(
+  payload: SolutionStartRequest,
+): Promise<SolutionStartResponse> {
+  return requestJson({
+    url: joinUrl(WEBHOOK_BASE_URL, '/webhook/solution-start-v1'),
+    method: 'POST',
+    payload,
+    headers: payload.request_id
+      ? {
+          'x-request-id': payload.request_id,
+        }
+      : undefined,
+    timeoutMs: REPLY_SESSION_TIMEOUT_MS,
+    parse: parseSolutionStartResponse,
+  });
+}
+
+export async function replySolution(
+  payload: SolutionReplyRequest,
+): Promise<SolutionReplyResponse> {
+  return requestJson({
+    url: joinUrl(WEBHOOK_BASE_URL, '/webhook/solution-reply-v1'),
+    method: 'POST',
+    payload,
+    headers: payload.request_id
+      ? {
+          'x-request-id': payload.request_id,
+        }
+      : undefined,
+    timeoutMs: REPLY_SESSION_TIMEOUT_MS,
+    parse: parseSolutionReplyResponse,
   });
 }
 

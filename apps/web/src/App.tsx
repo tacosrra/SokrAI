@@ -6,7 +6,9 @@ import {
   fetchRequestExecution,
   recoverRequestExecution,
   fetchSessionAudit,
+  replySolution,
   replySession,
+  startSolution,
   startSession,
 } from './lib/api';
 import { mapApiError } from './lib/feedback';
@@ -36,7 +38,7 @@ const REQUEST_RECOVERY_POLL_INTERVAL_MS = 4000;
 const ACTIVE_RECOVERY_AFTER_MS = readTimeout('VITE_ACTIVE_RECOVERY_AFTER_MS', 60000);
 const MAX_CONSECUTIVE_RECOVERY_TRANSPORT_ERRORS = 5;
 
-type RecoverableRequestKind = 'proposal_start' | 'proposal_reply';
+type RecoverableRequestKind = 'proposal_start' | 'proposal_reply' | 'solution_start' | 'solution_reply';
 
 interface ModeCardProps {
   activeMode: ModeView;
@@ -60,7 +62,7 @@ function writeSessionToUrl(sessionId: string) {
   window.history.replaceState({}, '', url);
 }
 
-function createClientRequestId(prefix: 'start' | 'reply'): string {
+function createClientRequestId(prefix: 'start' | 'reply' | 'solution-start' | 'solution-reply'): string {
   return `web-${prefix}-${crypto.randomUUID()}`;
 }
 
@@ -489,6 +491,141 @@ export function App() {
     }
   }
 
+  async function handleStartSolution() {
+    if (!activeAudit) {
+      return;
+    }
+
+    const requestId = createClientRequestId('solution-start');
+    setIsReplying(true);
+    setBanner({
+      tone: 'info',
+      text: 'Iniciando el carril de solución y generando la primera pregunta…',
+    });
+
+    try {
+      const result = await startSolution({
+        request_id: requestId,
+        session_id: activeAudit.session.id,
+      });
+
+      await loadSession(result.session_id, {
+        successMessage: `Carril de solución iniciado. Agent status: ${result.agent_status}.`,
+        skipBannerOnStart: true,
+      });
+    } catch (error) {
+      if (isRecoverableWorkflowDeliveryError(error)) {
+        setBanner({
+          tone: 'info',
+          text:
+            error.errorCode === 'request_timeout'
+              ? `La llamada para iniciar solución venció en el navegador. Recuperando el resultado del workflow para request_id ${requestId}…`
+              : `La respuesta de inicio de solución llegó con un formato inesperado. Intentando recuperar el estado real con request_id ${requestId}…`,
+        });
+
+        try {
+          const sessionId = await recoverTimedOutRequest(requestId, 'solution_start');
+          await loadSession(sessionId, {
+            successMessage: 'Carril de solución recuperado tras completar el workflow fuera del tiempo de espera inicial.',
+            skipBannerOnStart: true,
+          });
+          return;
+        } catch (recoveryError) {
+          try {
+            await loadSession(activeAudit.session.id, {
+              successMessage: 'Se recuperó el estado de la sesión directamente desde la API tras expirar el inicio de solución.',
+              skipBannerOnStart: true,
+            });
+            return;
+          } catch {
+            // Preserve the original recovery error when the direct session refresh also fails.
+          }
+
+          setBanner({
+            tone: 'error',
+            text: mapApiError(recoveryError),
+          });
+          return;
+        }
+      }
+
+      setBanner({
+        tone: 'error',
+        text: mapApiError(error),
+      });
+    } finally {
+      setIsReplying(false);
+    }
+  }
+
+  async function handleSolutionReply(answer: string) {
+    if (!activeAudit) {
+      return;
+    }
+
+    const requestId = createClientRequestId('solution-reply');
+    setIsReplying(true);
+    setBanner({
+      tone: 'info',
+      text: 'Respuesta de solución enviada. Actualizando el carril y sus fuentes internas…',
+    });
+
+    try {
+      const result = await replySolution({
+        request_id: requestId,
+        session_id: activeAudit.session.id,
+        answer,
+      });
+
+      await loadSession(result.session_id, {
+        successMessage: `Turno de solución procesado. Agent status: ${result.agent_status}.`,
+        skipBannerOnStart: true,
+      });
+    } catch (error) {
+      if (isRecoverableWorkflowDeliveryError(error)) {
+        setBanner({
+          tone: 'info',
+          text:
+            error.errorCode === 'request_timeout'
+              ? `La llamada del turno de solución venció en el navegador. Recuperando el resultado del workflow para request_id ${requestId}…`
+              : `La respuesta del turno de solución llegó con un formato inesperado. Intentando recuperar el estado real con request_id ${requestId}…`,
+        });
+
+        try {
+          const sessionId = await recoverTimedOutRequest(requestId, 'solution_reply');
+          await loadSession(sessionId, {
+            successMessage: 'Turno de solución recuperado tras completar el workflow fuera del tiempo de espera inicial.',
+            skipBannerOnStart: true,
+          });
+          return;
+        } catch (recoveryError) {
+          try {
+            await loadSession(activeAudit.session.id, {
+              successMessage: 'Se recuperó el estado de la sesión directamente desde la API tras expirar el turno de solución.',
+              skipBannerOnStart: true,
+            });
+            return;
+          } catch {
+            // Preserve the original recovery error when the direct session refresh also fails.
+          }
+
+          setBanner({
+            tone: 'error',
+            text: mapApiError(recoveryError),
+          });
+          return;
+        }
+      }
+
+      setBanner({
+        tone: 'error',
+        text: mapApiError(error),
+      });
+    } finally {
+      setIsReplying(false);
+    }
+  }
+
   function handleStartFreshSession() {
     setActiveAudit(null);
     setBanner(null);
@@ -623,6 +760,8 @@ export function App() {
               audit={activeAudit}
               isReplying={isReplying}
               onReply={handleReply}
+              onSolutionReply={handleSolutionReply}
+              onStartSolution={handleStartSolution}
               presentation={presentation}
             />
           </section>

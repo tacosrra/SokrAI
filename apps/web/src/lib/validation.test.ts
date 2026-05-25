@@ -5,6 +5,8 @@ import {
   parseProposalStartResponse,
   parseRequestExecutionResponse,
   parseSessionAuditView,
+  parseSolutionReplyResponse,
+  parseSolutionStartResponse,
 } from './validation';
 
 const structuredBrief = {
@@ -113,6 +115,18 @@ const validGeneratedSection = {
   supersedes_section_id: null,
   warnings: [],
   created_at: '2026-05-24T20:05:00.000Z',
+};
+
+const validSolutionDefinition = {
+  solution_summary: 'A guided intake assistant prepares structured triage handoff notes.',
+  target_user: 'Admission nursing staff',
+  how_it_works: 'The assistant asks bounded questions and creates a structured intake summary.',
+  workflow_change: 'Nurses review a structured summary before continuing the normal triage protocol.',
+  current_solutions: 'Current work relies on manual notes and static protocol sheets.',
+  value_differential: 'The solution makes intake notes more consistent without replacing judgement.',
+  scope_limits: 'The first version covers adult emergency intake and excludes diagnosis.',
+  assumptions: ['Nursing staff can answer guided questions during intake.'],
+  ambiguities_remaining: [],
 };
 
 function createAuditView(runs: unknown[] = []) {
@@ -242,6 +256,34 @@ describe('parseProposalReplyResponse', () => {
     expect(response.completion_reason).toBe('');
     expect(response.warnings).toEqual([]);
     expect(response.updated_problem_definition.problem_statement).toContain('triaje');
+  });
+});
+
+describe('parseSolutionResponse', () => {
+  it('accepts solution start and reply payloads', () => {
+    const start = parseSolutionStartResponse({
+      session_id: 'session-1',
+      stage: 'solution_definition',
+      agent_status: 'continue',
+      updated_solution_definition: validSolutionDefinition,
+      diagnosis: ['Solution lane started'],
+      next_question: 'What does the solution do?',
+      completion_reason: '',
+      warnings: [],
+    });
+    const reply = parseSolutionReplyResponse({
+      session_id: 'session-1',
+      stage: 'solution_definition',
+      agent_status: 'done',
+      updated_solution_definition: validSolutionDefinition,
+      diagnosis: ['Solution is clear'],
+      next_question: '',
+      completion_reason: 'solution sufficiently defined',
+      warnings: [],
+    });
+
+    expect(start.stage).toBe('solution_definition');
+    expect(reply.updated_solution_definition.solution_summary).toContain('guided intake');
   });
 });
 
@@ -628,6 +670,24 @@ describe('parseRequestExecutionResponse', () => {
     expect(response.status).toBe('failed');
     expect(response.error_code).toBe('ollama_timeout');
     expect(response.retryable).toBe(true);
+  });
+
+  it('accepts solution recovery request kinds', () => {
+    const startResponse = parseRequestExecutionResponse({
+      request_id: 'web-solution-start-1',
+      request_kind: 'solution_start',
+      status: 'completed',
+      session_id: 'session-1',
+    });
+    const replyResponse = parseRequestExecutionResponse({
+      request_id: 'web-solution-reply-1',
+      request_kind: 'solution_reply',
+      status: 'pending',
+      session_id: 'session-1',
+    });
+
+    expect(startResponse.request_kind).toBe('solution_start');
+    expect(replyResponse.request_kind).toBe('solution_reply');
   });
 
   it('unwraps response envelopes when the recovery endpoint is proxied', () => {

@@ -8,6 +8,8 @@ interface SessionWorkspaceProps {
   audit: SessionAuditView;
   isReplying: boolean;
   onReply: (answer: string) => Promise<void>;
+  onSolutionReply: (answer: string) => Promise<void>;
+  onStartSolution: () => Promise<void>;
   presentation: SessionPresentation;
 }
 
@@ -15,6 +17,8 @@ export function SessionWorkspace({
   audit,
   isReplying,
   onReply,
+  onSolutionReply,
+  onStartSolution,
   presentation,
 }: SessionWorkspaceProps) {
   const [reply, setReply] = useState('');
@@ -45,12 +49,28 @@ export function SessionWorkspace({
       return;
     }
 
+    if (presentation.currentSolutionQuestion) {
+      await onSolutionReply(reply.trim());
+      return;
+    }
+
     await onReply(reply.trim());
   }
 
-  const canReply =
+  const canProblemReply =
     presentation.status === 'waiting_for_user' ||
     presentation.status === 'active';
+  const canSolutionReply = presentation.solutionModuleChat?.turns.some((turn) =>
+    turn.turn_id === presentation.solutionModuleChat?.active_turn_id &&
+    turn.turn_status === 'awaiting_user',
+  ) ?? false;
+  const canReply = canSolutionReply || canProblemReply;
+  const canStartSolution = Boolean(
+    presentation.latestProblemSection &&
+      !canSolutionReply &&
+      presentation.solutionModuleChat?.chat_status !== 'completed' &&
+      presentation.solutionModuleChat?.chat_status !== 'waiting_for_user',
+  );
   const resolvedTurns = audit.turns.filter((turn) => Boolean(turn.answer_text?.trim())).length;
 
   return (
@@ -112,9 +132,35 @@ export function SessionWorkspace({
       </section>
 
       <section className="question-callout">
-        <span className="question-callout__label">Pregunta abierta</span>
+        <span className="question-callout__label">
+          {presentation.currentSolutionQuestion ? 'Pregunta abierta de solución' : 'Pregunta abierta'}
+        </span>
         <p>{presentation.currentQuestion || 'La sesión no tiene una pregunta abierta en este momento.'}</p>
       </section>
+
+      {presentation.latestProblemSection ? (
+        <section className="question-callout">
+          <span className="question-callout__label">Carril de solución</span>
+          <p>
+            {presentation.latestSolutionSection
+              ? `Se generó ${presentation.latestSolutionSection.title} v${presentation.latestSolutionSection.section_version}.`
+              : presentation.solutionModuleChat
+                ? `Estado: ${presentation.solutionModuleChat.chat_status.replaceAll('_', ' ')}.`
+                : 'El problema ya tiene sección generada y la solución puede iniciarse.'}
+          </p>
+
+          {canStartSolution ? (
+            <button
+              className="button button--secondary"
+              type="button"
+              onClick={() => void onStartSolution()}
+              disabled={isReplying}
+            >
+              {isReplying ? 'Procesando…' : 'Iniciar solución'}
+            </button>
+          ) : null}
+        </section>
+      ) : null}
 
       <div className="conversation-stream">
         <div className="stream-divider">
@@ -202,14 +248,22 @@ export function SessionWorkspace({
               className="field__control field__control--large"
               value={reply}
               onChange={(event) => setReply(event.target.value)}
-              placeholder="Describe quién vive el problema, la evidencia concreta, el alcance y las alternativas actuales."
+              placeholder={
+                presentation.currentSolutionQuestion
+                  ? 'Describe que hace la solucion, quien la usa, como funciona y que limites tiene.'
+                  : 'Describe quién vive el problema, la evidencia concreta, el alcance y las alternativas actuales.'
+              }
               disabled={isReplying}
             />
 
             {feedback ? <div className="feedback feedback--error">{feedback}</div> : null}
 
             <div className="composer-card__actions">
-              <p>Responde en un tono operativo: concreto, verificable y centrado en el problema.</p>
+              <p>
+                {presentation.currentSolutionQuestion
+                  ? 'Responde con informacion operativa sobre la solucion, sin entrar en costes o regulacion.'
+                  : 'Responde en un tono operativo: concreto, verificable y centrado en el problema.'}
+              </p>
               <button className="button button--primary" type="submit" disabled={isReplying}>
                 {isReplying ? 'Procesando turno…' : 'Enviar respuesta'}
               </button>

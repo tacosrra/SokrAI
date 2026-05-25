@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sokrai.local/contracts/schemas/solution-definition-turn.schema.json",
+  "title": "SolutionDefinitionTurn",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "agent_status": {
+      "type": "string",
+      "enum": [
+        "continue",
+        "done",
+        "blocked"
+      ]
+    },
+    "diagnosis": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "string"
+      }
+    },
+    "updated_solution_definition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "solution_summary": {
+          "type": "string"
+        },
+        "target_user": {
+          "type": "string"
+        },
+        "how_it_works": {
+          "type": "string"
+        },
+        "workflow_change": {
+          "type": "string"
+        },
+        "current_solutions": {
+          "type": "string"
+        },
+        "value_differential": {
+          "type": "string"
+        },
+        "scope_limits": {
+          "type": "string"
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "ambiguities_remaining": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "solution_summary",
+        "target_user",
+        "how_it_works",
+        "workflow_change",
+        "current_solutions",
+        "value_differential",
+        "scope_limits",
+        "assumptions",
+        "ambiguities_remaining"
+      ]
+    },
+    "next_question": {
+      "type": "string"
+    },
+    "completion_reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "agent_status",
+    "diagnosis",
+    "updated_solution_definition",
+    "next_question",
+    "completion_reason"
+  ]
+}

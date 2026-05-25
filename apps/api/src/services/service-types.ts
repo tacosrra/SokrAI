@@ -3,6 +3,10 @@ import type {
   ProposalReplyRequest,
   ProposalReplyResponse,
   ProposalStartRequest,
+  SolutionDefinitionState,
+  SolutionReplyRequest,
+  SolutionReplyResponse,
+  SolutionStartRequest,
   StructuredBrief,
 } from '../contracts/types';
 
@@ -37,7 +41,23 @@ export interface ReplyContextCommand {
   payload: ProposalReplyRequest;
 }
 
+export interface SolutionStartContextCommand {
+  context: WorkflowContext;
+  payload: SolutionStartRequest;
+}
+
+export interface SolutionReplyContextCommand {
+  context: WorkflowContext;
+  payload: SolutionReplyRequest;
+}
+
 export interface RunProblemDefinitionCommand {
+  context: WorkflowContext;
+  sessionId: string;
+  trigger: 'start' | 'reply';
+}
+
+export interface RunSolutionDefinitionCommand {
   context: WorkflowContext;
   sessionId: string;
   trigger: 'start' | 'reply';
@@ -48,4 +68,14 @@ export interface AgentResponseState {
   updatedProblemDefinition: ProblemDefinitionState;
   detectedGaps: string[];
   response: ProposalReplyResponse;
+}
+
+export interface SolutionDefinitionRunResponse extends SolutionReplyResponse {
+  run_id: string;
+}
+
+export interface SolutionAgentResponseState {
+  updatedSolutionDefinition: SolutionDefinitionState;
+  detectedGaps: string[];
+  response: SolutionReplyResponse;
 }

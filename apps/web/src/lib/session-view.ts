@@ -9,6 +9,7 @@ import type {
   SessionAuditView,
   SessionStatus,
   Snapshot,
+  Stage,
   StructuredBrief,
 } from '../domain/contracts';
 
@@ -48,17 +49,20 @@ export interface SessionPresentation {
   sessionId: string;
   projectTitle: string;
   goal: string;
-  stage: 'problem_definition';
+  stage: Stage;
   status: SessionStatus;
   agentStatus: AgentStatus;
   structuredBrief: StructuredBrief;
   problemDefinition: ProblemDefinitionState | null;
   gaps: AlphaGap[];
   problemModuleChat: ModuleChat | null;
+  solutionModuleChat: ModuleChat | null;
   latestProblemSection: GeneratedSection | null;
+  latestSolutionSection: GeneratedSection | null;
   detectedGaps: string[];
   latestDiagnosis: string[];
   currentQuestion: string;
+  currentSolutionQuestion: string;
   completionReason: string;
   warnings: string[];
   turns: ConversationTurn[];
@@ -256,12 +260,24 @@ export function deriveSessionPresentation(audit: SessionAuditView): SessionPrese
   const checklist = deriveChecklist(structuredBrief, problemDefinition);
   const gaps = audit.gaps;
   const problemModuleChat = audit.module_chats.find((chat) => chat.module === 'problem') ?? null;
+  const solutionModuleChat = audit.module_chats.find((chat) => chat.module === 'solution') ?? null;
+  const activeSolutionTurn = solutionModuleChat?.turns.find((turn) =>
+    turn.turn_id === solutionModuleChat.active_turn_id,
+  ) ?? null;
   const latestProblemSection = [...audit.generated_sections]
     .reverse()
     .find((section) =>
       section.section_kind === 'problem' &&
       ['draft', 'generated', 'accepted', 'needs_revision'].includes(section.section_status),
     ) ?? null;
+  const latestSolutionSection = [...audit.generated_sections]
+    .reverse()
+    .find((section) =>
+      section.section_kind === 'solution' &&
+      ['draft', 'generated', 'accepted', 'needs_revision'].includes(section.section_status),
+    ) ?? null;
+  const currentProblemQuestion = openTurn?.question_text ?? latestSnapshot?.next_question_text ?? '';
+  const currentSolutionQuestion = activeSolutionTurn?.question_text ?? '';
 
   return {
     sessionId: audit.session.id,
@@ -274,13 +290,15 @@ export function deriveSessionPresentation(audit: SessionAuditView): SessionPrese
     problemDefinition,
     gaps,
     problemModuleChat,
+    solutionModuleChat,
     latestProblemSection,
+    latestSolutionSection,
     detectedGaps: gaps.length > 0
       ? gaps.map((gap) => `${gap.field}: ${gap.description}`)
       : latestSnapshot?.detected_gaps_json ?? [],
     latestDiagnosis: latestResolvedTurn?.diagnosis_json ?? [],
-    currentQuestion:
-      openTurn?.question_text ?? latestSnapshot?.next_question_text ?? '',
+    currentQuestion: currentSolutionQuestion || currentProblemQuestion,
+    currentSolutionQuestion,
     completionReason:
       latestResolvedTurn?.completion_reason ??
       latestSnapshot?.completion_reason ??

@@ -1,8 +1,8 @@
 # SokrAI v1
 
-Middleware de maduracion de propuestas antes de comite, orientado a demostrar una sola capacidad de forma solida en v1:
+Middleware de maduracion de propuestas antes de comite, orientado a demostrar dos capacidades Alpha de forma solida en v1:
 
-> digerir una propuesta inicial, construir un `structured_brief` y conducir una conversacion socratica resumible para clarificar el problema.
+> digerir una propuesta inicial, construir un `structured_brief`, conducir una conversacion socratica resumible para clarificar el problema y continuar con la definicion de solucion.
 
 Guia detallada de arranque y prueba:
 
@@ -14,7 +14,7 @@ Guia detallada de arranque y prueba:
 - Inferencia local con `Ollama`
 - Persistencia en `PostgreSQL`
 - Interfaz operativa en `apps/web` para demo local y uso humano
-- Un unico lane operativo: `problem_definition_agent`
+- Carriles operativos Alpha: `problem_definition_agent` y `solution_definition_agent`
 - Una pregunta principal por turno
 - Persistencia de sesiones, turnos, snapshots, agent runs y eventos
 - Reanudacion por `session_id`
@@ -27,7 +27,7 @@ Guia detallada de arranque y prueba:
 - Scoring o priorizacion de comite
 - RAG complejo
 - OCR para PDFs escaneados
-- BI/dashboard amplio o superficies multi-lane fuera del carril `problem_definition`
+- BI/dashboard amplio o superficies multi-lane fuera de los carriles Alpha de problema y solucion
 
 ## Estructura
 
@@ -202,10 +202,10 @@ pnpm install --store-dir ./.pnpm-store
 docker compose up -d postgres ollama api n8n
 docker compose exec ollama ollama pull qwen2.5:3b-instruct
 docker compose exec api pnpm migrate
-for workflow in proposal_start_v1.json proposal_reply_v1.json agent_problem_definition_v1.json; do
+for workflow in proposal_start_v1.json proposal_reply_v1.json agent_problem_definition_v1.json solution_start_v1.json solution_reply_v1.json agent_solution_definition_v1.json; do
   docker compose exec -T -u node n8n n8n import:workflow --input="/workflows/${workflow}"
 done
-for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json; do
+for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json; do
   workflow_id="$(awk -F'"' '/^[[:space:]]*"id":[[:space:]]*"/ { print $4; exit }' "$workflow_path")"
   docker compose exec -T -u node n8n n8n publish:workflow --id="$workflow_id"
 done
@@ -306,8 +306,11 @@ Archivos:
 - `infra/n8n/workflows/proposal_start_v1.json`
 - `infra/n8n/workflows/proposal_reply_v1.json`
 - `infra/n8n/workflows/agent_problem_definition_v1.json`
+- `infra/n8n/workflows/solution_start_v1.json`
+- `infra/n8n/workflows/solution_reply_v1.json`
+- `infra/n8n/workflows/agent_solution_definition_v1.json`
 
-Abre `http://localhost:5678`, importa y publica los tres workflows, y asegúrate de que `INTERNAL_SHARED_SECRET` coincide entre `.env`, la API y `n8n`.
+Abre `http://localhost:5678`, importa y publica los seis workflows, y asegúrate de que `INTERNAL_SHARED_SECRET` coincide entre `.env`, la API y `n8n`.
 
 Los exports de workflow de esta version eliminan reintentos sincronos en nodos `HTTP Request` y propagan `statusCode + body` de la API al webhook para que un `ollama_timeout` o cualquier error controlado llegue a la UI como JSON consistente. Si reimportas los workflows, publica la nueva version exportada del repo.
 
@@ -321,16 +324,22 @@ No cambies `N8N_ENCRYPTION_KEY` una vez que `n8n` haya inicializado su volumen p
 
 - `POST /webhook/proposal-start-v1`
 - `POST /webhook/proposal-reply-v1`
+- `POST /webhook/solution-start-v1`
+- `POST /webhook/solution-reply-v1`
 
 ### Endpoint interno reutilizable
 
 - `POST /webhook/agent-problem-definition-v1`
+- `POST /webhook/agent-solution-definition-v1`
 
 ### API interna para n8n
 
 - `POST /internal/sessions/start-context`
 - `POST /internal/sessions/append-reply`
 - `POST /internal/agents/problem-definition/run`
+- `POST /internal/sessions/solution-start`
+- `POST /internal/sessions/solution-reply`
+- `POST /internal/agents/solution-definition/run`
 
 ### API de inspeccion
 
@@ -356,6 +365,8 @@ Payloads listos para prueba:
 
 - `examples/proposal-start.payload.json`
 - `examples/proposal-reply.payload.json`
+- `POST /webhook/solution-start-v1`
+- `POST /webhook/solution-reply-v1`
 
 El flujo normal es:
 
@@ -363,6 +374,8 @@ El flujo normal es:
 2. guardar `session_id`
 3. responder con `proposal_reply_v1`
 4. repetir hasta `agent_status = "done"`
+5. iniciar `solution_start_v1`
+6. responder con `solution_reply_v1` hasta `agent_status = "done"`
 
 Al cerrar el carril de problema, la API conserva la compatibilidad de resume con
 `conversation_turns`, `session_snapshots` y `agent_runs`, y tambien escribe el
@@ -373,7 +386,13 @@ modelo Alpha trazable: `module_chats`, `chat_turns`, `alpha_gaps`,
 determinista desde el brief y las respuestas persistidas; no usa un writer LLM
 separado.
 
-Siguen fuera de alcance en esta PR: modulo de solucion, legal/regulatorio,
+Tras cerrar el problema, el carril de solucion usa `module = "solution"` y genera
+una fila `generated_sections` con `section_kind = "solution"`. La seccion de
+solucion tambien se renderiza de forma determinista desde respuestas persistidas
+y fuentes internas; el reporte basico queda preparado para consumir ambas
+secciones en una PR posterior.
+
+Siguen fuera de alcance en esta PR: plan de negocio, costes, legal/regulatorio,
 medical device, PDF export, RAG, scoring, aprobacion/rechazo y reporte basico.
 
 ## Tests

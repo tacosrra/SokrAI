@@ -14,6 +14,9 @@ PR 2A defines schema-backed contracts and TypeScript domain types for the MVP Al
 | `GeneratedSection` | `contracts/schemas/generated-section.schema.json` | Versioned generated problem or solution section. |
 | `AlphaProposal` | `contracts/schemas/alpha-proposal.schema.json` | Aggregate contract that composes brief, documents, sources, gaps, chats, sections, and audit references. |
 | `BasicAlphaReport` | `contracts/schemas/basic-alpha-report.schema.json` | In-app structured Alpha report, without PDF/export fields. |
+| `SolutionDefinitionTurn` | `contracts/schemas/solution-definition-turn.schema.json` | Bounded model output for the solution-definition lane. |
+| `SolutionStartRequest` / `SolutionStartResponse` | `contracts/schemas/solution-start.*.schema.json` | Starts the solution lane after the problem section exists. |
+| `SolutionReplyRequest` / `SolutionReplyResponse` | `contracts/schemas/solution-reply.*.schema.json` | Persists a solution answer and returns the next solution state. |
 
 `structured-brief.schema.json` remains canonical and is referenced by aggregate/report contracts rather than duplicated.
 
@@ -47,6 +50,24 @@ PR 5 extends `AlphaGap` so initial gaps can be audited without inventing evidenc
 - `source_refs` may contain persisted internal sources only when the gap is tied to real submitted material.
 
 Initial gap analysis is deterministic API/domain code. It does not add scoring, ranking, approval, legal/regulatory conclusions, medical-device classification, cost/resource analysis, RAG, or PDF export.
+
+## Solution definition lane
+
+The Alpha solution lane reuses the same tables as the problem lane:
+
+- `module_chats.module = 'solution'`
+- `chat_turns.module = 'solution'`
+- `alpha_gaps.module = 'solution'`
+- `agent_runs.run_purpose = 'solution_definition'`
+- `generated_sections.section_kind = 'solution'`
+
+The lane starts only after a current generated problem section exists. It asks one
+primary question per turn, caps diagnosis at three items, stores answer
+idempotency on `chat_turns.answer_request_id`, and renders the final solution
+section deterministically from persisted solution fields and internal source
+refs. It does not introduce business plan, cost, legal/regulatory,
+medical-device, RAG, PDF, scoring, ranking, approval, or committee-decision
+behavior.
 
 ## GeneratedSection versioning
 

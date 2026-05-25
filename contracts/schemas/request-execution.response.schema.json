@@ -14,6 +14,8 @@
       "enum": [
         "proposal_start",
         "proposal_reply",
+        "solution_start",
+        "solution_reply",
         "unknown"
       ]
     },

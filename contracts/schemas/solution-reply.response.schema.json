@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sokrai.local/contracts/schemas/solution-reply.response.schema.json",
+  "title": "SolutionReplyResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "solution_definition"
+      ]
+    },
+    "agent_status": {
+      "type": "string",
+      "enum": [
+        "continue",
+        "done",
+        "blocked"
+      ]
+    },
+    "updated_solution_definition": {
+      "$ref": "https://sokrai.local/contracts/schemas/solution-definition-turn.schema.json#/properties/updated_solution_definition"
+    },
+    "diagnosis": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 3
+    },
+    "next_question": {
+      "type": "string"
+    },
+    "completion_reason": {
+      "type": "string"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "session_id",
+    "stage",
+    "agent_status",
+    "updated_solution_definition",
+    "diagnosis",
+    "next_question",
+    "completion_reason",
+    "warnings"
+  ]
+}

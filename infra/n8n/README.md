@@ -6,24 +6,30 @@ The canonical v1 workflows live in `infra/n8n/workflows`.
 
 1. Start the stack with `docker compose up -d postgres n8n api ollama`.
 2. Open `http://localhost:5678`.
-3. Import the three workflow JSON files from this folder.
+3. Import the six workflow JSON files from this folder.
 4. Set the environment variable `INTERNAL_SHARED_SECRET` in the n8n container to match the API.
 
 ## Entry webhooks
 
 - `POST /webhook/proposal-start-v1`
 - `POST /webhook/proposal-reply-v1`
+- `POST /webhook/solution-start-v1`
+- `POST /webhook/solution-reply-v1`
 
 ## Internal workflow webhook
 
 - `POST /webhook/agent-problem-definition-v1`
+- `POST /webhook/agent-solution-definition-v1`
 
-`agent_problem_definition_v1` exists as a reusable workflow surface, but the canonical
-`proposal_start_v1` and `proposal_reply_v1` exports do not call back into `n8n` through
-this webhook anymore.
+`agent_problem_definition_v1` and `agent_solution_definition_v1` exist as reusable
+workflow surfaces, but the canonical public exports do not call back into `n8n`
+through those webhooks anymore.
 
-They invoke `http://api:3001/internal/agents/problem-definition/run` directly with
-`x-internal-shared-secret`.
+They invoke the internal API endpoints directly with `x-internal-shared-secret`:
+
+- `proposal_start_v1` and `proposal_reply_v1` call `/internal/agents/problem-definition/run`
+- `solution_start_v1` calls `/internal/sessions/solution-start`
+- `solution_reply_v1` calls `/internal/sessions/solution-reply` and then `/internal/agents/solution-definition/run`
 
 Reason:
 
@@ -32,12 +38,13 @@ Reason:
   network failure
 - the API already owns the contracts, guardrails and persistence for this lane
 
-If you imported an older version of the workflows, reimport `proposal_start_v1.json`
-and `proposal_reply_v1.json` or update the `Invoke_AgentProblemDefinition` node in place.
+If you imported an older version of the workflows, reimport the files under
+`infra/n8n/workflows` or update the direct API call nodes in place.
 
 The current exports also keep the upstream API status code and JSON body when
-`/internal/sessions/start-context`, `/internal/sessions/append-reply`, or
-`/internal/agents/problem-definition/run` fail. This applies to
-`proposal_start_v1`, `proposal_reply_v1`, and `agent_problem_definition_v1`, and
+`/internal/sessions/start-context`, `/internal/sessions/append-reply`,
+`/internal/sessions/solution-start`, `/internal/sessions/solution-reply`, or
+the internal agent routes fail. This applies to the problem and solution
+workflows, and
 avoids n8n wrapping a controlled API error such as `ollama_timeout` into an
 unexpected webhook payload.

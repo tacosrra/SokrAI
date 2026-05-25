@@ -204,6 +204,33 @@ describe('deriveSessionPresentation', () => {
           completed_at: '2026-05-24T14:30:00.000Z',
           warnings: [],
         },
+        {
+          chat_id: 'chat-2',
+          proposal_id: 'session-1',
+          module: 'solution',
+          chat_status: 'waiting_for_user',
+          active_turn_id: 'solution-turn-1',
+          turns: [
+            {
+              turn_id: 'solution-turn-1',
+              chat_id: 'chat-2',
+              proposal_id: 'session-1',
+              module: 'solution',
+              turn_seq: 1,
+              question_text: 'What does the solution do?',
+              turn_status: 'awaiting_user',
+              agent_status: 'continue',
+              diagnosis: ['Falta definir la solucion.'],
+              source_refs: [],
+              gap_refs: [],
+              audit_refs: [],
+              warnings: [],
+              created_at: '2026-05-24T14:31:00.000Z',
+            },
+          ],
+          started_at: '2026-05-24T14:31:00.000Z',
+          warnings: [],
+        },
       ],
       generated_sections: [
         {
@@ -226,6 +253,9 @@ describe('deriveSessionPresentation', () => {
 
     expect(presentation.progress.percent).toBe(100);
     expect(presentation.problemModuleChat?.chat_status).toBe('completed');
+    expect(presentation.solutionModuleChat?.chat_status).toBe('waiting_for_user');
+    expect(presentation.currentSolutionQuestion).toBe('What does the solution do?');
+    expect(presentation.currentQuestion).toBe('What does the solution do?');
     expect(presentation.latestProblemSection).toMatchObject({
       section_id: 'section-1',
       section_version: 1,

@@ -25,6 +25,9 @@ import type {
   SessionEvent,
   SessionRecord,
   SessionStatus,
+  SolutionDefinitionState,
+  SolutionReplyResponse,
+  SolutionStartResponse,
   Snapshot,
   StructuredBrief,
 } from '../domain/contracts';
@@ -305,6 +308,46 @@ function parseProblemDefinitionState(
       record.current_alternatives,
       `${label}.current_alternatives`,
     ),
+    assumptions: expectStringArray(record.assumptions, `${label}.assumptions`),
+    ambiguities_remaining: expectStringArray(
+      record.ambiguities_remaining,
+      `${label}.ambiguities_remaining`,
+    ),
+  };
+}
+
+function hasSolutionDefinitionShape(record: JsonRecord): boolean {
+  return [
+    'solution_summary',
+    'target_user',
+    'how_it_works',
+    'workflow_change',
+    'current_solutions',
+    'value_differential',
+    'scope_limits',
+    'assumptions',
+    'ambiguities_remaining',
+  ].every((key) => Object.prototype.hasOwnProperty.call(record, key));
+}
+
+function parseSolutionDefinitionState(
+  value: unknown,
+  label: string,
+): SolutionDefinitionState {
+  const record = expectRecord(value, label);
+
+  if (!hasSolutionDefinitionShape(record)) {
+    throw new Error(`Expected ${label} to match solution definition state`);
+  }
+
+  return {
+    solution_summary: expectString(record.solution_summary, `${label}.solution_summary`),
+    target_user: expectString(record.target_user, `${label}.target_user`),
+    how_it_works: expectString(record.how_it_works, `${label}.how_it_works`),
+    workflow_change: expectString(record.workflow_change, `${label}.workflow_change`),
+    current_solutions: expectString(record.current_solutions, `${label}.current_solutions`),
+    value_differential: expectString(record.value_differential, `${label}.value_differential`),
+    scope_limits: expectString(record.scope_limits, `${label}.scope_limits`),
     assumptions: expectStringArray(record.assumptions, `${label}.assumptions`),
     ambiguities_remaining: expectStringArray(
       record.ambiguities_remaining,
@@ -616,6 +659,7 @@ function parseAgentRun(value: unknown, label: string): AgentRun {
     run_purpose: expectEnum(record.run_purpose, `${label}.run_purpose`, [
       'brief_extraction',
       'problem_definition',
+      'solution_definition',
       'json_repair',
     ]),
     agent_name: expectString(record.agent_name, `${label}.agent_name`),
@@ -757,6 +801,64 @@ export function parseProposalReplyResponse(value: unknown): ProposalReplyRespons
   };
 }
 
+export function parseSolutionStartResponse(value: unknown): SolutionStartResponse {
+  const record = expectRecord(
+    unwrapContractValue(value),
+    'solution start response',
+  );
+
+  return {
+    session_id: expectString(record.session_id, 'solution start response.session_id'),
+    stage: expectEnum(record.stage, 'solution start response.stage', ['solution_definition']),
+    agent_status: expectEnum(
+      record.agent_status,
+      'solution start response.agent_status',
+      AGENT_STATUSES,
+    ),
+    updated_solution_definition: parseSolutionDefinitionState(
+      record.updated_solution_definition,
+      'solution start response.updated_solution_definition',
+    ),
+    diagnosis: expectStringArray(record.diagnosis, 'solution start response.diagnosis'),
+    next_question: expectString(record.next_question, 'solution start response.next_question'),
+    completion_reason: expectOptionalString(
+      record.completion_reason,
+      '',
+      'solution start response.completion_reason',
+    ),
+    warnings: expectOptionalStringArray(record.warnings, [], 'solution start response.warnings'),
+  };
+}
+
+export function parseSolutionReplyResponse(value: unknown): SolutionReplyResponse {
+  const record = expectRecord(
+    unwrapContractValue(value),
+    'solution reply response',
+  );
+
+  return {
+    session_id: expectString(record.session_id, 'solution reply response.session_id'),
+    stage: expectEnum(record.stage, 'solution reply response.stage', ['solution_definition']),
+    agent_status: expectEnum(
+      record.agent_status,
+      'solution reply response.agent_status',
+      AGENT_STATUSES,
+    ),
+    updated_solution_definition: parseSolutionDefinitionState(
+      record.updated_solution_definition,
+      'solution reply response.updated_solution_definition',
+    ),
+    diagnosis: expectStringArray(record.diagnosis, 'solution reply response.diagnosis'),
+    next_question: expectString(record.next_question, 'solution reply response.next_question'),
+    completion_reason: expectOptionalString(
+      record.completion_reason,
+      '',
+      'solution reply response.completion_reason',
+    ),
+    warnings: expectOptionalStringArray(record.warnings, [], 'solution reply response.warnings'),
+  };
+}
+
 export function parseErrorResponse(value: unknown): ErrorResponse {
   const record = expectRecord(unwrapContractValue(value), 'error response');
 
@@ -783,7 +885,7 @@ export function parseRequestExecutionResponse(value: unknown): RequestExecutionR
     request_kind: expectEnum(
       record.request_kind,
       'request execution response.request_kind',
-      ['proposal_start', 'proposal_reply', 'unknown'],
+      ['proposal_start', 'proposal_reply', 'solution_start', 'solution_reply', 'unknown'],
     ),
     status: expectEnum(
       record.status,

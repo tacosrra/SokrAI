@@ -225,6 +225,26 @@ export interface ProblemDefinitionTurn {
   completion_reason: string;
 }
 
+export interface SolutionDefinitionState {
+  solution_summary: string;
+  target_user: string;
+  how_it_works: string;
+  workflow_change: string;
+  current_solutions: string;
+  value_differential: string;
+  scope_limits: string;
+  assumptions: string[];
+  ambiguities_remaining: string[];
+}
+
+export interface SolutionDefinitionTurn {
+  agent_status: 'continue' | 'done' | 'blocked';
+  diagnosis: string[];
+  updated_solution_definition: SolutionDefinitionState;
+  next_question: string;
+  completion_reason: string;
+}
+
 export interface ProposalStartFile {
   file_name: string;
   mime_type: 'application/pdf';
@@ -269,6 +289,39 @@ export interface ProposalReplyResponse {
   warnings: string[];
 }
 
+export interface SolutionStartRequest {
+  request_id?: string;
+  session_id: string;
+}
+
+export interface SolutionStartResponse {
+  session_id: string;
+  stage: 'solution_definition';
+  agent_status: 'continue' | 'done' | 'blocked';
+  updated_solution_definition: SolutionDefinitionState;
+  diagnosis: string[];
+  next_question: string;
+  completion_reason: string;
+  warnings: string[];
+}
+
+export interface SolutionReplyRequest {
+  request_id?: string;
+  session_id: string;
+  answer: string;
+}
+
+export interface SolutionReplyResponse {
+  session_id: string;
+  stage: 'solution_definition';
+  agent_status: 'continue' | 'done' | 'blocked';
+  updated_solution_definition: SolutionDefinitionState;
+  diagnosis: string[];
+  next_question: string;
+  completion_reason: string;
+  warnings: string[];
+}
+
 export interface ErrorResponse {
   error_code: string;
   safe_message: string;
@@ -279,7 +332,7 @@ export interface ErrorResponse {
 
 export interface RequestExecutionResponse {
   request_id: string;
-  request_kind: 'proposal_start' | 'proposal_reply' | 'unknown';
+  request_kind: 'proposal_start' | 'proposal_reply' | 'solution_start' | 'solution_reply' | 'unknown';
   status: 'pending' | 'completed' | 'failed' | 'not_found';
   session_id?: string;
   error_code?: string;

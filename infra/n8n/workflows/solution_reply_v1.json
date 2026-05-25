@@ -1,0 +1,247 @@
+{
+  "id": "c6c73991-a64d-4bb5-baf9-38ff67e6ff23",
+  "name": "solution_reply_v1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "solution-reply-v1",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e0707fc7-88a7-4936-847b-e42ebf0f3e20",
+      "name": "Webhook_SolutionReply",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        260,
+        300
+      ],
+      "webhookId": "solution-reply-v1"
+    },
+    {
+      "parameters": {
+        "keepOnlySet": false,
+        "values": {
+          "string": [
+            {
+              "name": "request_id",
+              "value": "={{ $node[\"Webhook_SolutionReply\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_SolutionReply\"].json.body?.request_id || $execution.id }}"
+            },
+            {
+              "name": "workflow_version",
+              "value": "solution_reply_v1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "116467f6-2e62-48f2-9c8d-bf76c56a68e5",
+      "name": "Set_ReplyPayload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:3001/internal/sessions/solution-reply",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-shared-secret",
+              "value": "={{ $env.INTERNAL_SHARED_SECRET }}"
+            },
+            {
+              "name": "x-request-id",
+              "value": "={{ $node[\"Webhook_SolutionReply\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_SolutionReply\"].json.body?.request_id || $execution.id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { request_id: ($node[\"Webhook_SolutionReply\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_SolutionReply\"].json.body?.request_id || $execution.id), workflow_version: $json.workflow_version, workflow_execution_id: $execution.id, payload: $node[\"Webhook_SolutionReply\"].json.body } }}",
+        "options": {
+          "timeout": 120000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "ce4cb252-9a18-4a3b-bcb4-0f2851478146",
+      "name": "HTTP_AppendSolutionReply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7620af56-384e-4301-951f-b905572bd46d",
+              "leftValue": "={{ Number($json.statusCode ?? 0) < 400 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "793e8fdc-6c1b-475b-b77f-fe7811b4d740",
+      "name": "If_AppendSolutionReplySucceeded",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        940,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:3001/internal/agents/solution-definition/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-shared-secret",
+              "value": "={{ $env.INTERNAL_SHARED_SECRET }}"
+            },
+            {
+              "name": "x-request-id",
+              "value": "={{ $node[\"Webhook_SolutionReply\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_SolutionReply\"].json.body?.request_id || $execution.id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { request_id: ($node[\"Webhook_SolutionReply\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_SolutionReply\"].json.body?.request_id || $execution.id), workflow_version: \"agent_solution_definition_v1\", workflow_execution_id: $execution.id, session_id: $node[\"HTTP_AppendSolutionReply\"].json.body.session_id, trigger: \"reply\" } }}",
+        "options": {
+          "timeout": 450000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "56557fca-d709-4ef4-9742-d2ad0ec5b66b",
+      "name": "Invoke_AgentSolutionDefinition",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1140,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.body ?? $json }}",
+        "options": {
+          "responseCode": "={{ Number($json.statusCode ?? 200) }}"
+        }
+      },
+      "id": "ebf9830d-f2f3-40d7-b499-3a03b72b5cb7",
+      "name": "Respond_Reply",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1340,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook_SolutionReply": {
+      "main": [
+        [
+          {
+            "node": "Set_ReplyPayload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set_ReplyPayload": {
+      "main": [
+        [
+          {
+            "node": "HTTP_AppendSolutionReply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP_AppendSolutionReply": {
+      "main": [
+        [
+          {
+            "node": "If_AppendSolutionReplySucceeded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If_AppendSolutionReplySucceeded": {
+      "main": [
+        [
+          {
+            "node": "Invoke_AgentSolutionDefinition",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond_Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoke_AgentSolutionDefinition": {
+      "main": [
+        [
+          {
+            "node": "Respond_Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "solution_reply_v1"
+}
