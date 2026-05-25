@@ -364,10 +364,24 @@ El flujo normal es:
 3. responder con `proposal_reply_v1`
 4. repetir hasta `agent_status = "done"`
 
+Al cerrar el carril de problema, la API conserva la compatibilidad de resume con
+`conversation_turns`, `session_snapshots` y `agent_runs`, y tambien escribe el
+modelo Alpha trazable: `module_chats`, `chat_turns`, `alpha_gaps`,
+`proposal_sources` de tipo `user_answer` y una fila `generated_sections` con
+`section_kind = "problem"`, `section_status = "generated"` y
+`section_version >= 1`. La seccion de problema se renderiza de forma
+determinista desde el brief y las respuestas persistidas; no usa un writer LLM
+separado.
+
+Siguen fuera de alcance en esta PR: modulo de solucion, legal/regulatorio,
+medical device, PDF export, RAG, scoring, aprobacion/rechazo y reporte basico.
+
 ## Tests
 
 ```bash
 pnpm install --store-dir ./.pnpm-store
+pnpm run type-check
+pnpm run format:check
 pnpm build
 pnpm test:contracts
 pnpm test:unit

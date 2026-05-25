@@ -1,6 +1,8 @@
 import type {
+  AlphaGap,
   ProblemDefinitionState,
   ProblemDefinitionTurn,
+  ProposalSource,
   StructuredBrief,
 } from '../contracts/types';
 
@@ -23,6 +25,21 @@ const FORBIDDEN_TOPIC_PATTERNS = [
   /\bimplement/i,
 ];
 
+const PROBLEM_FIELD_PRIORITY = [
+  'problem_owner',
+  'problem_statement',
+  'evidence_of_problem',
+  'scope',
+  'current_alternatives',
+  'assumptions',
+] as const;
+
+export interface ProblemGapStatusChange {
+  gapId: string;
+  gapStatus: 'in_progress' | 'resolved';
+  resolvedByTurnId?: string;
+}
+
 function isBlank(value: string): boolean {
   return value.trim().length === 0;
 }
@@ -33,6 +50,44 @@ function hasEnoughText(value: string, minLength: number): boolean {
 
 function dedupe(items: string[]): string[] {
   return Array.from(new Set(items.map((item) => item.trim()).filter(Boolean)));
+}
+
+function isInternalSource(source: ProposalSource): boolean {
+  return source.source_kind === 'pasted_text' ||
+    source.source_kind === 'uploaded_file' ||
+    source.source_kind === 'extracted_text' ||
+    source.source_kind === 'user_answer';
+}
+
+function hasResolvedGapField(gap: AlphaGap, problemDefinition: ProblemDefinitionState): boolean {
+  const missing = computeMissingInformation(problemDefinition);
+
+  if (missing.includes(gap.field)) {
+    return false;
+  }
+
+  if (gap.origin === 'structured_brief_ambiguity') {
+    const normalizedDescription = gap.description.toLocaleLowerCase();
+    return !problemDefinition.ambiguities_remaining.some((ambiguity) =>
+      normalizedDescription.includes(ambiguity.toLocaleLowerCase()) ||
+      ambiguity.toLocaleLowerCase().includes(normalizedDescription),
+    );
+  }
+
+  return PROBLEM_FIELD_PRIORITY.includes(gap.field as (typeof PROBLEM_FIELD_PRIORITY)[number]);
+}
+
+function sortProblemGaps(left: AlphaGap, right: AlphaGap): number {
+  const leftPriority = PROBLEM_FIELD_PRIORITY.indexOf(left.field as (typeof PROBLEM_FIELD_PRIORITY)[number]);
+  const rightPriority = PROBLEM_FIELD_PRIORITY.indexOf(right.field as (typeof PROBLEM_FIELD_PRIORITY)[number]);
+  const normalizedLeft = leftPriority === -1 ? PROBLEM_FIELD_PRIORITY.length : leftPriority;
+  const normalizedRight = rightPriority === -1 ? PROBLEM_FIELD_PRIORITY.length : rightPriority;
+
+  if (normalizedLeft !== normalizedRight) {
+    return normalizedLeft - normalizedRight;
+  }
+
+  return left.created_at.localeCompare(right.created_at) || left.gap_id.localeCompare(right.gap_id);
 }
 
 export function isVagueAnswer(answer: string): boolean {
@@ -123,6 +178,140 @@ export function buildFallbackQuestion(problemDefinition: ProblemDefinitionState)
   return '¿Qué detalle falta para que el problema quede claramente definido antes de hablar de soluciones?';
 }
 
+/**
+ * Selects the highest-priority open Alpha problem gaps that should be attached
+ * to the next clarification turn. The cap keeps each turn focused and auditable.
+ */
+export function selectProblemGapRefs(
+  gaps: AlphaGap[],
+  problemDefinition: ProblemDefinitionState,
+): string[] {
+  const missing = computeMissingInformation(problemDefinition);
+
+  return gaps
+    .filter((gap) =>
+      gap.module === 'problem' &&
+      (gap.gap_status === 'open' || gap.gap_status === 'in_progress') &&
+      !hasResolvedGapField(gap, problemDefinition) &&
+      (
+        missing.includes(gap.field) ||
+        gap.origin === 'structured_brief_ambiguity' ||
+        gap.gap_kind === 'needs_user_confirmation'
+      ),
+    )
+    .sort(sortProblemGaps)
+    .slice(0, 3)
+    .map((gap) => gap.gap_id);
+}
+
+/**
+ * Classifies persisted Alpha problem gaps after a user answer. Completed fields
+ * resolve their gaps; still-missing or ambiguous fields stay open/in progress.
+ */
+export function classifyProblemGapStatuses(
+  gaps: AlphaGap[],
+  problemDefinition: ProblemDefinitionState,
+  answeredTurnId?: string,
+): ProblemGapStatusChange[] {
+  const candidateGapRefs = new Set(selectProblemGapRefs(gaps, problemDefinition));
+  const changes: ProblemGapStatusChange[] = [];
+
+  for (const gap of gaps.filter((item) => item.module === 'problem').sort(sortProblemGaps)) {
+    if (gap.gap_status === 'resolved' || gap.gap_status === 'deferred' || gap.gap_status === 'not_applicable') {
+      continue;
+    }
+
+    if (answeredTurnId && hasResolvedGapField(gap, problemDefinition)) {
+      changes.push({
+        gapId: gap.gap_id,
+        gapStatus: 'resolved',
+        resolvedByTurnId: answeredTurnId,
+      });
+      continue;
+    }
+
+    if (candidateGapRefs.has(gap.gap_id) && gap.gap_status === 'open') {
+      changes.push({
+        gapId: gap.gap_id,
+        gapStatus: 'in_progress',
+      });
+    }
+  }
+
+  return changes;
+}
+
+/**
+ * Builds the internal source refs allowed for deterministic problem sections.
+ * External, generated, or unrelated sources are intentionally excluded.
+ */
+export function buildProblemSectionSourceRefs(
+  initialSources: ProposalSource[],
+  userAnswerSources: ProposalSource[],
+): ProposalSource[] {
+  const sourcesById = new Map<string, ProposalSource>();
+
+  for (const source of [...initialSources, ...userAnswerSources]) {
+    if (isInternalSource(source)) {
+      sourcesById.set(source.source_id, source);
+    }
+  }
+
+  return Array.from(sourcesById.values());
+}
+
+/**
+ * Renders the terminal Alpha problem section from persisted problem state only.
+ * It does not introduce solution, pilot, legal, cost, or retrieval content.
+ */
+export function renderProblemSection(
+  problemDefinition: ProblemDefinitionState,
+  params: { sourceCount: number; gapCount: number },
+): { title: string; contentMarkdown: string; warnings: string[] } {
+  const warnings: string[] = [];
+  const assumptions = problemDefinition.assumptions.length > 0
+    ? problemDefinition.assumptions.map((assumption) => `- ${assumption}`).join('\n')
+    : '- Sin supuestos explícitos persistidos.';
+  const ambiguities = problemDefinition.ambiguities_remaining.length > 0
+    ? problemDefinition.ambiguities_remaining.map((ambiguity) => `- ${ambiguity}`).join('\n')
+    : '- Sin ambigüedades abiertas relevantes.';
+
+  if (params.sourceCount === 0) {
+    warnings.push('Problem section has no internal source references');
+  }
+
+  if (params.gapCount === 0) {
+    warnings.push('Problem section has no resolved gap references');
+  }
+
+  return {
+    title: 'Problem definition',
+    contentMarkdown: [
+      '## Problem owner',
+      problemDefinition.problem_owner,
+      '',
+      '## Problem statement',
+      problemDefinition.problem_statement,
+      '',
+      '## Evidence of the problem',
+      problemDefinition.evidence_of_problem,
+      '',
+      '## Scope',
+      problemDefinition.scope,
+      '',
+      '## Current alternatives',
+      problemDefinition.current_alternatives,
+      '',
+      '## Assumptions',
+      assumptions,
+      '',
+      '## Remaining ambiguities',
+      ambiguities,
+    ].join('\n'),
+    warnings,
+  };
+}
+
 export function enforceSingleQuestion(question: string): string {
   const trimmed = question.trim();
 
@@ -187,6 +376,7 @@ export function enforceTurnGuardrails(
   updatedBrief: StructuredBrief;
   updatedProblemDefinition: ProblemDefinitionState;
   detectedGaps: string[];
+  latestAnswerWasVague: boolean;
 } {
   const warnings: string[] = [];
   const nextQuestion = enforceSingleQuestion(turn.next_question);
@@ -255,5 +445,6 @@ export function enforceTurnGuardrails(
     },
     updatedProblemDefinition,
     detectedGaps: dedupe([...updatedBrief.ambiguities, ...updatedBrief.missing_information]),
+    latestAnswerWasVague: latestAnswerIsVague,
   };
 }

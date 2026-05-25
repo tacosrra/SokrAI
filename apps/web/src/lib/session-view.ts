@@ -3,6 +3,8 @@ import type {
   AgentStatus,
   AlphaGap,
   ConversationTurn,
+  GeneratedSection,
+  ModuleChat,
   ProblemDefinitionState,
   SessionAuditView,
   SessionStatus,
@@ -52,6 +54,8 @@ export interface SessionPresentation {
   structuredBrief: StructuredBrief;
   problemDefinition: ProblemDefinitionState | null;
   gaps: AlphaGap[];
+  problemModuleChat: ModuleChat | null;
+  latestProblemSection: GeneratedSection | null;
   detectedGaps: string[];
   latestDiagnosis: string[];
   currentQuestion: string;
@@ -251,6 +255,13 @@ export function deriveSessionPresentation(audit: SessionAuditView): SessionPrese
     audit.session.latest_problem_definition_json;
   const checklist = deriveChecklist(structuredBrief, problemDefinition);
   const gaps = audit.gaps;
+  const problemModuleChat = audit.module_chats.find((chat) => chat.module === 'problem') ?? null;
+  const latestProblemSection = [...audit.generated_sections]
+    .reverse()
+    .find((section) =>
+      section.section_kind === 'problem' &&
+      ['draft', 'generated', 'accepted', 'needs_revision'].includes(section.section_status),
+    ) ?? null;
 
   return {
     sessionId: audit.session.id,
@@ -262,6 +273,8 @@ export function deriveSessionPresentation(audit: SessionAuditView): SessionPrese
     structuredBrief,
     problemDefinition,
     gaps,
+    problemModuleChat,
+    latestProblemSection,
     detectedGaps: gaps.length > 0
       ? gaps.map((gap) => `${gap.field}: ${gap.description}`)
       : latestSnapshot?.detected_gaps_json ?? [],

@@ -245,6 +245,13 @@ describe('alpha persistence integration', () => {
       document_id: document.document_id,
       source_kind: 'pasted_text',
     });
+    expect(await store.findModuleChatByProposalAndModule(session.id, 'problem')).toMatchObject({
+      chat_id: chat.chat_id,
+    });
+    expect(await store.findCurrentGeneratedSection(session.id, 'problem')).toMatchObject({
+      section_id: problemSection.section_id,
+      section_version: 2,
+    });
     expect(await store.getBasicReport(session.id)).toEqual(report);
     expect(aggregate).toMatchObject({
       proposal_id: session.id,
@@ -253,10 +260,77 @@ describe('alpha persistence integration', () => {
       gaps: [{ gap_id: gap.gap_id, gap_status: 'resolved' }],
       module_chats: [{ chat_id: chat.chat_id, turns: [{ turn_id: turn.turn_id, turn_status: 'resolved' }] }],
       generated_sections: expect.arrayContaining([
-        expect.objectContaining({ section_id: oldProblemSection.section_id, section_status: 'superseded' }),
-        expect.objectContaining({ section_id: problemSection.section_id, section_status: 'accepted' }),
+        expect.objectContaining({ section_id: oldProblemSection.section_id, section_status: 'superseded', section_version: 1 }),
+        expect.objectContaining({ section_id: problemSection.section_id, section_status: 'accepted', section_version: 2 }),
+        expect.objectContaining({ section_id: solutionSection.section_id, section_status: 'generated', section_version: 1 }),
       ]),
       audit_refs: [{ kind: 'audit_event', id: auditEvent.id }],
+    });
+  });
+
+  it('maps generated section version and current-section conflicts to controlled errors', async () => {
+    ({ app } = await buildTestApp(new QueueLanguageModelClient([])));
+    const structuredBrief = await readFixture<StructuredBrief>('expected', 'structured-brief.strong.json');
+    const session = await createLegacySession(app.services.database, app.services.sessionStore, structuredBrief);
+    const store = app.services.alphaStore;
+
+    await store.createProposal(app.services.database, {
+      proposalId: session.id,
+      sessionId: session.id,
+      proposalStatus: 'active',
+      projectTitle: structuredBrief.project_title,
+      goal: structuredBrief.goal,
+      structuredBrief,
+      schemaVersion: 'alpha-model.v1',
+    });
+
+    const first = await store.createGeneratedSection(app.services.database, {
+      proposalId: session.id,
+      sectionKind: 'problem',
+      sectionStatus: 'generated',
+      title: 'Problem definition',
+      contentMarkdown: 'Problem v1.',
+    });
+
+    await store.supersedeGeneratedSection(app.services.database, {
+      sectionId: first.section_id,
+    });
+
+    await expect(
+      store.createGeneratedSection(app.services.database, {
+        proposalId: session.id,
+        sectionKind: 'problem',
+        sectionStatus: 'generated',
+        sectionVersion: first.section_version,
+        title: 'Duplicate version',
+        contentMarkdown: 'Duplicate.',
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      errorCode: 'alpha_section_version_conflict',
+    });
+
+    await store.createGeneratedSection(app.services.database, {
+      proposalId: session.id,
+      sectionKind: 'problem',
+      sectionStatus: 'generated',
+      sectionVersion: 2,
+      title: 'Problem definition v2',
+      contentMarkdown: 'Problem v2.',
+    });
+
+    await expect(
+      store.createGeneratedSection(app.services.database, {
+        proposalId: session.id,
+        sectionKind: 'problem',
+        sectionStatus: 'generated',
+        sectionVersion: 3,
+        title: 'Second current section',
+        contentMarkdown: 'Still current.',
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      errorCode: 'alpha_current_section_conflict',
     });
   });
 
@@ -538,6 +612,57 @@ describe('alpha persistence integration', () => {
 
     const events = await store.listAuditEvents(session.id);
     expect(events.map((event) => event.event_seq)).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('returns a deterministic audit timeline across session and Alpha event streams', async () => {
+    ({ app } = await buildTestApp(new QueueLanguageModelClient([])));
+    const structuredBrief = await readFixture<StructuredBrief>('expected', 'structured-brief.strong.json');
+    const session = await createLegacySession(app.services.database, app.services.sessionStore, structuredBrief);
+    const store = app.services.alphaStore;
+
+    await store.createProposal(app.services.database, {
+      proposalId: session.id,
+      sessionId: session.id,
+      proposalStatus: 'active',
+      projectTitle: structuredBrief.project_title,
+      goal: structuredBrief.goal,
+      structuredBrief,
+      schemaVersion: 'alpha-model.v1',
+    });
+
+    await app.services.database.query(
+      [
+        'INSERT INTO session_events',
+        '(session_id, event_seq, event_type, actor_type, payload_json, created_at)',
+        'VALUES',
+        '($1, 1, \'session_created\', \'workflow\', \'{}\'::jsonb, $2),',
+        '($1, 2, \'brief_extracted\', \'system\', \'{}\'::jsonb, $2)',
+      ].join(' '),
+      [session.id, '2026-05-24T20:00:00.000Z'],
+    );
+    await app.services.database.query(
+      [
+        'INSERT INTO audit_events',
+        '(proposal_id, session_id, event_seq, event_type, actor_type, payload_json, created_at)',
+        'VALUES',
+        '($1, $1, 1, \'proposal_created\', \'system\', \'{}\'::jsonb, $2),',
+        '($1, $1, 2, \'problem_question_opened\', \'agent\', \'{}\'::jsonb, $2)',
+      ].join(' '),
+      [session.id, '2026-05-24T20:00:00.000Z'],
+    );
+
+    const auditView = await app.services.sessionStore.getAuditView(session.id);
+
+    expect(auditView.events.map((event) => ({
+      event_stream: event.event_stream,
+      event_type: event.event_type,
+      stream_event_seq: event.stream_event_seq,
+    }))).toEqual([
+      { event_stream: 'audit_events', event_type: 'proposal_created', stream_event_seq: 1 },
+      { event_stream: 'audit_events', event_type: 'problem_question_opened', stream_event_seq: 2 },
+      { event_stream: 'session_events', event_type: 'session_created', stream_event_seq: 1 },
+      { event_stream: 'session_events', event_type: 'brief_extracted', stream_event_seq: 2 },
+    ]);
   });
 
   it('creates initial Alpha rows during the existing start transaction', async () => {

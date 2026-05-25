@@ -1254,7 +1254,11 @@ Considera que la inicializacion esta bien hecha si puedes marcar todo esto:
 - `POST /webhook/proposal-start-v1` devuelve `session_id`
 - `POST /webhook/proposal-reply-v1` reutiliza ese `session_id`
 - `GET /api/v1/sessions/:sessionId` devuelve session, documentos, fuentes, gaps, turnos, runs,
-  snapshots y eventos
+  snapshots, eventos, `module_chats` y `generated_sections`
+- Al completar el modulo Alpha de problema, el artefacto esperado es:
+  - `module_chats` contiene el chat `problem` en estado `completed` y sin turno activo
+  - `generated_sections` contiene la seccion `problem` con `section_version >= 1`
+  - los eventos de auditoria incluyen la generacion de la seccion con sus `source_refs` y `gap_refs`
 - `pnpm verify` pasa completo
 - `bash scripts/smoke-core.sh` pasa contra el stack vivo
 

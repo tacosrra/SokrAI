@@ -106,6 +106,15 @@ describe('contract schemas', () => {
     expect(assertGeneratedSection(await readFixture('alpha-model', 'generated-section.valid.json'))).toBeTruthy();
   });
 
+  it('requires generated sections to carry an explicit section version', async () => {
+    const section = await readFixture('alpha-model', 'generated-section.valid.json');
+    const withoutVersion = structuredClone(section) as Record<string, unknown>;
+
+    delete withoutVersion.section_version;
+
+    expect(() => assertGeneratedSection(withoutVersion)).toThrow(AppError);
+  });
+
   it('exposes AuditRef as a shared contract schema', () => {
     expect(schemaIds.auditRef).toBe('https://sokrai.local/contracts/schemas/audit-ref.schema.json');
     expect(schemaDocuments.auditRef.$id).toBe(schemaIds.auditRef);

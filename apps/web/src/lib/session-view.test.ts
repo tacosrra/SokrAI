@@ -43,6 +43,8 @@ const auditFixture: SessionAuditView = {
   documents: [],
   sources: [],
   gaps: [],
+  module_chats: [],
+  generated_sections: [],
   turns: [
     {
       id: 'turn-1',
@@ -191,11 +193,43 @@ describe('deriveSessionPresentation', () => {
           completion_reason: 'La definición del problema quedó lista para revisión.',
         },
       ],
+      module_chats: [
+        {
+          chat_id: 'chat-1',
+          proposal_id: 'session-1',
+          module: 'problem',
+          chat_status: 'completed',
+          turns: [],
+          started_at: '2026-05-24T14:00:00.000Z',
+          completed_at: '2026-05-24T14:30:00.000Z',
+          warnings: [],
+        },
+      ],
+      generated_sections: [
+        {
+          section_id: 'section-1',
+          proposal_id: 'session-1',
+          section_kind: 'problem',
+          section_status: 'generated',
+          section_version: 1,
+          title: 'Problem definition',
+          content_markdown: 'El triaje inicial se retrasa en horas punta.',
+          source_refs: [],
+          gap_refs: ['gap-1'],
+          warnings: [],
+          created_at: '2026-05-24T14:30:00.000Z',
+        },
+      ],
     };
 
     const presentation = deriveSessionPresentation(completedAudit);
 
     expect(presentation.progress.percent).toBe(100);
+    expect(presentation.problemModuleChat?.chat_status).toBe('completed');
+    expect(presentation.latestProblemSection).toMatchObject({
+      section_id: 'section-1',
+      section_version: 1,
+    });
     expect(presentation.progress.title).toBe('Definición del problema completada');
     expect(presentation.progress.steps.every((step) => step.state === 'complete')).toBe(true);
     expect(presentation.checklist.find((item) => item.id === 'problem_owner')).toMatchObject({

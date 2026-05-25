@@ -95,16 +95,97 @@ describe('proposal flow integration', () => {
       documents_count: string;
       sources_count: string;
       problem_chats_count: string;
+      chat_turns_count: string;
+      resolved_gaps_count: string;
+      generated_sections_count: string;
+      user_answer_sources_count: string;
     }>(
       [
         'SELECT',
         '  (SELECT COUNT(*)::text FROM proposals WHERE id = $1) AS proposals_count,',
         '  (SELECT COUNT(*)::text FROM proposal_documents WHERE proposal_id = $1) AS documents_count,',
         '  (SELECT COUNT(*)::text FROM proposal_sources WHERE proposal_id = $1) AS sources_count,',
-        '  (SELECT COUNT(*)::text FROM module_chats WHERE proposal_id = $1 AND module = \'problem\') AS problem_chats_count',
+        '  (SELECT COUNT(*)::text FROM module_chats WHERE proposal_id = $1 AND module = \'problem\') AS problem_chats_count,',
+        '  (SELECT COUNT(*)::text FROM chat_turns WHERE proposal_id = $1 AND module = \'problem\') AS chat_turns_count,',
+        '  (SELECT COUNT(*)::text FROM alpha_gaps WHERE proposal_id = $1 AND module = \'problem\' AND gap_status = \'resolved\') AS resolved_gaps_count,',
+        '  (SELECT COUNT(*)::text FROM generated_sections WHERE proposal_id = $1 AND section_kind = \'problem\' AND section_status = \'generated\' AND section_version = 1) AS generated_sections_count,',
+        '  (SELECT COUNT(*)::text FROM proposal_sources WHERE proposal_id = $1 AND source_kind = \'user_answer\') AS user_answer_sources_count',
       ].join(' '),
       [startResult.body.session_id],
     );
+    const alphaChatTurns = await app.services.database.query<{
+      turn_seq: number;
+      answer_text: string | null;
+      turn_status: string;
+      agent_status: string | null;
+      gap_refs_json: string[];
+      source_refs_json: Array<{ source_kind: string }>;
+    }>(
+      [
+        'SELECT turn_seq, answer_text, turn_status, agent_status, gap_refs_json, source_refs_json',
+        'FROM chat_turns',
+        'WHERE proposal_id = $1 AND module = \'problem\'',
+        'ORDER BY turn_seq ASC',
+      ].join(' '),
+      [startResult.body.session_id],
+    );
+    const moduleChats = await app.services.database.query<{
+      chat_status: string;
+      active_turn_id: string | null;
+    }>(
+      [
+        'SELECT chat_status, active_turn_id',
+        'FROM module_chats',
+        'WHERE proposal_id = $1 AND module = \'problem\'',
+      ].join(' '),
+      [startResult.body.session_id],
+    );
+    const activeLegacyTurns = await app.services.database.query<{ count: string }>(
+      [
+        'SELECT COUNT(*)::text AS count',
+        'FROM conversation_turns',
+        'WHERE session_id = $1 AND status IN (\'awaiting_user\', \'processing\')',
+      ].join(' '),
+      [startResult.body.session_id],
+    );
+    const generatedSections = await app.services.database.query<{
+      section_id: string;
+      section_kind: string;
+      section_status: string;
+      section_version: number;
+      title: string;
+      content_markdown: string;
+      source_refs_json: Array<{ source_kind: string }>;
+      gap_refs_json: string[];
+      generated_by_run_id: string | null;
+    }>(
+      [
+        'SELECT id AS section_id, section_kind, section_status, section_version, title, content_markdown, source_refs_json, gap_refs_json, generated_by_run_id',
+        'FROM generated_sections',
+        'WHERE proposal_id = $1 AND section_kind = \'problem\'',
+      ].join(' '),
+      [startResult.body.session_id],
+    );
+    const sectionAuditEvents = await app.services.database.query<{
+      event_type: string;
+      payload_json: {
+        section_id?: string;
+        section_version?: number;
+        source_refs?: string[];
+        gap_refs?: string[];
+      };
+    }>(
+      [
+        'SELECT event_type, payload_json',
+        'FROM audit_events',
+        'WHERE proposal_id = $1 AND event_type = \'problem_section_generated\'',
+      ].join(' '),
+      [startResult.body.session_id],
+    );
+    const audit = await app.inject({
+      method: 'GET',
+      url: `/api/v1/sessions/${startResult.body.session_id}`,
+    });
 
     expect(sessions.rows[0]?.count).toBe('1');
     expect(turns.rows).toHaveLength(1);
@@ -131,11 +212,74 @@ describe('proposal flow integration', () => {
       model_params_json: { temperature: 0.2, num_ctx: 8192 },
     });
     expect(snapshots.rows[0]?.count).toBe('3');
-    expect(alphaRows.rows[0]).toEqual({
+    expect(alphaRows.rows[0]).toMatchObject({
       proposals_count: '1',
       documents_count: '1',
-      sources_count: '1',
+      sources_count: '3',
       problem_chats_count: '1',
+      chat_turns_count: '1',
+      generated_sections_count: '1',
+      user_answer_sources_count: '1',
+    });
+    expect(Number(alphaRows.rows[0]?.resolved_gaps_count)).toBeGreaterThan(0);
+    expect(moduleChats.rows[0]).toEqual({
+      chat_status: 'completed',
+      active_turn_id: null,
+    });
+    expect(activeLegacyTurns.rows[0]).toEqual({ count: '0' });
+    expect(alphaChatTurns.rows[0]).toMatchObject({
+      turn_seq: 1,
+      turn_status: 'resolved',
+      agent_status: 'done',
+    });
+    expect(alphaChatTurns.rows[0]?.answer_text?.toLowerCase()).toContain('enfermeria');
+    expect(alphaChatTurns.rows[0]?.gap_refs_json.length).toBeGreaterThan(0);
+    expect(alphaChatTurns.rows[0]?.source_refs_json).toEqual([
+      expect.objectContaining({ source_kind: 'user_answer' }),
+    ]);
+    expect(generatedSections.rows[0]).toMatchObject({
+      section_kind: 'problem',
+      section_status: 'generated',
+      section_version: 1,
+      title: 'Problem definition',
+      generated_by_run_id: runs.rows[2] ? expect.any(String) : null,
+    });
+    expect(generatedSections.rows[0]?.source_refs_json).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source_kind: 'pasted_text' }),
+        expect.objectContaining({ source_kind: 'user_answer' }),
+      ]),
+    );
+    expect(generatedSections.rows[0]?.source_refs_json).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source_kind: 'generated_section' }),
+      ]),
+    );
+    expect(generatedSections.rows[0]?.gap_refs_json.length).toBeGreaterThan(0);
+    expect(generatedSections.rows[0]?.content_markdown).toContain('## Problem owner');
+    expect(generatedSections.rows[0]?.content_markdown).not.toMatch(/solution|Clinic Pilot|piloto clinico|soluci[oó]n/i);
+    expect(sectionAuditEvents.rows).toEqual([
+      {
+        event_type: 'problem_section_generated',
+        payload_json: expect.objectContaining({
+          section_id: generatedSections.rows[0]?.section_id,
+          section_version: 1,
+          source_refs: expect.any(Array),
+          gap_refs: expect.any(Array),
+        }),
+      },
+    ]);
+    expect(sectionAuditEvents.rows[0]?.payload_json.source_refs?.length).toBeGreaterThan(0);
+    expect(sectionAuditEvents.rows[0]?.payload_json.gap_refs?.length).toBeGreaterThan(0);
+    expect(audit.statusCode).toBe(200);
+    expect(audit.json().module_chats[0]).toMatchObject({
+      chat_status: 'completed',
+    });
+    expect(audit.json().module_chats[0].active_turn_id ?? null).toBeNull();
+    expect(audit.json().module_chats[0].turns[0].gap_refs.length).toBeGreaterThan(0);
+    expect(audit.json().generated_sections[0]).toMatchObject({
+      section_kind: 'problem',
+      section_version: 1,
     });
   });
 
@@ -220,13 +364,13 @@ describe('proposal flow integration', () => {
       agent_status: 'done',
       diagnosis: ['La respuesta es suficiente'],
       updated_problem_definition: {
-        problem_owner: '',
+        problem_owner: 'Enfermeria de admision',
         problem_statement: structuredBrief.problem_statement,
-        evidence_of_problem: '',
-        scope: '',
-        current_alternatives: '',
-        assumptions: [],
-        ambiguities_remaining: ['Falta evidencia'],
+        evidence_of_problem: structuredBrief.evidence_of_problem,
+        scope: structuredBrief.scope,
+        current_alternatives: structuredBrief.current_alternatives,
+        assumptions: structuredBrief.assumptions,
+        ambiguities_remaining: [],
       },
       next_question: '',
       completion_reason: 'problem sufficiently defined',
@@ -249,6 +393,23 @@ describe('proposal flow integration', () => {
     expect(replyResult.body.agent_status).toBe('continue');
     expect(replyResult.body.next_question).not.toBe('');
     expect(replyResult.body.completion_reason).toBe('');
+
+    const alphaSideEffects = await app.services.database.query<{
+      resolved_gaps_count: string;
+      generated_sections_count: string;
+    }>(
+      [
+        'SELECT',
+        '  (SELECT COUNT(*)::text FROM alpha_gaps WHERE proposal_id = $1 AND module = \'problem\' AND gap_status = \'resolved\') AS resolved_gaps_count,',
+        '  (SELECT COUNT(*)::text FROM generated_sections WHERE proposal_id = $1 AND section_kind = \'problem\') AS generated_sections_count',
+      ].join(' '),
+      [startResult.body.session_id],
+    );
+
+    expect(alphaSideEffects.rows[0]).toEqual({
+      resolved_gaps_count: '0',
+      generated_sections_count: '0',
+    });
   });
 
   it('supports resume across app restarts using the persisted session state', async () => {
@@ -445,9 +606,26 @@ describe('proposal flow integration', () => {
     const runs = await app.services.database.query<{ count: string }>(
       'SELECT COUNT(*)::text AS count FROM agent_runs',
     );
+    const alphaRows = await app.services.database.query<{
+      proposals_count: string;
+      chat_turns_count: string;
+      generated_sections_count: string;
+    }>(
+      [
+        'SELECT',
+        '  (SELECT COUNT(*)::text FROM proposals) AS proposals_count,',
+        '  (SELECT COUNT(*)::text FROM chat_turns) AS chat_turns_count,',
+        '  (SELECT COUNT(*)::text FROM generated_sections) AS generated_sections_count',
+      ].join(' '),
+    );
 
     expect(sessions.rows[0]?.count).toBe('0');
     expect(runs.rows[0]?.count).toBe('0');
+    expect(alphaRows.rows[0]).toEqual({
+      proposals_count: '0',
+      chat_turns_count: '0',
+      generated_sections_count: '0',
+    });
   });
 });
 

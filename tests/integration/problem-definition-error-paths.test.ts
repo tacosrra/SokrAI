@@ -436,6 +436,27 @@ describe('problem-definition invalid JSON handling', () => {
       'SELECT COUNT(*)::text AS count FROM agent_runs WHERE request_id = $1 AND run_purpose = $2',
       ['req-max-turn-reply', 'problem_definition'],
     );
+    const alphaFailure = await app.services.database.query<{
+      chat_status: string;
+      active_turn_id: string | null;
+      turn_status: string;
+      agent_status: string | null;
+      answer_text: string | null;
+      user_answer_sources_count: string;
+      failed_events_count: string;
+    }>(
+      [
+        'SELECT',
+        '  (SELECT chat_status FROM module_chats WHERE proposal_id = $1 AND module = \'problem\') AS chat_status,',
+        '  (SELECT active_turn_id FROM module_chats WHERE proposal_id = $1 AND module = \'problem\') AS active_turn_id,',
+        '  (SELECT turn_status FROM chat_turns WHERE proposal_id = $1 AND module = \'problem\' AND turn_seq = 1) AS turn_status,',
+        '  (SELECT agent_status FROM chat_turns WHERE proposal_id = $1 AND module = \'problem\' AND turn_seq = 1) AS agent_status,',
+        '  (SELECT answer_text FROM chat_turns WHERE proposal_id = $1 AND module = \'problem\' AND turn_seq = 1) AS answer_text,',
+        '  (SELECT COUNT(*)::text FROM proposal_sources WHERE proposal_id = $1 AND source_kind = \'user_answer\') AS user_answer_sources_count,',
+        '  (SELECT COUNT(*)::text FROM audit_events WHERE proposal_id = $1 AND event_type = \'problem_answer_failed\') AS failed_events_count',
+      ].join(' '),
+      [sessionId],
+    );
     const requestStatus = await app.inject({
       method: 'GET',
       url: '/api/v1/requests/req-max-turn-reply',
@@ -459,6 +480,15 @@ describe('problem-definition invalid JSON handling', () => {
     expect(failedRun.rows[0]?.prompt_sha256).toMatch(/^[a-f0-9]{64}$/);
     expect(failedRuns.rows[0]?.count).toBe('1');
     expect(blockedEvents.rows[0]?.count).toBe('1');
+    expect(alphaFailure.rows[0]).toMatchObject({
+      chat_status: 'failed',
+      active_turn_id: null,
+      turn_status: 'failed',
+      agent_status: 'blocked',
+      answer_text: strongAnswer.answer,
+      user_answer_sources_count: '1',
+      failed_events_count: '1',
+    });
     expect(requestStatus.statusCode).toBe(200);
     expect(requestStatus.json()).toMatchObject({
       request_id: 'req-max-turn-reply',

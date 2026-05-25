@@ -2,6 +2,8 @@ import type { PoolClient, QueryResult, QueryResultRow } from 'pg';
 
 import type {
   AlphaGap,
+  GeneratedSection,
+  ModuleChat,
   DocumentStatus,
   ProblemDefinitionState,
   ProposalDocument,
@@ -12,7 +14,16 @@ import type {
   StructuredBrief,
 } from '../contracts/types';
 import { AppError } from '../utils/errors';
-import { mapGap, type AlphaGapRecord } from './alpha-store';
+import {
+  mapChatTurn,
+  mapGap,
+  mapGeneratedSection,
+  mapModuleChat,
+  type AlphaGapRecord,
+  type ChatTurnRecord,
+  type GeneratedSectionRecord,
+  type ModuleChatRecord,
+} from './alpha-store';
 import type { Database, SqlExecutor } from './database';
 
 export interface SessionRecord {
@@ -87,6 +98,12 @@ export interface SnapshotRecord {
   completion_reason: string | null;
   warnings_json: string[];
 }
+
+type AuditTimelineEvent = Record<string, unknown> & {
+  event_stream: 'audit_events' | 'session_events';
+  stream_event_seq: number;
+  created_at?: unknown;
+};
 
 export interface ProposalDocumentRecord {
   id: string;
@@ -679,13 +696,27 @@ export class SessionStore {
     documents: ProposalDocument[];
     sources: ProposalSource[];
     gaps: AlphaGap[];
+    module_chats: ModuleChat[];
+    generated_sections: GeneratedSection[];
     turns: ConversationTurnRecord[];
     runs: AgentRunRecord[];
     snapshots: SnapshotRecord[];
     events: Array<Record<string, unknown>>;
   }> {
     const session = await this.getSession(sessionId);
-    const [documents, sources, gaps, turns, runs, snapshots, sessionEvents, alphaEvents] = await Promise.all([
+    const [
+      documents,
+      sources,
+      gaps,
+      moduleChats,
+      chatTurns,
+      generatedSections,
+      turns,
+      runs,
+      snapshots,
+      sessionEvents,
+      alphaEvents,
+    ] = await Promise.all([
       this.listProposalDocuments(sessionId),
       this.listProposalSources(sessionId),
       this.database.query<AlphaGapRecord>(
@@ -694,6 +725,33 @@ export class SessionStore {
           'FROM alpha_gaps',
           'WHERE proposal_id = (SELECT id FROM proposals WHERE session_id = $1 LIMIT 1)',
           'ORDER BY created_at ASC, id ASC',
+        ].join(' '),
+        [sessionId],
+      ),
+      this.database.query<ModuleChatRecord>(
+        [
+          'SELECT *',
+          'FROM module_chats',
+          'WHERE proposal_id = (SELECT id FROM proposals WHERE session_id = $1 LIMIT 1)',
+          'ORDER BY started_at ASC, id ASC',
+        ].join(' '),
+        [sessionId],
+      ),
+      this.database.query<ChatTurnRecord>(
+        [
+          'SELECT *',
+          'FROM chat_turns',
+          'WHERE proposal_id = (SELECT id FROM proposals WHERE session_id = $1 LIMIT 1)',
+          'ORDER BY turn_seq ASC, created_at ASC, id ASC',
+        ].join(' '),
+        [sessionId],
+      ),
+      this.database.query<GeneratedSectionRecord>(
+        [
+          'SELECT *',
+          'FROM generated_sections',
+          'WHERE proposal_id = (SELECT id FROM proposals WHERE session_id = $1 LIMIT 1)',
+          'ORDER BY section_version ASC, created_at ASC, id ASC',
         ].join(' '),
         [sessionId],
       ),
@@ -729,10 +787,19 @@ export class SessionStore {
       documents,
       sources,
       gaps: gaps.rows.map(mapGap),
+      module_chats: moduleChats.rows.map((chat) =>
+        mapModuleChat(
+          chat,
+          chatTurns.rows
+            .filter((turn) => turn.chat_id === chat.id)
+            .map(mapChatTurn),
+        ),
+      ),
+      generated_sections: generatedSections.rows.map(mapGeneratedSection),
       turns: turns.rows,
       runs: runs.rows,
       snapshots: snapshots.rows,
-      events: [...sessionEvents.rows, ...alphaEvents.rows],
+      events: buildAuditTimelineEvents(sessionEvents.rows, alphaEvents.rows),
     };
   }
 
@@ -871,6 +938,56 @@ async function runQuery<T extends QueryResultRow>(
 
 function toJson(value: unknown): string {
   return JSON.stringify(value);
+}
+
+function buildAuditTimelineEvents(
+  sessionEvents: Array<Record<string, unknown>>,
+  auditEvents: Array<Record<string, unknown>>,
+): AuditTimelineEvent[] {
+  return [
+    ...sessionEvents.map((event) => toAuditTimelineEvent(event, 'session_events')),
+    ...auditEvents.map((event) => toAuditTimelineEvent(event, 'audit_events')),
+  ].sort(compareAuditTimelineEvents);
+}
+
+function toAuditTimelineEvent(
+  event: Record<string, unknown>,
+  eventStream: AuditTimelineEvent['event_stream'],
+): AuditTimelineEvent {
+  return {
+    ...event,
+    event_stream: eventStream,
+    stream_event_seq: Number(event.event_seq),
+  };
+}
+
+function compareAuditTimelineEvents(left: AuditTimelineEvent, right: AuditTimelineEvent): number {
+  const createdAtCompare = getCreatedAtMillis(left.created_at) - getCreatedAtMillis(right.created_at);
+
+  if (createdAtCompare !== 0) {
+    return createdAtCompare;
+  }
+
+  const streamCompare = left.event_stream.localeCompare(right.event_stream);
+
+  if (streamCompare !== 0) {
+    return streamCompare;
+  }
+
+  return left.stream_event_seq - right.stream_event_seq;
+}
+
+function getCreatedAtMillis(value: unknown): number {
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+
+  if (typeof value === 'string' || typeof value === 'number') {
+    const parsed = new Date(value).getTime();
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+
+  return 0;
 }
 
 function toProposalDocument(record: ProposalDocumentRecord): ProposalDocument {

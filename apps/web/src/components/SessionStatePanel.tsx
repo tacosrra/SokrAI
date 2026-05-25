@@ -104,6 +104,27 @@ export function SessionStatePanel({
         </div>
       </section>
 
+      {presentation.latestProblemSection ? (
+        <section className="state-card">
+          <div className="state-card__header">
+            <div>
+              <h3>{presentation.latestProblemSection.title}</h3>
+              <p>
+                v{presentation.latestProblemSection.section_version} · {presentation.latestProblemSection.section_status.replaceAll('_', ' ')}
+              </p>
+            </div>
+            <strong className="state-count">
+              {presentation.latestProblemSection.source_refs.length}/{presentation.latestProblemSection.gap_refs.length}
+            </strong>
+          </div>
+
+          <article className="context-block">
+            <span className="context-block__label">Problem section</span>
+            <p>{presentation.latestProblemSection.content_markdown}</p>
+          </article>
+        </section>
+      ) : null}
+
       <section className="state-card">
         <div className="state-card__header">
           <div>

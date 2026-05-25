@@ -2,12 +2,17 @@ import type {
   AgentRun,
   AgentStatus,
   AlphaGap,
+  ChatStatus,
+  ChatTurn,
+  ChatTurnStatus,
   ConversationTurn,
   DocumentStatus,
   ErrorResponse,
+  GeneratedSection,
   GapKind,
   GapOrigin,
   GapStatus,
+  ModuleChat,
   ProblemDefinitionState,
   ProposalDocument,
   ProposalDocumentSourceKind,
@@ -49,6 +54,22 @@ const GAP_KINDS: GapKind[] = [
   'needs_user_confirmation',
 ];
 const GAP_STATUSES: GapStatus[] = ['open', 'in_progress', 'resolved', 'deferred', 'not_applicable'];
+const CHAT_STATUSES: ChatStatus[] = [
+  'not_started',
+  'active',
+  'waiting_for_user',
+  'ready_to_generate',
+  'completed',
+  'blocked',
+  'failed',
+];
+const CHAT_TURN_STATUSES: ChatTurnStatus[] = [
+  'awaiting_user',
+  'processing',
+  'resolved',
+  'failed',
+  'skipped',
+];
 const GAP_ORIGINS: GapOrigin[] = [
   'structured_brief_field',
   'structured_brief_missing_information',
@@ -404,6 +425,20 @@ function parseProposalDocument(value: unknown, label: string): ProposalDocument 
   };
 }
 
+function parseAuditRef(value: unknown, label: string) {
+  const auditRef = expectRecord(value, label);
+
+  return {
+    kind: expectEnum(auditRef.kind, `${label}.kind`, [
+      'agent_run',
+      'audit_event',
+      'snapshot',
+      'chat_turn',
+    ]),
+    id: expectString(auditRef.id, `${label}.id`),
+  };
+}
+
 function parseAlphaGap(value: unknown, label: string): AlphaGap {
   const record = expectRecord(value, label);
   const absence = expectRecord(record.absence, `${label}.absence`);
@@ -433,22 +468,106 @@ function parseAlphaGap(value: unknown, label: string): AlphaGap {
       record.resolved_by_turn_id === null || record.resolved_by_turn_id === undefined
         ? undefined
         : expectString(record.resolved_by_turn_id, `${label}.resolved_by_turn_id`),
-    audit_refs: expectOptionalArray(record.audit_refs, [], `${label}.audit_refs`).map((item, index) => {
-      const auditRef = expectRecord(item, `${label}.audit_refs[${index}]`);
-
-      return {
-        kind: expectEnum(auditRef.kind, `${label}.audit_refs[${index}].kind`, [
-          'agent_run',
-          'audit_event',
-          'snapshot',
-          'chat_turn',
-        ]),
-        id: expectString(auditRef.id, `${label}.audit_refs[${index}].id`),
-      };
-    }),
+    audit_refs: expectOptionalArray(record.audit_refs, [], `${label}.audit_refs`).map((item, index) =>
+      parseAuditRef(item, `${label}.audit_refs[${index}]`),
+    ),
     warnings: expectOptionalStringArray(record.warnings, [], `${label}.warnings`),
     created_at: expectString(record.created_at, `${label}.created_at`),
     updated_at: expectString(record.updated_at, `${label}.updated_at`),
+  };
+}
+
+function parseChatTurn(value: unknown, label: string): ChatTurn {
+  const record = expectRecord(value, label);
+
+  return {
+    turn_id: expectString(record.turn_id, `${label}.turn_id`),
+    chat_id: expectString(record.chat_id, `${label}.chat_id`),
+    proposal_id: expectString(record.proposal_id, `${label}.proposal_id`),
+    module: expectEnum(record.module, `${label}.module`, ['problem', 'solution']),
+    turn_seq: expectNumber(record.turn_seq, `${label}.turn_seq`),
+    question_text: expectString(record.question_text, `${label}.question_text`),
+    answer_text:
+      record.answer_text === null || record.answer_text === undefined
+        ? undefined
+        : expectString(record.answer_text, `${label}.answer_text`),
+    turn_status: expectEnum(record.turn_status, `${label}.turn_status`, CHAT_TURN_STATUSES),
+    agent_status:
+      record.agent_status === null || record.agent_status === undefined
+        ? undefined
+        : expectEnum(record.agent_status, `${label}.agent_status`, AGENT_STATUSES),
+    diagnosis: expectOptionalStringArray(record.diagnosis, [], `${label}.diagnosis`),
+    source_refs: expectOptionalArray(record.source_refs, [], `${label}.source_refs`).map((item, index) =>
+      parseProposalSource(item, `${label}.source_refs[${index}]`),
+    ),
+    gap_refs: expectOptionalStringArray(record.gap_refs, [], `${label}.gap_refs`),
+    audit_refs: expectOptionalArray(record.audit_refs, [], `${label}.audit_refs`).map((item, index) =>
+      parseAuditRef(item, `${label}.audit_refs[${index}]`),
+    ),
+    warnings: expectOptionalStringArray(record.warnings, [], `${label}.warnings`),
+    created_at: expectString(record.created_at, `${label}.created_at`),
+    completed_at:
+      record.completed_at === null || record.completed_at === undefined
+        ? undefined
+        : expectString(record.completed_at, `${label}.completed_at`),
+  };
+}
+
+function parseModuleChat(value: unknown, label: string): ModuleChat {
+  const record = expectRecord(value, label);
+
+  return {
+    chat_id: expectString(record.chat_id, `${label}.chat_id`),
+    proposal_id: expectString(record.proposal_id, `${label}.proposal_id`),
+    module: expectEnum(record.module, `${label}.module`, ['problem', 'solution']),
+    chat_status: expectEnum(record.chat_status, `${label}.chat_status`, CHAT_STATUSES),
+    turns: expectOptionalArray(record.turns, [], `${label}.turns`).map((item, index) =>
+      parseChatTurn(item, `${label}.turns[${index}]`),
+    ),
+    active_turn_id:
+      record.active_turn_id === null || record.active_turn_id === undefined
+        ? undefined
+        : expectString(record.active_turn_id, `${label}.active_turn_id`),
+    started_at: expectString(record.started_at, `${label}.started_at`),
+    completed_at:
+      record.completed_at === null || record.completed_at === undefined
+        ? undefined
+        : expectString(record.completed_at, `${label}.completed_at`),
+    warnings: expectOptionalStringArray(record.warnings, [], `${label}.warnings`),
+  };
+}
+
+function parseGeneratedSection(value: unknown, label: string): GeneratedSection {
+  const record = expectRecord(value, label);
+
+  return {
+    section_id: expectString(record.section_id, `${label}.section_id`),
+    proposal_id: expectString(record.proposal_id, `${label}.proposal_id`),
+    section_kind: expectEnum(record.section_kind, `${label}.section_kind`, ['problem', 'solution']),
+    section_status: expectEnum(record.section_status, `${label}.section_status`, [
+      'draft',
+      'generated',
+      'accepted',
+      'needs_revision',
+      'superseded',
+    ]),
+    section_version: expectNumber(record.section_version, `${label}.section_version`),
+    title: expectString(record.title, `${label}.title`),
+    content_markdown: expectString(record.content_markdown, `${label}.content_markdown`),
+    source_refs: expectOptionalArray(record.source_refs, [], `${label}.source_refs`).map((item, index) =>
+      parseProposalSource(item, `${label}.source_refs[${index}]`),
+    ),
+    gap_refs: expectOptionalStringArray(record.gap_refs, [], `${label}.gap_refs`),
+    generated_by_run_id:
+      record.generated_by_run_id === null || record.generated_by_run_id === undefined
+        ? undefined
+        : expectString(record.generated_by_run_id, `${label}.generated_by_run_id`),
+    supersedes_section_id:
+      record.supersedes_section_id === null || record.supersedes_section_id === undefined
+        ? undefined
+        : expectString(record.supersedes_section_id, `${label}.supersedes_section_id`),
+    warnings: expectOptionalStringArray(record.warnings, [], `${label}.warnings`),
+    created_at: expectString(record.created_at, `${label}.created_at`),
   };
 }
 
@@ -565,6 +684,11 @@ function parseSessionEvent(value: unknown, label: string): SessionEvent {
         : expectNumber(record.turn_seq, `${label}.turn_seq`),
     run_id: expectNullableString(record.run_id, `${label}.run_id`),
     event_seq: expectNumber(record.event_seq, `${label}.event_seq`),
+    event_stream: expectEnum(record.event_stream, `${label}.event_stream`, [
+      'audit_events',
+      'session_events',
+    ]),
+    stream_event_seq: expectNumber(record.stream_event_seq, `${label}.stream_event_seq`),
     event_type: expectString(record.event_type, `${label}.event_type`),
     actor_type: expectString(record.actor_type, `${label}.actor_type`),
     request_id: expectNullableString(record.request_id, `${label}.request_id`),
@@ -698,6 +822,12 @@ export function parseSessionAuditView(value: unknown): SessionAuditView {
     ),
     gaps: expectArray(record.gaps, 'session audit view.gaps').map((item, index) =>
       parseAlphaGap(item, `session audit view.gaps[${index}]`),
+    ),
+    module_chats: expectArray(record.module_chats, 'session audit view.module_chats').map((item, index) =>
+      parseModuleChat(item, `session audit view.module_chats[${index}]`),
+    ),
+    generated_sections: expectArray(record.generated_sections, 'session audit view.generated_sections').map((item, index) =>
+      parseGeneratedSection(item, `session audit view.generated_sections[${index}]`),
     ),
     turns: expectOptionalArray(record.turns, [], 'session audit view.turns').map((item, index) =>
       parseConversationTurn(item, `session audit view.turns[${index}]`),

@@ -95,6 +95,7 @@
       "proposal_id": "proposal-1",
       "section_kind": "problem",
       "section_status": "generated",
+      "section_version": 1,
       "title": "Problem definition",
       "content_markdown": "Clinical AI intake reviews are delayed because teams reconcile fragmented notes manually before review.",
       "source_refs": [

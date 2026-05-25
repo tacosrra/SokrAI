@@ -172,6 +172,7 @@ export interface GeneratedSection {
   proposal_id: string;
   section_kind: SectionKind;
   section_status: SectionStatus;
+  section_version: number;
   title: string;
   content_markdown: string;
   source_refs: ProposalSource[];
@@ -363,6 +364,8 @@ export interface SessionEvent {
   turn_seq: number | null;
   run_id: string | null;
   event_seq: number;
+  event_stream: 'audit_events' | 'session_events';
+  stream_event_seq: number;
   event_type: string;
   actor_type: string;
   request_id: string | null;
@@ -375,6 +378,8 @@ export interface SessionAuditView {
   documents: ProposalDocument[];
   sources: ProposalSource[];
   gaps: AlphaGap[];
+  module_chats: ModuleChat[];
+  generated_sections: GeneratedSection[];
   turns: ConversationTurn[];
   runs: AgentRun[];
   snapshots: Snapshot[];

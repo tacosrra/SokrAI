@@ -47,7 +47,13 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     gapAnalysisService,
   );
   const proposalReplyService = new ProposalReplyService(config, logger, sessionStore);
-  const problemDefinitionService = new ProblemDefinitionService(config, logger, sessionStore, llmOrchestrator);
+  const problemDefinitionService = new ProblemDefinitionService(
+    config,
+    logger,
+    sessionStore,
+    alphaStore,
+    llmOrchestrator,
+  );
 
   const app = Fastify({
     logger: false,
