@@ -4,7 +4,7 @@
 
 This guide lets a developer run and manually test the current SokrAI MVP Alpha end to end from the local repository. It is based on the current `package.json` scripts, Docker Compose files, `.env.example`, n8n workflow exports, Ollama adapter, API routes, frontend behavior, and test suite.
 
-Use it when you need to prove the PR8 / Basic Structured Alpha Report path manually, then exercise the PR9 browser extension for data/AI/privacy gaps:
+Use it when you need to prove the PR8 / Basic Structured Alpha Report path manually, then exercise the PR9 browser extension for data/AI/privacy gaps and the PR10 conditional medical-device triage flow:
 
 1. Create a proposal.
 2. Add or paste documentation.
@@ -16,11 +16,13 @@ Use it when you need to prove the PR8 / Basic Structured Alpha Report path manua
 8. Generate the solution section.
 9. Compose and view the Basic Alpha Report in the app.
 10. Start and complete the PR9 data/AI/privacy browser flow after the solution section exists.
-11. Reload or resume the session and verify state persists.
+11. Start PR10 medical-device triage after the PR9 section exists.
+12. Verify applicable/uncertain cases ask bounded questions and no-signal cases are recorded as `not_applicable`.
+13. Reload or resume the session and verify state persists.
 
 ## 2. Current Scope
 
-This guide covers MVP Alpha plus the PR9 Clinic Pilot extension:
+This guide covers MVP Alpha plus the PR9 and PR10 Clinic Pilot extensions:
 
 - local proposal intake
 - pasted text and optional text-extractable PDF intake
@@ -33,6 +35,8 @@ This guide covers MVP Alpha plus the PR9 Clinic Pilot extension:
 - persisted audit and resume behavior
 - Basic Alpha Report composition and app display
 - PR9 `hospital_clinic_v1` data/AI/privacy gap flow after solution completion
+- PR10 conditional `medical_device_triage` flow after data/AI/privacy completion
+- PR10 generated section limited to gaps/questions/uncertainty and competent human review
 
 The canonical contracts live in `contracts/schemas`. The relevant public app surfaces are:
 
@@ -44,10 +48,13 @@ The canonical contracts live in `contracts/schemas`. The relevant public app sur
 
 ## 3. Intentionally Out of Scope
 
-Do not test or present these as implemented MVP Alpha or PR9 capabilities:
+Do not test or present these as implemented MVP Alpha, PR9, or PR10 capabilities:
 
-- Clinic Pilot modules beyond `data_ai_privacy_gap_agent`
-- medical device determination
+- Clinic Pilot modules beyond `data_ai_privacy_gap_agent` and `medical_device_triage`
+- definitive medical device determination
+- MDR class or product classification
+- legal, regulatory, clinical, privacy, or medical-device dictamen
+- compliance, non-compliance, approval, rejection, scoring, or ranking
 - resources/pilot/viability modules
 - PDF export
 - RAG
@@ -56,6 +63,12 @@ Do not test or present these as implemented MVP Alpha or PR9 capabilities:
 - real patient data processing
 
 The Alpha report is not an approval, rejection, ranking, legal decision, clinical decision, regulatory decision, or committee decision.
+
+PR10 medical-device triage is conditional and non-definitive. It activates only
+when medical-device signals or uncertainty are present in persisted proposal
+material, or records `not_applicable` for the current material when no such
+signals are found. Its output must stay limited to gaps/questions/uncertainty
+and must use `requires competent human review` when human review is required.
 
 ## 4. Prerequisites
 

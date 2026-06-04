@@ -9,6 +9,8 @@ import {
   assertDataAiPrivacyReplyResponse,
   assertDataAiPrivacyStartResponse,
   assertErrorResponse,
+  assertMedicalDeviceTriageReplyResponse,
+  assertMedicalDeviceTriageStartResponse,
   assertProposalReplyResponse,
   assertProposalStartResponse,
   assertRequestExecutionResponse,
@@ -25,6 +27,7 @@ import { BasicReportService } from './services/basic-report-service';
 import { DataAiPrivacyService } from './services/data-ai-privacy-service';
 import { GapAnalysisService } from './services/gap-analysis-service';
 import { LlmOrchestrator } from './services/llm-orchestrator';
+import { MedicalDeviceTriageService } from './services/medical-device-triage-service';
 import { ProblemDefinitionService } from './services/problem-definition-service';
 import { ProposalReplyService } from './services/proposal-reply-service';
 import { ProposalStartService } from './services/proposal-start-service';
@@ -81,6 +84,13 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     alphaStore,
     llmOrchestrator,
   );
+  const medicalDeviceTriageService = new MedicalDeviceTriageService(
+    config,
+    logger,
+    sessionStore,
+    alphaStore,
+    llmOrchestrator,
+  );
 
   const app = Fastify({
     logger: false,
@@ -102,6 +112,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     solutionReplyService,
     solutionDefinitionService,
     dataAiPrivacyService,
+    medicalDeviceTriageService,
   });
 
   app.addHook('onClose', async () => {
@@ -186,6 +197,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       problemDefinitionService,
       solutionDefinitionService,
       dataAiPrivacyService,
+      medicalDeviceTriageService,
       sessionStore,
     });
 
@@ -494,6 +506,122 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     return reply.send(response);
   });
 
+  app.post('/internal/sessions/medical-device-triage-start', async (request, reply) => {
+    assertInternalSecret(request);
+
+    const body = request.body as {
+      request_id?: string;
+      workflow_version?: string;
+      workflow_execution_id?: string;
+      payload: unknown;
+    };
+
+    const result = await medicalDeviceTriageService.start({
+      context: {
+        requestId: body.request_id ?? getRequestId(request),
+        workflowVersion: body.workflow_version ?? 'medical_device_triage_start_v1',
+        workflowExecutionId: body.workflow_execution_id,
+      },
+      payload: body.payload as never,
+    });
+
+    return reply.send(assertMedicalDeviceTriageStartResponse({
+      session_id: result.session_id,
+      stage: 'medical_device_triage',
+      profile_id: result.profile_id,
+      activation_result: result.activation_result,
+      agent_status: result.agent_status,
+      updated_medical_device_triage: result.updated_medical_device_triage,
+      diagnosis: result.diagnosis,
+      next_question: result.next_question,
+      completion_reason: result.completion_reason,
+      warnings: result.warnings,
+    }));
+  });
+
+  app.post('/internal/sessions/medical-device-triage-reply', async (request, reply) => {
+    assertInternalSecret(request);
+
+    const body = request.body as {
+      request_id?: string;
+      workflow_version?: string;
+      workflow_execution_id?: string;
+      payload: unknown;
+    };
+
+    const result = await medicalDeviceTriageService.reply({
+      context: {
+        requestId: body.request_id ?? getRequestId(request),
+        workflowVersion: body.workflow_version ?? 'medical_device_triage_reply_v1',
+        workflowExecutionId: body.workflow_execution_id,
+      },
+      payload: body.payload as never,
+    });
+
+    return reply.send(assertMedicalDeviceTriageReplyResponse({
+      session_id: result.session_id,
+      stage: 'medical_device_triage',
+      profile_id: result.profile_id,
+      activation_result: result.activation_result,
+      agent_status: result.agent_status,
+      updated_medical_device_triage: result.updated_medical_device_triage,
+      diagnosis: result.diagnosis,
+      next_question: result.next_question,
+      completion_reason: result.completion_reason,
+      warnings: result.warnings,
+    }));
+  });
+
+  app.post('/internal/agents/medical-device-triage/run', async (request, reply) => {
+    assertInternalSecret(request);
+
+    const body = request.body as {
+      request_id?: string;
+      workflow_version?: string;
+      workflow_execution_id?: string;
+      session_id: string;
+      trigger: 'start' | 'reply';
+    };
+
+    const result = await medicalDeviceTriageService.execute({
+      context: {
+        requestId: body.request_id ?? getRequestId(request),
+        workflowVersion: body.workflow_version ?? 'agent_medical_device_triage_v1',
+        workflowExecutionId: body.workflow_execution_id,
+      },
+      sessionId: body.session_id,
+      trigger: body.trigger,
+    });
+
+    const response = body.trigger === 'start'
+      ? assertMedicalDeviceTriageStartResponse({
+          session_id: result.session_id,
+          stage: 'medical_device_triage',
+          profile_id: result.profile_id,
+          activation_result: result.activation_result,
+          agent_status: result.agent_status,
+          updated_medical_device_triage: result.updated_medical_device_triage,
+          diagnosis: result.diagnosis,
+          next_question: result.next_question,
+          completion_reason: result.completion_reason,
+          warnings: result.warnings,
+        })
+      : assertMedicalDeviceTriageReplyResponse({
+          session_id: result.session_id,
+          stage: 'medical_device_triage',
+          profile_id: result.profile_id,
+          activation_result: result.activation_result,
+          agent_status: result.agent_status,
+          updated_medical_device_triage: result.updated_medical_device_triage,
+          diagnosis: result.diagnosis,
+          next_question: result.next_question,
+          completion_reason: result.completion_reason,
+          warnings: result.warnings,
+        });
+
+    return reply.send(response);
+  });
+
   app.post('/internal/reports/basic-alpha/compose', async (request, reply) => {
     assertInternalSecret(request);
 
@@ -564,6 +692,7 @@ async function recoverRequestExecution(params: {
   problemDefinitionService: ProblemDefinitionService;
   solutionDefinitionService: SolutionDefinitionService;
   dataAiPrivacyService: DataAiPrivacyService;
+  medicalDeviceTriageService: MedicalDeviceTriageService;
 }) {
   const currentStatus = await params.sessionStore.getRequestExecutionStatus(params.requestId);
 
@@ -723,6 +852,72 @@ async function recoverRequestExecution(params: {
         (
           error.errorCode === 'data_ai_privacy_start_already_initialized' ||
           error.errorCode === 'data_ai_privacy_start_already_completed'
+        )
+      ) {
+        return refreshedStatus;
+      }
+
+      throw error;
+    }
+
+    return params.sessionStore.getRequestExecutionStatus(params.requestId);
+  }
+
+  if (currentStatus.request_kind === 'medical_device_triage_reply' && currentStatus.session_id) {
+    try {
+      await params.medicalDeviceTriageService.execute({
+        context: {
+          requestId: params.requestId,
+          workflowVersion: 'request_recovery_v1',
+        },
+        sessionId: currentStatus.session_id,
+        trigger: 'reply',
+      });
+    } catch (error) {
+      const refreshedStatus = await params.sessionStore.getRequestExecutionStatus(params.requestId);
+
+      if (refreshedStatus.status !== 'pending') {
+        return refreshedStatus;
+      }
+
+      if (
+        error instanceof AppError &&
+        (
+          error.errorCode === 'medical_device_triage_reply_not_ready_for_agent' ||
+          error.errorCode === 'medical_device_triage_start_already_completed'
+        )
+      ) {
+        return refreshedStatus;
+      }
+
+      throw error;
+    }
+
+    return params.sessionStore.getRequestExecutionStatus(params.requestId);
+  }
+
+  if (currentStatus.request_kind === 'medical_device_triage_start' && currentStatus.session_id) {
+    try {
+      await params.medicalDeviceTriageService.execute({
+        context: {
+          requestId: params.requestId,
+          workflowVersion: 'request_recovery_v1',
+        },
+        sessionId: currentStatus.session_id,
+        trigger: 'start',
+      });
+    } catch (error) {
+      const refreshedStatus = await params.sessionStore.getRequestExecutionStatus(params.requestId);
+
+      if (refreshedStatus.status !== 'pending') {
+        return refreshedStatus;
+      }
+
+      if (
+        error instanceof AppError &&
+        (
+          error.errorCode === 'medical_device_triage_start_already_initialized' ||
+          error.errorCode === 'medical_device_triage_start_already_completed'
         )
       ) {
         return refreshedStatus;

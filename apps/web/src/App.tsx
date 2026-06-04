@@ -8,9 +8,11 @@ import {
   recoverRequestExecution,
   fetchSessionAudit,
   replyDataAiPrivacy,
+  replyMedicalDeviceTriage,
   replySolution,
   replySession,
   startDataAiPrivacy,
+  startMedicalDeviceTriage,
   startSolution,
   startSession,
 } from './lib/api';
@@ -47,7 +49,9 @@ type RecoverableRequestKind =
   | 'solution_start'
   | 'solution_reply'
   | 'data_ai_privacy_start'
-  | 'data_ai_privacy_reply';
+  | 'data_ai_privacy_reply'
+  | 'medical_device_triage_start'
+  | 'medical_device_triage_reply';
 
 interface ModeCardProps {
   activeMode: ModeView;
@@ -78,7 +82,9 @@ function createClientRequestId(
     | 'solution-start'
     | 'solution-reply'
     | 'data-ai-privacy-start'
-    | 'data-ai-privacy-reply',
+    | 'data-ai-privacy-reply'
+    | 'medical-device-triage-start'
+    | 'medical-device-triage-reply',
 ): string {
   return `web-${prefix}-${crypto.randomUUID()}`;
 }
@@ -140,6 +146,16 @@ function hasDataAiPrivacyRecoveryArtifacts(audit: SessionAuditView): boolean {
     presentation.dataAiPrivacyModuleChat ||
       presentation.currentDataAiPrivacyQuestion ||
       presentation.latestDataAiPrivacySection,
+  );
+}
+
+function hasMedicalDeviceTriageRecoveryArtifacts(audit: SessionAuditView): boolean {
+  const presentation = deriveSessionPresentation(audit);
+
+  return Boolean(
+    presentation.medicalDeviceTriageModuleChat ||
+      presentation.currentMedicalDeviceTriageQuestion ||
+      presentation.latestMedicalDeviceTriageSection,
   );
 }
 
@@ -823,6 +839,149 @@ export function App() {
     }
   }
 
+  async function handleStartMedicalDeviceTriage() {
+    if (!activeAudit) {
+      return;
+    }
+
+    const requestId = createClientRequestId('medical-device-triage-start');
+    setIsReplying(true);
+    setBanner({
+      tone: 'info',
+      text: 'Iniciando medical-device triage para registrar gaps/questions/uncertainty…',
+    });
+
+    try {
+      const result = await startMedicalDeviceTriage({
+        request_id: requestId,
+        session_id: activeAudit.session.id,
+        profile_id: 'hospital_clinic_v1',
+      });
+
+      await loadSession(result.session_id, {
+        successMessage: `Medical-device triage procesado. Agent status: ${result.agent_status}.`,
+        skipBannerOnStart: true,
+      });
+    } catch (error) {
+      if (isRecoverableWorkflowDeliveryError(error)) {
+        setBanner({
+          tone: 'info',
+          text:
+            error.errorCode === 'request_timeout'
+              ? `La llamada para iniciar medical-device triage vencio en el navegador. Recuperando el resultado del workflow para request_id ${requestId}…`
+              : `La respuesta de inicio de medical-device triage llego con un formato inesperado. Intentando recuperar el estado real con request_id ${requestId}…`,
+        });
+
+        try {
+          const sessionId = await recoverTimedOutRequest(requestId, 'medical_device_triage_start');
+          await loadSession(sessionId, {
+            successMessage: 'Medical-device triage recuperado tras completar el workflow fuera del tiempo de espera inicial.',
+            skipBannerOnStart: true,
+          });
+          return;
+        } catch (recoveryError) {
+          try {
+            const recoveredAudit = await loadSession(activeAudit.session.id, {
+              skipBannerOnStart: true,
+              suppressSuccessBanner: true,
+            });
+
+            if (recoveredAudit && hasMedicalDeviceTriageRecoveryArtifacts(recoveredAudit)) {
+              setBanner({
+                tone: 'success',
+                text: 'Se recupero el estado de medical-device triage directamente desde la API tras expirar el inicio.',
+              });
+              return;
+            }
+          } catch {
+            // Preserve the original recovery error when the direct session refresh also fails.
+          }
+
+          setBanner({
+            tone: 'error',
+            text: mapApiError(recoveryError),
+          });
+          return;
+        }
+      }
+
+      setBanner({
+        tone: 'error',
+        text: mapApiError(error),
+      });
+    } finally {
+      setIsReplying(false);
+    }
+  }
+
+  async function handleMedicalDeviceTriageReply(answer: string) {
+    if (!activeAudit) {
+      return;
+    }
+
+    const requestId = createClientRequestId('medical-device-triage-reply');
+    setIsReplying(true);
+    setBanner({
+      tone: 'info',
+      text: 'Respuesta de medical-device triage enviada. Actualizando gaps/questions/uncertainty…',
+    });
+
+    try {
+      const result = await replyMedicalDeviceTriage({
+        request_id: requestId,
+        session_id: activeAudit.session.id,
+        answer,
+      });
+
+      await loadSession(result.session_id, {
+        successMessage: `Turno medical-device triage procesado. Agent status: ${result.agent_status}.`,
+        skipBannerOnStart: true,
+      });
+    } catch (error) {
+      if (isRecoverableWorkflowDeliveryError(error)) {
+        setBanner({
+          tone: 'info',
+          text:
+            error.errorCode === 'request_timeout'
+              ? `La llamada del turno medical-device triage vencio en el navegador. Recuperando el resultado del workflow para request_id ${requestId}…`
+              : `La respuesta del turno medical-device triage llego con un formato inesperado. Intentando recuperar el estado real con request_id ${requestId}…`,
+        });
+
+        try {
+          const sessionId = await recoverTimedOutRequest(requestId, 'medical_device_triage_reply');
+          await loadSession(sessionId, {
+            successMessage: 'Turno medical-device triage recuperado tras completar el workflow fuera del tiempo de espera inicial.',
+            skipBannerOnStart: true,
+          });
+          return;
+        } catch (recoveryError) {
+          try {
+            await loadSession(activeAudit.session.id, {
+              successMessage: 'Se recupero el estado de la sesion directamente desde la API tras expirar el turno medical-device triage.',
+              skipBannerOnStart: true,
+            });
+            return;
+          } catch {
+            // Preserve the original recovery error when the direct session refresh also fails.
+          }
+
+          setBanner({
+            tone: 'error',
+            text: mapApiError(recoveryError),
+          });
+          return;
+        }
+      }
+
+      setBanner({
+        tone: 'error',
+        text: mapApiError(error),
+      });
+    } finally {
+      setIsReplying(false);
+    }
+  }
+
   function handleStartFreshSession() {
     setActiveAudit(null);
     setActiveReport(null);
@@ -961,8 +1120,10 @@ export function App() {
               onReply={handleReply}
               onSolutionReply={handleSolutionReply}
               onDataAiPrivacyReply={handleDataAiPrivacyReply}
+              onMedicalDeviceTriageReply={handleMedicalDeviceTriageReply}
               onStartSolution={handleStartSolution}
               onStartDataAiPrivacy={handleStartDataAiPrivacy}
+              onStartMedicalDeviceTriage={handleStartMedicalDeviceTriage}
               presentation={presentation}
             />
           </section>

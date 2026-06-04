@@ -14,6 +14,11 @@ import {
   assertDataAiPrivacyStartResponse,
   assertDataAiPrivacyTurn,
   assertGeneratedSection,
+  assertMedicalDeviceTriageReplyRequest,
+  assertMedicalDeviceTriageReplyResponse,
+  assertMedicalDeviceTriageStartRequest,
+  assertMedicalDeviceTriageStartResponse,
+  assertMedicalDeviceTriageTurn,
   assertModuleChat,
   assertProblemDefinitionTurn,
   assertProposalDocument,
@@ -209,6 +214,12 @@ describe('contract schemas', () => {
       status: 'pending',
       session_id: 'session-1',
     })).toBeTruthy();
+    expect(assertRequestExecutionResponse({
+      request_id: 'web-medical-device-start-1',
+      request_kind: 'medical_device_triage_start',
+      status: 'completed',
+      session_id: 'session-1',
+    })).toBeTruthy();
   });
 
   it('accepts data AI privacy as a widened Alpha module and section kind', async () => {
@@ -240,6 +251,91 @@ describe('contract schemas', () => {
       title: 'Data, AI and privacy gaps',
       warnings: ['requires competent human review'],
     })).toBeTruthy();
+  });
+
+  it('accepts medical-device triage turn, request, and response contracts', async () => {
+    const applicable = await readFixture('expected', 'medical-device-triage.applicable.json');
+    const notApplicable = await readFixture('expected', 'medical-device-triage.not-applicable.json');
+    const uncertain = await readFixture('expected', 'medical-device-triage.uncertain.json');
+
+    expect(assertMedicalDeviceTriageTurn(applicable)).toBeTruthy();
+    expect(assertMedicalDeviceTriageTurn(notApplicable)).toBeTruthy();
+    expect(assertMedicalDeviceTriageTurn(uncertain)).toBeTruthy();
+    expect(assertMedicalDeviceTriageStartRequest({
+      request_id: 'medical-device-start-1',
+      session_id: 'session-1',
+      profile_id: 'hospital_clinic_v1',
+    })).toBeTruthy();
+    expect(assertMedicalDeviceTriageReplyRequest({
+      request_id: 'medical-device-reply-1',
+      session_id: 'session-1',
+      answer: 'The proposal drafts a triage recommendation for staff review.',
+    })).toBeTruthy();
+    expect(assertMedicalDeviceTriageStartResponse({
+      session_id: 'session-1',
+      stage: 'medical_device_triage',
+      profile_id: 'hospital_clinic_v1',
+      activation_result: 'not_applicable',
+      agent_status: 'done',
+      updated_medical_device_triage: notApplicable.updated_medical_device_triage,
+      diagnosis: notApplicable.diagnosis,
+      next_question: '',
+      completion_reason: notApplicable.completion_reason,
+      warnings: ['requires competent human review'],
+    })).toBeTruthy();
+    expect(assertMedicalDeviceTriageReplyResponse({
+      session_id: 'session-1',
+      stage: 'medical_device_triage',
+      profile_id: 'hospital_clinic_v1',
+      activation_result: 'applicable',
+      agent_status: 'continue',
+      updated_medical_device_triage: applicable.updated_medical_device_triage,
+      diagnosis: applicable.diagnosis,
+      next_question: applicable.next_question,
+      completion_reason: '',
+      warnings: ['requires competent human review'],
+    })).toBeTruthy();
+  });
+
+  it('accepts medical-device triage as a widened Alpha module and section kind', async () => {
+    const gap = await readFixture('alpha-model', 'alpha-gap.valid.json');
+    const chat = await readFixture('alpha-model', 'module-chat.valid.json');
+    const turn = await readFixture('alpha-model', 'chat-turn.valid.json');
+    const section = await readFixture('alpha-model', 'generated-section.valid.json');
+
+    expect(assertAlphaGap({
+      ...gap,
+      module: 'medical_device_triage',
+      field: 'human_review_plan',
+      warnings: ['requires competent human review'],
+    })).toBeTruthy();
+    expect(assertModuleChat({
+      ...chat,
+      module: 'medical_device_triage',
+      turns: [],
+      warnings: ['requires competent human review'],
+    })).toBeTruthy();
+    expect(assertChatTurn({
+      ...turn,
+      module: 'medical_device_triage',
+      warnings: ['requires competent human review'],
+    })).toBeTruthy();
+    expect(assertGeneratedSection({
+      ...section,
+      section_kind: 'medical_device_triage',
+      title: 'Medical-device triage gaps and uncertainty',
+      warnings: ['requires competent human review'],
+    })).toBeTruthy();
+  });
+
+  it('rejects invalid medical-device triage status labels', async () => {
+    const applicable = await readFixture('expected', 'medical-device-triage.applicable.json');
+    const invalid = structuredClone(applicable) as {
+      updated_medical_device_triage: Record<string, unknown>;
+    };
+
+    invalid.updated_medical_device_triage.triage_status = 'Class IIa';
+    expect(() => assertMedicalDeviceTriageTurn(invalid)).toThrow(AppError);
   });
 
   it('accepts a valid proposal reply request fixture', async () => {

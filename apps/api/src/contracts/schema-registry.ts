@@ -14,6 +14,11 @@ import dataAiPrivacyStartResponseSchema from '../../../../contracts/schemas/data
 import dataAiPrivacyTurnSchema from '../../../../contracts/schemas/data-ai-privacy-turn.schema.json';
 import errorResponseSchema from '../../../../contracts/schemas/error-response.schema.json';
 import generatedSectionSchema from '../../../../contracts/schemas/generated-section.schema.json';
+import medicalDeviceTriageReplyRequestSchema from '../../../../contracts/schemas/medical-device-triage-reply.request.schema.json';
+import medicalDeviceTriageReplyResponseSchema from '../../../../contracts/schemas/medical-device-triage-reply.response.schema.json';
+import medicalDeviceTriageStartRequestSchema from '../../../../contracts/schemas/medical-device-triage-start.request.schema.json';
+import medicalDeviceTriageStartResponseSchema from '../../../../contracts/schemas/medical-device-triage-start.response.schema.json';
+import medicalDeviceTriageTurnSchema from '../../../../contracts/schemas/medical-device-triage-turn.schema.json';
 import moduleChatSchema from '../../../../contracts/schemas/module-chat.schema.json';
 import problemDefinitionTurnSchema from '../../../../contracts/schemas/problem-definition-turn.schema.json';
 import proposalDocumentSchema from '../../../../contracts/schemas/proposal-document.schema.json';
@@ -43,6 +48,11 @@ import type {
   DataAiPrivacyTurn,
   ErrorResponse,
   GeneratedSection,
+  MedicalDeviceTriageReplyRequest,
+  MedicalDeviceTriageReplyResponse,
+  MedicalDeviceTriageStartRequest,
+  MedicalDeviceTriageStartResponse,
+  MedicalDeviceTriageTurn,
   ModuleChat,
   ProblemDefinitionTurn,
   ProposalDocument,
@@ -84,6 +94,7 @@ ajv.addSchema(regulatoryProfileSchema, regulatoryProfileSchema.$id);
 ajv.addSchema(problemDefinitionTurnSchema, problemDefinitionTurnSchema.$id);
 ajv.addSchema(solutionDefinitionTurnSchema, solutionDefinitionTurnSchema.$id);
 ajv.addSchema(dataAiPrivacyTurnSchema, dataAiPrivacyTurnSchema.$id);
+ajv.addSchema(medicalDeviceTriageTurnSchema, medicalDeviceTriageTurnSchema.$id);
 ajv.addSchema(proposalStartRequestSchema, proposalStartRequestSchema.$id);
 ajv.addSchema(proposalStartResponseSchema, proposalStartResponseSchema.$id);
 ajv.addSchema(proposalReplyRequestSchema, proposalReplyRequestSchema.$id);
@@ -96,6 +107,10 @@ ajv.addSchema(dataAiPrivacyStartRequestSchema, dataAiPrivacyStartRequestSchema.$
 ajv.addSchema(dataAiPrivacyStartResponseSchema, dataAiPrivacyStartResponseSchema.$id);
 ajv.addSchema(dataAiPrivacyReplyRequestSchema, dataAiPrivacyReplyRequestSchema.$id);
 ajv.addSchema(dataAiPrivacyReplyResponseSchema, dataAiPrivacyReplyResponseSchema.$id);
+ajv.addSchema(medicalDeviceTriageStartRequestSchema, medicalDeviceTriageStartRequestSchema.$id);
+ajv.addSchema(medicalDeviceTriageStartResponseSchema, medicalDeviceTriageStartResponseSchema.$id);
+ajv.addSchema(medicalDeviceTriageReplyRequestSchema, medicalDeviceTriageReplyRequestSchema.$id);
+ajv.addSchema(medicalDeviceTriageReplyResponseSchema, medicalDeviceTriageReplyResponseSchema.$id);
 ajv.addSchema(requestExecutionResponseSchema, requestExecutionResponseSchema.$id);
 ajv.addSchema(errorResponseSchema, errorResponseSchema.$id);
 
@@ -140,6 +155,11 @@ export const schemaIds = {
   dataAiPrivacyTurn: dataAiPrivacyTurnSchema.$id,
   errorResponse: errorResponseSchema.$id,
   generatedSection: generatedSectionSchema.$id,
+  medicalDeviceTriageReplyRequest: medicalDeviceTriageReplyRequestSchema.$id,
+  medicalDeviceTriageReplyResponse: medicalDeviceTriageReplyResponseSchema.$id,
+  medicalDeviceTriageStartRequest: medicalDeviceTriageStartRequestSchema.$id,
+  medicalDeviceTriageStartResponse: medicalDeviceTriageStartResponseSchema.$id,
+  medicalDeviceTriageTurn: medicalDeviceTriageTurnSchema.$id,
   moduleChat: moduleChatSchema.$id,
   problemDefinitionTurn: problemDefinitionTurnSchema.$id,
   proposalDocument: proposalDocumentSchema.$id,
@@ -172,6 +192,11 @@ export const schemaDocuments = {
   dataAiPrivacyTurn: dataAiPrivacyTurnSchema,
   errorResponse: errorResponseSchema,
   generatedSection: generatedSectionSchema,
+  medicalDeviceTriageReplyRequest: medicalDeviceTriageReplyRequestSchema,
+  medicalDeviceTriageReplyResponse: medicalDeviceTriageReplyResponseSchema,
+  medicalDeviceTriageStartRequest: medicalDeviceTriageStartRequestSchema,
+  medicalDeviceTriageStartResponse: medicalDeviceTriageStartResponseSchema,
+  medicalDeviceTriageTurn: medicalDeviceTriageTurnSchema,
   moduleChat: moduleChatSchema,
   problemDefinitionTurn: problemDefinitionTurnSchema,
   proposalDocument: proposalDocumentSchema,
@@ -254,6 +279,38 @@ export function assertDataAiPrivacyReplyResponse(payload: unknown): DataAiPrivac
   );
 }
 
+export function assertMedicalDeviceTriageStartRequest(payload: unknown): MedicalDeviceTriageStartRequest {
+  return assertSchema<MedicalDeviceTriageStartRequest>(
+    schemaIds.medicalDeviceTriageStartRequest,
+    payload,
+    'invalid_medical_device_triage_start_request',
+  );
+}
+
+export function assertMedicalDeviceTriageStartResponse(payload: unknown): MedicalDeviceTriageStartResponse {
+  return assertSchema<MedicalDeviceTriageStartResponse>(
+    schemaIds.medicalDeviceTriageStartResponse,
+    payload,
+    'invalid_medical_device_triage_start_response',
+  );
+}
+
+export function assertMedicalDeviceTriageReplyRequest(payload: unknown): MedicalDeviceTriageReplyRequest {
+  return assertSchema<MedicalDeviceTriageReplyRequest>(
+    schemaIds.medicalDeviceTriageReplyRequest,
+    payload,
+    'invalid_medical_device_triage_reply_request',
+  );
+}
+
+export function assertMedicalDeviceTriageReplyResponse(payload: unknown): MedicalDeviceTriageReplyResponse {
+  return assertSchema<MedicalDeviceTriageReplyResponse>(
+    schemaIds.medicalDeviceTriageReplyResponse,
+    payload,
+    'invalid_medical_device_triage_reply_response',
+  );
+}
+
 export function assertStructuredBrief(payload: unknown): StructuredBrief {
   return assertSchema<StructuredBrief>(schemaIds.structuredBrief, payload, 'invalid_structured_brief');
 }
@@ -315,6 +372,14 @@ export function assertDataAiPrivacyTurn(payload: unknown): DataAiPrivacyTurn {
     schemaIds.dataAiPrivacyTurn,
     payload,
     'invalid_data_ai_privacy_turn',
+  );
+}
+
+export function assertMedicalDeviceTriageTurn(payload: unknown): MedicalDeviceTriageTurn {
+  return assertSchema<MedicalDeviceTriageTurn>(
+    schemaIds.medicalDeviceTriageTurn,
+    payload,
+    'invalid_medical_device_triage_turn',
   );
 }
 

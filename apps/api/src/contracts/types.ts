@@ -13,7 +13,7 @@ export interface StructuredBrief {
   missing_information: string[];
 }
 
-export type AlphaModule = 'problem' | 'solution' | 'data_ai_privacy';
+export type AlphaModule = 'problem' | 'solution' | 'data_ai_privacy' | 'medical_device_triage';
 
 export type ProposalStatus = 'draft' | 'active' | 'completed' | 'blocked' | 'failed' | 'archived';
 
@@ -54,7 +54,7 @@ export type ChatStatus =
 
 export type ChatTurnStatus = 'awaiting_user' | 'processing' | 'resolved' | 'failed' | 'skipped';
 
-export type SectionKind = 'problem' | 'solution' | 'data_ai_privacy';
+export type SectionKind = 'problem' | 'solution' | 'data_ai_privacy' | 'medical_device_triage';
 
 export type SectionStatus = 'draft' | 'generated' | 'accepted' | 'needs_revision' | 'superseded';
 
@@ -294,6 +294,28 @@ export interface DataAiPrivacyTurn {
   completion_reason: string;
 }
 
+export type MedicalDeviceTriageStatus = 'applicable' | 'not_applicable' | 'uncertain';
+
+export interface MedicalDeviceTriageState {
+  triage_status: MedicalDeviceTriageStatus;
+  activation_signals: string[];
+  uncertainties: string[];
+  intended_use_claims: string[];
+  clinical_decision_role: string;
+  evidence_needed: string[];
+  human_review_plan: string;
+  needs_human_review: boolean;
+  requires_competent_human_review: boolean;
+}
+
+export interface MedicalDeviceTriageTurn {
+  agent_status: 'continue' | 'done' | 'blocked';
+  diagnosis: string[];
+  updated_medical_device_triage: MedicalDeviceTriageState;
+  next_question: string;
+  completion_reason: string;
+}
+
 export interface ProposalStartFile {
   file_name: string;
   mime_type: 'application/pdf';
@@ -407,6 +429,44 @@ export interface DataAiPrivacyReplyResponse {
   warnings: string[];
 }
 
+export interface MedicalDeviceTriageStartRequest {
+  request_id?: string;
+  session_id: string;
+  profile_id?: RegulatoryProfileId;
+}
+
+export interface MedicalDeviceTriageStartResponse {
+  session_id: string;
+  stage: 'medical_device_triage';
+  profile_id: RegulatoryProfileId;
+  activation_result: MedicalDeviceTriageStatus;
+  agent_status: 'continue' | 'done' | 'blocked';
+  updated_medical_device_triage: MedicalDeviceTriageState;
+  diagnosis: string[];
+  next_question: string;
+  completion_reason: string;
+  warnings: string[];
+}
+
+export interface MedicalDeviceTriageReplyRequest {
+  request_id?: string;
+  session_id: string;
+  answer: string;
+}
+
+export interface MedicalDeviceTriageReplyResponse {
+  session_id: string;
+  stage: 'medical_device_triage';
+  profile_id: RegulatoryProfileId;
+  activation_result: MedicalDeviceTriageStatus;
+  agent_status: 'continue' | 'done' | 'blocked';
+  updated_medical_device_triage: MedicalDeviceTriageState;
+  diagnosis: string[];
+  next_question: string;
+  completion_reason: string;
+  warnings: string[];
+}
+
 export interface ErrorResponse {
   error_code: string;
   safe_message: string;
@@ -424,6 +484,8 @@ export interface RequestExecutionResponse {
     | 'solution_reply'
     | 'data_ai_privacy_start'
     | 'data_ai_privacy_reply'
+    | 'medical_device_triage_start'
+    | 'medical_device_triage_reply'
     | 'unknown';
   status: 'pending' | 'completed' | 'failed' | 'not_found';
   session_id?: string;

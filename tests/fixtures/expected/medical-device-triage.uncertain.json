@@ -1,0 +1,23 @@
+{
+  "agent_status": "continue",
+  "diagnosis": [
+    "Medical-device signals or uncertainty are present and require competent human review."
+  ],
+  "updated_medical_device_triage": {
+    "triage_status": "uncertain",
+    "activation_signals": [],
+    "uncertainties": [
+      "The proposal has clinical workflow ambiguity that requires competent human review."
+    ],
+    "intended_use_claims": [],
+    "clinical_decision_role": "",
+    "evidence_needed": [
+      "Clarify whether the proposal influences clinical triage, diagnosis, monitoring, treatment, or recommendation workflows."
+    ],
+    "human_review_plan": "requires competent human review",
+    "needs_human_review": true,
+    "requires_competent_human_review": true
+  },
+  "next_question": "Que papel tendria la propuesta en decisiones clinicas, triaje, diagnostico, seguimiento o recomendacion?",
+  "completion_reason": ""
+}

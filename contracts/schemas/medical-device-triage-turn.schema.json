@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sokrai.local/contracts/schemas/medical-device-triage-turn.schema.json",
+  "title": "MedicalDeviceTriageTurn",
+  "description": "Non-definitive medical-device triage output limited to gaps, questions, uncertainty, and competent human review.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "agent_status": {
+      "type": "string",
+      "enum": [
+        "continue",
+        "done",
+        "blocked"
+      ]
+    },
+    "diagnosis": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "string"
+      }
+    },
+    "updated_medical_device_triage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "triage_status": {
+          "type": "string",
+          "description": "Non-definitive triage outcome. This is not a legal, regulatory, product, or MDR classification decision.",
+          "enum": [
+            "applicable",
+            "not_applicable",
+            "uncertain"
+          ]
+        },
+        "activation_signals": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "uncertainties": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "intended_use_claims": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "clinical_decision_role": {
+          "type": "string"
+        },
+        "evidence_needed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "human_review_plan": {
+          "type": "string"
+        },
+        "needs_human_review": {
+          "type": "boolean"
+        },
+        "requires_competent_human_review": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "triage_status",
+        "activation_signals",
+        "uncertainties",
+        "intended_use_claims",
+        "clinical_decision_role",
+        "evidence_needed",
+        "human_review_plan",
+        "needs_human_review",
+        "requires_competent_human_review"
+      ]
+    },
+    "next_question": {
+      "type": "string"
+    },
+    "completion_reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "agent_status",
+    "diagnosis",
+    "updated_medical_device_triage",
+    "next_question",
+    "completion_reason"
+  ]
+}

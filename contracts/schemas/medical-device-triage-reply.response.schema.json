@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sokrai.local/contracts/schemas/medical-device-triage-reply.response.schema.json",
+  "title": "MedicalDeviceTriageReplyResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "medical_device_triage"
+      ]
+    },
+    "profile_id": {
+      "type": "string",
+      "enum": [
+        "hospital_clinic_v1"
+      ]
+    },
+    "activation_result": {
+      "type": "string",
+      "enum": [
+        "applicable",
+        "not_applicable",
+        "uncertain"
+      ]
+    },
+    "agent_status": {
+      "type": "string",
+      "enum": [
+        "continue",
+        "done",
+        "blocked"
+      ]
+    },
+    "updated_medical_device_triage": {
+      "$ref": "https://sokrai.local/contracts/schemas/medical-device-triage-turn.schema.json#/properties/updated_medical_device_triage"
+    },
+    "diagnosis": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "string"
+      }
+    },
+    "next_question": {
+      "type": "string"
+    },
+    "completion_reason": {
+      "type": "string"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "session_id",
+    "stage",
+    "profile_id",
+    "activation_result",
+    "agent_status",
+    "updated_medical_device_triage",
+    "diagnosis",
+    "next_question",
+    "completion_reason",
+    "warnings"
+  ]
+}

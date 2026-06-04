@@ -16,6 +16,10 @@ import type {
   GapKind,
   GapOrigin,
   GapStatus,
+  MedicalDeviceTriageReplyResponse,
+  MedicalDeviceTriageStartResponse,
+  MedicalDeviceTriageState,
+  MedicalDeviceTriageStatus,
   ModuleChat,
   ProblemDefinitionState,
   ProposalDocument,
@@ -42,8 +46,13 @@ type JsonRecord = Record<string, unknown>;
 const WRAPPER_KEYS = ['body', 'data', 'payload', 'result', 'response', 'output', 'json'] as const;
 
 const AGENT_STATUSES: AgentStatus[] = ['continue', 'done', 'blocked'];
-const ALPHA_MODULES = ['problem', 'solution', 'data_ai_privacy'] as const;
-const SECTION_KINDS = ['problem', 'solution', 'data_ai_privacy'] as const;
+const ALPHA_MODULES = ['problem', 'solution', 'data_ai_privacy', 'medical_device_triage'] as const;
+const SECTION_KINDS = ['problem', 'solution', 'data_ai_privacy', 'medical_device_triage'] as const;
+const MEDICAL_DEVICE_TRIAGE_STATUSES: MedicalDeviceTriageStatus[] = [
+  'applicable',
+  'not_applicable',
+  'uncertain',
+];
 const PROPOSAL_SOURCE_KINDS: ProposalSourceKind[] = [
   'pasted_text',
   'uploaded_file',
@@ -433,6 +442,43 @@ function parseDataAiPrivacyState(value: unknown, label: string): DataAiPrivacySt
   };
 }
 
+function hasMedicalDeviceTriageShape(record: JsonRecord): boolean {
+  return [
+    'triage_status',
+    'activation_signals',
+    'uncertainties',
+    'intended_use_claims',
+    'clinical_decision_role',
+    'evidence_needed',
+    'human_review_plan',
+    'needs_human_review',
+    'requires_competent_human_review',
+  ].every((key) => Object.prototype.hasOwnProperty.call(record, key));
+}
+
+function parseMedicalDeviceTriageState(value: unknown, label: string): MedicalDeviceTriageState {
+  const record = expectRecord(value, label);
+
+  if (!hasMedicalDeviceTriageShape(record)) {
+    throw new Error(`Expected ${label} to match medical-device triage state`);
+  }
+
+  return {
+    triage_status: expectEnum(record.triage_status, `${label}.triage_status`, MEDICAL_DEVICE_TRIAGE_STATUSES),
+    activation_signals: expectStringArray(record.activation_signals, `${label}.activation_signals`),
+    uncertainties: expectStringArray(record.uncertainties, `${label}.uncertainties`),
+    intended_use_claims: expectStringArray(record.intended_use_claims, `${label}.intended_use_claims`),
+    clinical_decision_role: expectString(record.clinical_decision_role, `${label}.clinical_decision_role`),
+    evidence_needed: expectStringArray(record.evidence_needed, `${label}.evidence_needed`),
+    human_review_plan: expectString(record.human_review_plan, `${label}.human_review_plan`),
+    needs_human_review: expectBoolean(record.needs_human_review, `${label}.needs_human_review`),
+    requires_competent_human_review: expectBoolean(
+      record.requires_competent_human_review,
+      `${label}.requires_competent_human_review`,
+    ),
+  };
+}
+
 function parseSessionRecord(value: unknown): SessionRecord {
   const record = expectRecord(value, 'session');
 
@@ -737,7 +783,9 @@ function parseAgentRun(value: unknown, label: string): AgentRun {
       'brief_extraction',
       'problem_definition',
       'solution_definition',
+      'basic_report_compose',
       'data_ai_privacy_gap',
+      'medical_device_triage',
       'json_repair',
     ]),
     agent_name: expectString(record.agent_name, `${label}.agent_name`),
@@ -997,6 +1045,84 @@ export function parseDataAiPrivacyReplyResponse(value: unknown): DataAiPrivacyRe
   };
 }
 
+export function parseMedicalDeviceTriageStartResponse(value: unknown): MedicalDeviceTriageStartResponse {
+  const record = expectRecord(
+    unwrapContractValue(value),
+    'medical-device triage start response',
+  );
+
+  return {
+    session_id: expectString(record.session_id, 'medical-device triage start response.session_id'),
+    stage: expectEnum(record.stage, 'medical-device triage start response.stage', ['medical_device_triage']),
+    profile_id: expectEnum(
+      record.profile_id,
+      'medical-device triage start response.profile_id',
+      ['hospital_clinic_v1'],
+    ),
+    activation_result: expectEnum(
+      record.activation_result,
+      'medical-device triage start response.activation_result',
+      MEDICAL_DEVICE_TRIAGE_STATUSES,
+    ),
+    agent_status: expectEnum(
+      record.agent_status,
+      'medical-device triage start response.agent_status',
+      AGENT_STATUSES,
+    ),
+    updated_medical_device_triage: parseMedicalDeviceTriageState(
+      record.updated_medical_device_triage,
+      'medical-device triage start response.updated_medical_device_triage',
+    ),
+    diagnosis: expectStringArray(record.diagnosis, 'medical-device triage start response.diagnosis'),
+    next_question: expectString(record.next_question, 'medical-device triage start response.next_question'),
+    completion_reason: expectOptionalString(
+      record.completion_reason,
+      '',
+      'medical-device triage start response.completion_reason',
+    ),
+    warnings: expectOptionalStringArray(record.warnings, [], 'medical-device triage start response.warnings'),
+  };
+}
+
+export function parseMedicalDeviceTriageReplyResponse(value: unknown): MedicalDeviceTriageReplyResponse {
+  const record = expectRecord(
+    unwrapContractValue(value),
+    'medical-device triage reply response',
+  );
+
+  return {
+    session_id: expectString(record.session_id, 'medical-device triage reply response.session_id'),
+    stage: expectEnum(record.stage, 'medical-device triage reply response.stage', ['medical_device_triage']),
+    profile_id: expectEnum(
+      record.profile_id,
+      'medical-device triage reply response.profile_id',
+      ['hospital_clinic_v1'],
+    ),
+    activation_result: expectEnum(
+      record.activation_result,
+      'medical-device triage reply response.activation_result',
+      MEDICAL_DEVICE_TRIAGE_STATUSES,
+    ),
+    agent_status: expectEnum(
+      record.agent_status,
+      'medical-device triage reply response.agent_status',
+      AGENT_STATUSES,
+    ),
+    updated_medical_device_triage: parseMedicalDeviceTriageState(
+      record.updated_medical_device_triage,
+      'medical-device triage reply response.updated_medical_device_triage',
+    ),
+    diagnosis: expectStringArray(record.diagnosis, 'medical-device triage reply response.diagnosis'),
+    next_question: expectString(record.next_question, 'medical-device triage reply response.next_question'),
+    completion_reason: expectOptionalString(
+      record.completion_reason,
+      '',
+      'medical-device triage reply response.completion_reason',
+    ),
+    warnings: expectOptionalStringArray(record.warnings, [], 'medical-device triage reply response.warnings'),
+  };
+}
+
 export function parseErrorResponse(value: unknown): ErrorResponse {
   const record = expectRecord(unwrapContractValue(value), 'error response');
 
@@ -1030,6 +1156,8 @@ export function parseRequestExecutionResponse(value: unknown): RequestExecutionR
         'solution_reply',
         'data_ai_privacy_start',
         'data_ai_privacy_reply',
+        'medical_device_triage_start',
+        'medical_device_triage_reply',
         'unknown',
       ],
     ),

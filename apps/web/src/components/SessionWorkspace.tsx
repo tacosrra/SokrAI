@@ -12,8 +12,10 @@ interface SessionWorkspaceProps {
   onReply: (answer: string) => Promise<void>;
   onSolutionReply: (answer: string) => Promise<void>;
   onDataAiPrivacyReply: (answer: string) => Promise<void>;
+  onMedicalDeviceTriageReply: (answer: string) => Promise<void>;
   onStartSolution: () => Promise<void>;
   onStartDataAiPrivacy: () => Promise<void>;
+  onStartMedicalDeviceTriage: () => Promise<void>;
   presentation: SessionPresentation;
 }
 
@@ -24,8 +26,10 @@ export function SessionWorkspace({
   onReply,
   onSolutionReply,
   onDataAiPrivacyReply,
+  onMedicalDeviceTriageReply,
   onStartSolution,
   onStartDataAiPrivacy,
+  onStartMedicalDeviceTriage,
   presentation,
 }: SessionWorkspaceProps) {
   const [reply, setReply] = useState('');
@@ -56,6 +60,11 @@ export function SessionWorkspace({
       return;
     }
 
+    if (presentation.currentMedicalDeviceTriageQuestion) {
+      await onMedicalDeviceTriageReply(reply.trim());
+      return;
+    }
+
     if (presentation.currentDataAiPrivacyQuestion) {
       await onDataAiPrivacyReply(reply.trim());
       return;
@@ -80,7 +89,11 @@ export function SessionWorkspace({
     turn.turn_id === presentation.dataAiPrivacyModuleChat?.active_turn_id &&
     turn.turn_status === 'awaiting_user',
   ) ?? false;
-  const canReply = canDataAiPrivacyReply || canSolutionReply || canProblemReply;
+  const canMedicalDeviceTriageReply = presentation.medicalDeviceTriageModuleChat?.turns.some((turn) =>
+    turn.turn_id === presentation.medicalDeviceTriageModuleChat?.active_turn_id &&
+    turn.turn_status === 'awaiting_user',
+  ) ?? false;
+  const canReply = canMedicalDeviceTriageReply || canDataAiPrivacyReply || canSolutionReply || canProblemReply;
   const canStartSolution = Boolean(
     presentation.latestProblemSection &&
       !canSolutionReply &&
@@ -92,6 +105,12 @@ export function SessionWorkspace({
       !canDataAiPrivacyReply &&
       presentation.dataAiPrivacyModuleChat?.chat_status !== 'completed' &&
       presentation.dataAiPrivacyModuleChat?.chat_status !== 'waiting_for_user',
+  );
+  const canStartMedicalDeviceTriage = Boolean(
+    presentation.latestDataAiPrivacySection &&
+      !canMedicalDeviceTriageReply &&
+      presentation.medicalDeviceTriageModuleChat?.chat_status !== 'completed' &&
+      presentation.medicalDeviceTriageModuleChat?.chat_status !== 'waiting_for_user',
   );
   const resolvedTurns = audit.turns.filter((turn) => Boolean(turn.answer_text?.trim())).length;
 
@@ -155,7 +174,9 @@ export function SessionWorkspace({
 
       <section className="question-callout">
         <span className="question-callout__label">
-          {presentation.currentDataAiPrivacyQuestion
+          {presentation.currentMedicalDeviceTriageQuestion
+            ? 'Pregunta abierta de medical-device triage'
+            : presentation.currentDataAiPrivacyQuestion
             ? 'Pregunta abierta de datos/IA/privacidad'
             : presentation.currentSolutionQuestion
               ? 'Pregunta abierta de solución'
@@ -216,6 +237,37 @@ export function SessionWorkspace({
         <section className="question-callout question-callout--muted">
           <span className="question-callout__label">{presentation.latestDataAiPrivacySection.title}</span>
           <p>{presentation.latestDataAiPrivacySection.content_markdown}</p>
+        </section>
+      ) : null}
+
+      {presentation.latestDataAiPrivacySection ? (
+        <section className="question-callout">
+          <span className="question-callout__label">Medical-device triage</span>
+          <p>
+            {presentation.latestMedicalDeviceTriageSection
+              ? `Se generó ${presentation.latestMedicalDeviceTriageSection.title} v${presentation.latestMedicalDeviceTriageSection.section_version}.`
+              : presentation.medicalDeviceTriageModuleChat
+                ? `Estado: ${presentation.medicalDeviceTriageModuleChat.chat_status.replaceAll('_', ' ')}.`
+                : 'El módulo registra gaps/questions/uncertainty cuando hay señales o incertidumbre y requiere competent human review cuando corresponde.'}
+          </p>
+
+          {canStartMedicalDeviceTriage ? (
+            <button
+              className="button button--secondary"
+              type="button"
+              onClick={() => void onStartMedicalDeviceTriage()}
+              disabled={isReplying}
+            >
+              {isReplying ? 'Procesando…' : 'Iniciar medical-device triage'}
+            </button>
+          ) : null}
+        </section>
+      ) : null}
+
+      {presentation.latestMedicalDeviceTriageSection ? (
+        <section className="question-callout question-callout--muted">
+          <span className="question-callout__label">{presentation.latestMedicalDeviceTriageSection.title}</span>
+          <p>{presentation.latestMedicalDeviceTriageSection.content_markdown}</p>
         </section>
       ) : null}
 
@@ -315,7 +367,9 @@ export function SessionWorkspace({
               value={reply}
               onChange={(event) => setReply(event.target.value)}
               placeholder={
-                presentation.currentDataAiPrivacyQuestion
+                presentation.currentMedicalDeviceTriageQuestion
+                  ? 'Describe uso previsto, papel clinico, evidencia faltante, incertidumbre y revision humana competente.'
+                  : presentation.currentDataAiPrivacyQuestion
                   ? 'Describe datos tratados, fuentes, rol de IA, controles, validacion y revision humana competente.'
                   : presentation.currentSolutionQuestion
                   ? 'Describe que hace la solucion, quien la usa, como funciona y que limites tiene.'
@@ -328,7 +382,9 @@ export function SessionWorkspace({
 
             <div className="composer-card__actions">
               <p>
-                {presentation.currentDataAiPrivacyQuestion
+                {presentation.currentMedicalDeviceTriageQuestion
+                  ? 'Responde solo con gaps/questions/uncertainty y competent human review; no clasifiques.'
+                  : presentation.currentDataAiPrivacyQuestion
                   ? 'Responde con gaps, incertidumbre y revision humana competente; no emitas decisiones definitivas.'
                   : presentation.currentSolutionQuestion
                   ? 'Responde con informacion operativa sobre la solucion, sin entrar en costes o regulacion.'
