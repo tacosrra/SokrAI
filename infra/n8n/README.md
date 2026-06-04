@@ -6,7 +6,7 @@ The canonical v1 workflows live in `infra/n8n/workflows`.
 
 1. Start the stack with `docker compose up -d postgres n8n api ollama`.
 2. Open `http://localhost:5678`.
-3. Import the twelve workflow JSON files from this folder.
+3. Import the fifteen workflow JSON files from this folder.
 4. Set the environment variable `INTERNAL_SHARED_SECRET` in the n8n container to match the API.
 
 ## Entry webhooks
@@ -19,6 +19,8 @@ The canonical v1 workflows live in `infra/n8n/workflows`.
 - `POST /webhook/data-ai-privacy-reply-v1`
 - `POST /webhook/medical-device-triage-start-v1`
 - `POST /webhook/medical-device-triage-reply-v1`
+- `POST /webhook/resources-pilot-viability-start-v1`
+- `POST /webhook/resources-pilot-viability-reply-v1`
 
 ## Internal workflow webhook
 
@@ -26,9 +28,11 @@ The canonical v1 workflows live in `infra/n8n/workflows`.
 - `POST /webhook/agent-solution-definition-v1`
 - `POST /webhook/agent-data-ai-privacy-gap-v1`
 - `POST /webhook/agent-medical-device-triage-v1`
+- `POST /webhook/agent-resources-pilot-viability-v1`
 
 `agent_problem_definition_v1`, `agent_solution_definition_v1`, and
-`agent_data_ai_privacy_gap_v1`, and `agent_medical_device_triage_v1` exist as
+`agent_data_ai_privacy_gap_v1`, `agent_medical_device_triage_v1`, and
+`agent_resources_pilot_viability_v1` exist as
 reusable workflow surfaces, but the canonical public exports do not call back
 into `n8n` through those webhooks anymore.
 
@@ -41,6 +45,8 @@ They invoke the internal API endpoints directly with `x-internal-shared-secret`:
 - `data_ai_privacy_reply_v1` calls `/internal/sessions/data-ai-privacy-reply`
 - `medical_device_triage_start_v1` calls `/internal/sessions/medical-device-triage-start`
 - `medical_device_triage_reply_v1` calls `/internal/sessions/medical-device-triage-reply`
+- `resources_pilot_viability_start_v1` calls `/internal/sessions/resources-pilot-viability-start`
+- `resources_pilot_viability_reply_v1` calls `/internal/sessions/resources-pilot-viability-reply`
 
 Reason:
 
@@ -58,9 +64,11 @@ The current exports also keep the upstream API status code and JSON body when
 `/internal/sessions/data-ai-privacy-start`,
 `/internal/sessions/data-ai-privacy-reply`,
 `/internal/sessions/medical-device-triage-start`,
-`/internal/sessions/medical-device-triage-reply`, or the internal agent routes
+`/internal/sessions/medical-device-triage-reply`,
+`/internal/sessions/resources-pilot-viability-start`,
+`/internal/sessions/resources-pilot-viability-reply`, or the internal agent routes
 fail. This applies to the problem, solution, data/AI/privacy, and
-medical-device triage workflows, and avoids n8n wrapping a controlled API error
+medical-device triage, and resources/pilot workflows, and avoids n8n wrapping a controlled API error
 such as `ollama_timeout` into an unexpected webhook payload.
 
 The medical-device triage workflows are thin wrappers only. They do not contain
@@ -68,3 +76,8 @@ activation rules, prompts, legal/regulatory text, MDR material, scoring, or
 classification logic. The API owns the conditional activation and keeps the
 output limited to gaps/questions/uncertainty and `requires competent human
 review`.
+
+The resources/pilot/viability workflows are also thin wrappers only. They do
+not contain scoring, approval, ranking, financial modelling, RAG, PDF/export, or
+pilot decision logic. The API owns operational guardrails, persistence, replay,
+and section rendering for `resources_pilot_viability`.

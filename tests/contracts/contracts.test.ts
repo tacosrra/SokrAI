@@ -28,6 +28,11 @@ import {
   assertProposalStartRequest,
   assertProposalStartResponse,
   assertRequestExecutionResponse,
+  assertResourcesPilotViabilityReplyRequest,
+  assertResourcesPilotViabilityReplyResponse,
+  assertResourcesPilotViabilityStartRequest,
+  assertResourcesPilotViabilityStartResponse,
+  assertResourcesPilotViabilityTurn,
   assertRegulatoryProfile,
   assertSchema,
   assertSolutionDefinitionTurn,
@@ -294,6 +299,75 @@ describe('contract schemas', () => {
       next_question: applicable.next_question,
       completion_reason: '',
       warnings: ['requires competent human review'],
+    })).toBeTruthy();
+  });
+
+  it('accepts resources pilot viability turn, request, and response contracts', async () => {
+    const done = await readFixture('expected', 'resources-pilot-viability.done.json');
+    const continueTurn = await readFixture('expected', 'resources-pilot-viability.continue.json');
+
+    expect(assertResourcesPilotViabilityTurn(done)).toBeTruthy();
+    expect(assertResourcesPilotViabilityTurn(continueTurn)).toBeTruthy();
+    expect(assertResourcesPilotViabilityStartRequest({
+      request_id: 'resources-pilot-start-1',
+      session_id: 'session-1',
+    })).toBeTruthy();
+    expect(assertResourcesPilotViabilityReplyRequest({
+      request_id: 'resources-pilot-reply-1',
+      session_id: 'session-1',
+      answer: 'The pilot uses two nurses, a coordinator, SSO, and weekly completion metrics.',
+    })).toBeTruthy();
+    expect(assertResourcesPilotViabilityStartResponse({
+      session_id: 'session-1',
+      stage: 'resources_pilot_viability',
+      agent_status: 'continue',
+      updated_resources_pilot_viability: continueTurn.updated_resources_pilot_viability,
+      diagnosis: continueTurn.diagnosis,
+      next_question: continueTurn.next_question,
+      completion_reason: '',
+      warnings: ['This section is not a viability score, approval decision, ranking, or financial model.'],
+    })).toBeTruthy();
+    expect(assertResourcesPilotViabilityReplyResponse({
+      session_id: 'session-1',
+      stage: 'resources_pilot_viability',
+      agent_status: 'done',
+      updated_resources_pilot_viability: done.updated_resources_pilot_viability,
+      diagnosis: done.diagnosis,
+      next_question: '',
+      completion_reason: done.completion_reason,
+      warnings: ['This section is not a viability score, approval decision, ranking, or financial model.'],
+    })).toBeTruthy();
+  });
+
+  it('accepts resources pilot viability as a widened Alpha module and section kind', async () => {
+    const gap = await readFixture('alpha-model', 'alpha-gap.valid.json');
+    const chat = await readFixture('alpha-model', 'module-chat.valid.json');
+    const turn = await readFixture('alpha-model', 'chat-turn.valid.json');
+    const section = await readFixture('alpha-model', 'generated-section.valid.json');
+    const warning = 'This section is not a viability score, approval decision, ranking, or financial model.';
+
+    expect(assertAlphaGap({
+      ...gap,
+      module: 'resources_pilot_viability',
+      field: 'technical_resources',
+      warnings: [warning],
+    })).toBeTruthy();
+    expect(assertModuleChat({
+      ...chat,
+      module: 'resources_pilot_viability',
+      turns: [],
+      warnings: [warning],
+    })).toBeTruthy();
+    expect(assertChatTurn({
+      ...turn,
+      module: 'resources_pilot_viability',
+      warnings: [warning],
+    })).toBeTruthy();
+    expect(assertGeneratedSection({
+      ...section,
+      section_kind: 'resources_pilot_viability',
+      title: 'Resources, pilot and viability readiness inputs',
+      warnings: [warning],
     })).toBeTruthy();
   });
 

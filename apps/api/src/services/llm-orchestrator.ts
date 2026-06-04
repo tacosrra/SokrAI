@@ -2,6 +2,7 @@ import {
   assertDataAiPrivacyTurn,
   assertMedicalDeviceTriageTurn,
   assertProblemDefinitionTurn,
+  assertResourcesPilotViabilityTurn,
   assertSolutionDefinitionTurn,
   assertStructuredBrief,
   schemaDocuments,
@@ -14,6 +15,7 @@ import type {
   MedicalDeviceTriageStatus,
   ProblemDefinitionTurn,
   RegulatoryProfile,
+  ResourcesPilotViabilityTurn,
   SolutionDefinitionTurn,
   StructuredBrief,
 } from '../contracts/types';
@@ -241,6 +243,53 @@ export class LlmOrchestrator {
       userPrompt,
       validate: assertMedicalDeviceTriageTurn,
       responseSchema: schemaDocuments.medicalDeviceTriageTurn,
+    });
+  }
+
+  async runResourcesPilotViability(input: {
+    structuredBrief: StructuredBrief;
+    problemSection: Pick<GeneratedSection, 'title' | 'content_markdown' | 'source_refs'>;
+    solutionSection: Pick<GeneratedSection, 'title' | 'content_markdown' | 'source_refs'>;
+    dataAiPrivacySection?: Pick<GeneratedSection, 'title' | 'content_markdown' | 'source_refs'> | null;
+    medicalDeviceTriageSection?: Pick<GeneratedSection, 'title' | 'content_markdown' | 'source_refs'> | null;
+    recentTurns: Array<{ question_text: string; answer_text: string | null; diagnosis: string[] }>;
+    latestAnswer?: string;
+  }): Promise<GenerationResult<ResourcesPilotViabilityTurn>> {
+    const prompt = await loadPrompt('resources-pilot-viability-agent');
+    const sectionPayload = (section?: Pick<GeneratedSection, 'title' | 'content_markdown' | 'source_refs'> | null) =>
+      section
+        ? {
+            title: section.title,
+            content_markdown: section.content_markdown,
+            source_refs: section.source_refs.map((source) => source.source_id),
+          }
+        : null;
+    const userPrompt = [
+      'Return a single bounded resources/pilot/viability operational input turn.',
+      '',
+      `Output schema id: ${schemaIds.resourcesPilotViabilityTurn}`,
+      '',
+      'Input JSON:',
+      JSON.stringify(
+        {
+          structured_brief: input.structuredBrief,
+          problem_section: sectionPayload(input.problemSection),
+          solution_section: sectionPayload(input.solutionSection),
+          data_ai_privacy_section: sectionPayload(input.dataAiPrivacySection),
+          medical_device_triage_section: sectionPayload(input.medicalDeviceTriageSection),
+          recent_turns: input.recentTurns,
+          latest_user_answer: input.latestAnswer ?? null,
+        },
+        null,
+        2,
+      ),
+    ].join('\n');
+
+    return this.generateWithRepair<ResourcesPilotViabilityTurn>({
+      prompt,
+      userPrompt,
+      validate: assertResourcesPilotViabilityTurn,
+      responseSchema: schemaDocuments.resourcesPilotViabilityTurn,
     });
   }
 

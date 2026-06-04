@@ -19,6 +19,11 @@ import type {
   ModuleChat as ApiModuleChat,
   ProposalDocument as ApiProposalDocument,
   ProposalSource as ApiProposalSource,
+  ResourcesPilotViabilityReplyRequest as ApiResourcesPilotViabilityReplyRequest,
+  ResourcesPilotViabilityReplyResponse as ApiResourcesPilotViabilityReplyResponse,
+  ResourcesPilotViabilityStartRequest as ApiResourcesPilotViabilityStartRequest,
+  ResourcesPilotViabilityStartResponse as ApiResourcesPilotViabilityStartResponse,
+  ResourcesPilotViabilityState as ApiResourcesPilotViabilityState,
   SolutionDefinitionState as ApiSolutionDefinitionState,
   SolutionReplyRequest as ApiSolutionReplyRequest,
   SolutionReplyResponse as ApiSolutionReplyResponse,
@@ -44,6 +49,11 @@ import type {
   ModuleChat as WebModuleChat,
   ProposalDocument as WebProposalDocument,
   ProposalSource as WebProposalSource,
+  ResourcesPilotViabilityReplyRequest as WebResourcesPilotViabilityReplyRequest,
+  ResourcesPilotViabilityReplyResponse as WebResourcesPilotViabilityReplyResponse,
+  ResourcesPilotViabilityStartRequest as WebResourcesPilotViabilityStartRequest,
+  ResourcesPilotViabilityStartResponse as WebResourcesPilotViabilityStartResponse,
+  ResourcesPilotViabilityState as WebResourcesPilotViabilityState,
   SolutionDefinitionState as WebSolutionDefinitionState,
   SolutionReplyRequest as WebSolutionReplyRequest,
   SolutionReplyResponse as WebSolutionReplyResponse,
@@ -76,5 +86,10 @@ describe('Alpha contract type mirrors', () => {
     expectTypeOf<ApiMedicalDeviceTriageStartResponse>().toEqualTypeOf<WebMedicalDeviceTriageStartResponse>();
     expectTypeOf<ApiMedicalDeviceTriageReplyRequest>().toEqualTypeOf<WebMedicalDeviceTriageReplyRequest>();
     expectTypeOf<ApiMedicalDeviceTriageReplyResponse>().toEqualTypeOf<WebMedicalDeviceTriageReplyResponse>();
+    expectTypeOf<ApiResourcesPilotViabilityState>().toEqualTypeOf<WebResourcesPilotViabilityState>();
+    expectTypeOf<ApiResourcesPilotViabilityStartRequest>().toEqualTypeOf<WebResourcesPilotViabilityStartRequest>();
+    expectTypeOf<ApiResourcesPilotViabilityStartResponse>().toEqualTypeOf<WebResourcesPilotViabilityStartResponse>();
+    expectTypeOf<ApiResourcesPilotViabilityReplyRequest>().toEqualTypeOf<WebResourcesPilotViabilityReplyRequest>();
+    expectTypeOf<ApiResourcesPilotViabilityReplyResponse>().toEqualTypeOf<WebResourcesPilotViabilityReplyResponse>();
   });
 });

@@ -14,6 +14,8 @@ import {
   assertProposalReplyResponse,
   assertProposalStartResponse,
   assertRequestExecutionResponse,
+  assertResourcesPilotViabilityReplyResponse,
+  assertResourcesPilotViabilityStartResponse,
   assertSolutionReplyResponse,
   assertSolutionStartRequest,
   assertSolutionStartResponse,
@@ -31,6 +33,7 @@ import { MedicalDeviceTriageService } from './services/medical-device-triage-ser
 import { ProblemDefinitionService } from './services/problem-definition-service';
 import { ProposalReplyService } from './services/proposal-reply-service';
 import { ProposalStartService } from './services/proposal-start-service';
+import { ResourcesPilotViabilityService } from './services/resources-pilot-viability-service';
 import { SolutionDefinitionService } from './services/solution-definition-service';
 import { SolutionReplyService } from './services/solution-reply-service';
 import { AppError } from './utils/errors';
@@ -91,6 +94,13 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     alphaStore,
     llmOrchestrator,
   );
+  const resourcesPilotViabilityService = new ResourcesPilotViabilityService(
+    config,
+    logger,
+    sessionStore,
+    alphaStore,
+    llmOrchestrator,
+  );
 
   const app = Fastify({
     logger: false,
@@ -113,6 +123,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     solutionDefinitionService,
     dataAiPrivacyService,
     medicalDeviceTriageService,
+    resourcesPilotViabilityService,
   });
 
   app.addHook('onClose', async () => {
@@ -198,6 +209,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       solutionDefinitionService,
       dataAiPrivacyService,
       medicalDeviceTriageService,
+      resourcesPilotViabilityService,
       sessionStore,
     });
 
@@ -622,6 +634,114 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     return reply.send(response);
   });
 
+  app.post('/internal/sessions/resources-pilot-viability-start', async (request, reply) => {
+    assertInternalSecret(request);
+
+    const body = request.body as {
+      request_id?: string;
+      workflow_version?: string;
+      workflow_execution_id?: string;
+      payload: unknown;
+    };
+
+    const result = await resourcesPilotViabilityService.start({
+      context: {
+        requestId: body.request_id ?? getRequestId(request),
+        workflowVersion: body.workflow_version ?? 'resources_pilot_viability_start_v1',
+        workflowExecutionId: body.workflow_execution_id,
+      },
+      payload: body.payload as never,
+    });
+
+    return reply.send(assertResourcesPilotViabilityStartResponse({
+      session_id: result.session_id,
+      stage: 'resources_pilot_viability',
+      agent_status: result.agent_status,
+      updated_resources_pilot_viability: result.updated_resources_pilot_viability,
+      diagnosis: result.diagnosis,
+      next_question: result.next_question,
+      completion_reason: result.completion_reason,
+      warnings: result.warnings,
+    }));
+  });
+
+  app.post('/internal/sessions/resources-pilot-viability-reply', async (request, reply) => {
+    assertInternalSecret(request);
+
+    const body = request.body as {
+      request_id?: string;
+      workflow_version?: string;
+      workflow_execution_id?: string;
+      payload: unknown;
+    };
+
+    const result = await resourcesPilotViabilityService.reply({
+      context: {
+        requestId: body.request_id ?? getRequestId(request),
+        workflowVersion: body.workflow_version ?? 'resources_pilot_viability_reply_v1',
+        workflowExecutionId: body.workflow_execution_id,
+      },
+      payload: body.payload as never,
+    });
+
+    return reply.send(assertResourcesPilotViabilityReplyResponse({
+      session_id: result.session_id,
+      stage: 'resources_pilot_viability',
+      agent_status: result.agent_status,
+      updated_resources_pilot_viability: result.updated_resources_pilot_viability,
+      diagnosis: result.diagnosis,
+      next_question: result.next_question,
+      completion_reason: result.completion_reason,
+      warnings: result.warnings,
+    }));
+  });
+
+  app.post('/internal/agents/resources-pilot-viability/run', async (request, reply) => {
+    assertInternalSecret(request);
+
+    const body = request.body as {
+      request_id?: string;
+      workflow_version?: string;
+      workflow_execution_id?: string;
+      session_id: string;
+      trigger: 'start' | 'reply';
+    };
+
+    const result = await resourcesPilotViabilityService.execute({
+      context: {
+        requestId: body.request_id ?? getRequestId(request),
+        workflowVersion: body.workflow_version ?? 'agent_resources_pilot_viability_v1',
+        workflowExecutionId: body.workflow_execution_id,
+      },
+      sessionId: body.session_id,
+      trigger: body.trigger,
+    });
+
+    const response = body.trigger === 'start'
+      ? assertResourcesPilotViabilityStartResponse({
+          session_id: result.session_id,
+          stage: 'resources_pilot_viability',
+          agent_status: result.agent_status,
+          updated_resources_pilot_viability: result.updated_resources_pilot_viability,
+          diagnosis: result.diagnosis,
+          next_question: result.next_question,
+          completion_reason: result.completion_reason,
+          warnings: result.warnings,
+        })
+      : assertResourcesPilotViabilityReplyResponse({
+          session_id: result.session_id,
+          stage: 'resources_pilot_viability',
+          agent_status: result.agent_status,
+          updated_resources_pilot_viability: result.updated_resources_pilot_viability,
+          diagnosis: result.diagnosis,
+          next_question: result.next_question,
+          completion_reason: result.completion_reason,
+          warnings: result.warnings,
+        });
+
+    return reply.send(response);
+  });
+
   app.post('/internal/reports/basic-alpha/compose', async (request, reply) => {
     assertInternalSecret(request);
 
@@ -693,6 +813,7 @@ async function recoverRequestExecution(params: {
   solutionDefinitionService: SolutionDefinitionService;
   dataAiPrivacyService: DataAiPrivacyService;
   medicalDeviceTriageService: MedicalDeviceTriageService;
+  resourcesPilotViabilityService: ResourcesPilotViabilityService;
 }) {
   const currentStatus = await params.sessionStore.getRequestExecutionStatus(params.requestId);
 
@@ -918,6 +1039,72 @@ async function recoverRequestExecution(params: {
         (
           error.errorCode === 'medical_device_triage_start_already_initialized' ||
           error.errorCode === 'medical_device_triage_start_already_completed'
+        )
+      ) {
+        return refreshedStatus;
+      }
+
+      throw error;
+    }
+
+    return params.sessionStore.getRequestExecutionStatus(params.requestId);
+  }
+
+  if (currentStatus.request_kind === 'resources_pilot_viability_reply' && currentStatus.session_id) {
+    try {
+      await params.resourcesPilotViabilityService.execute({
+        context: {
+          requestId: params.requestId,
+          workflowVersion: 'request_recovery_v1',
+        },
+        sessionId: currentStatus.session_id,
+        trigger: 'reply',
+      });
+    } catch (error) {
+      const refreshedStatus = await params.sessionStore.getRequestExecutionStatus(params.requestId);
+
+      if (refreshedStatus.status !== 'pending') {
+        return refreshedStatus;
+      }
+
+      if (
+        error instanceof AppError &&
+        (
+          error.errorCode === 'resources_pilot_viability_reply_not_ready_for_agent' ||
+          error.errorCode === 'resources_pilot_viability_start_already_completed'
+        )
+      ) {
+        return refreshedStatus;
+      }
+
+      throw error;
+    }
+
+    return params.sessionStore.getRequestExecutionStatus(params.requestId);
+  }
+
+  if (currentStatus.request_kind === 'resources_pilot_viability_start' && currentStatus.session_id) {
+    try {
+      await params.resourcesPilotViabilityService.execute({
+        context: {
+          requestId: params.requestId,
+          workflowVersion: 'request_recovery_v1',
+        },
+        sessionId: currentStatus.session_id,
+        trigger: 'start',
+      });
+    } catch (error) {
+      const refreshedStatus = await params.sessionStore.getRequestExecutionStatus(params.requestId);
+
+      if (refreshedStatus.status !== 'pending') {
+        return refreshedStatus;
+      }
+
+      if (
+        error instanceof AppError &&
+        (
+          error.errorCode === 'resources_pilot_viability_start_already_initialized' ||
+          error.errorCode === 'resources_pilot_viability_start_already_completed'
         )
       ) {
         return refreshedStatus;

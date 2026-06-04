@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sokrai.local/contracts/schemas/resources-pilot-viability-reply.response.schema.json",
+  "title": "ResourcesPilotViabilityReplyResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "resources_pilot_viability"
+      ]
+    },
+    "agent_status": {
+      "type": "string",
+      "enum": [
+        "continue",
+        "done",
+        "blocked"
+      ]
+    },
+    "updated_resources_pilot_viability": {
+      "$ref": "https://sokrai.local/contracts/schemas/resources-pilot-viability-turn.schema.json#/properties/updated_resources_pilot_viability"
+    },
+    "diagnosis": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "string"
+      }
+    },
+    "next_question": {
+      "type": "string"
+    },
+    "completion_reason": {
+      "type": "string"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "session_id",
+    "stage",
+    "agent_status",
+    "updated_resources_pilot_viability",
+    "diagnosis",
+    "next_question",
+    "completion_reason",
+    "warnings"
+  ]
+}

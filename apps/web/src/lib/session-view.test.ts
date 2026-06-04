@@ -571,4 +571,110 @@ describe('deriveSessionPresentation', () => {
     expect(presentation.currentDataAiPrivacyQuestion).toBe('');
     expect(presentation.latestDataAiPrivacySection).toBeNull();
   });
+
+  it('prioritizes active resources pilot viability questions and maps PR11 section state', () => {
+    const auditWithResourcesPilot: SessionAuditView = {
+      ...auditFixture,
+      module_chats: [
+        {
+          chat_id: 'chat-medical-device',
+          proposal_id: 'session-1',
+          module: 'medical_device_triage',
+          chat_status: 'waiting_for_user',
+          active_turn_id: 'medical-device-turn-1',
+          turns: [
+            {
+              turn_id: 'medical-device-turn-1',
+              chat_id: 'chat-medical-device',
+              proposal_id: 'session-1',
+              module: 'medical_device_triage',
+              turn_seq: 1,
+              question_text: 'Que uso previsto deberia revisar una persona competente?',
+              turn_status: 'awaiting_user',
+              agent_status: 'continue',
+              diagnosis: ['Falta aclarar uso previsto.'],
+              source_refs: [],
+              gap_refs: ['gap-medical-device'],
+              audit_refs: [{ kind: 'agent_run', id: 'run-medical-device' }],
+              warnings: ['requires competent human review'],
+              created_at: '2026-05-24T14:50:00.000Z',
+            },
+          ],
+          started_at: '2026-05-24T14:50:00.000Z',
+          warnings: ['requires competent human review'],
+        },
+        {
+          chat_id: 'chat-resources',
+          proposal_id: 'session-1',
+          module: 'resources_pilot_viability',
+          chat_status: 'waiting_for_user',
+          active_turn_id: 'resources-turn-1',
+          turns: [
+            {
+              turn_id: 'resources-turn-1',
+              chat_id: 'chat-resources',
+              proposal_id: 'session-1',
+              module: 'resources_pilot_viability',
+              turn_seq: 1,
+              question_text: 'What operational risks should be tracked before pilot launch?',
+              turn_status: 'awaiting_user',
+              agent_status: 'continue',
+              diagnosis: ['Falta concretar riesgos operativos.'],
+              source_refs: [],
+              gap_refs: ['gap-resources'],
+              audit_refs: [{ kind: 'agent_run', id: 'run-resources' }],
+              warnings: ['This section is not a viability score, approval decision, ranking, or financial model.'],
+              created_at: '2026-05-24T15:00:00.000Z',
+            },
+          ],
+          started_at: '2026-05-24T15:00:00.000Z',
+          warnings: ['This section is not a viability score, approval decision, ranking, or financial model.'],
+        },
+      ],
+      generated_sections: [
+        {
+          section_id: 'section-solution',
+          proposal_id: 'session-1',
+          section_kind: 'solution',
+          section_status: 'generated',
+          section_version: 1,
+          title: 'Solution definition',
+          content_markdown: '## Solution\nThe solution is defined.',
+          source_refs: [],
+          gap_refs: [],
+          warnings: [],
+          created_at: '2026-05-24T14:35:00.000Z',
+        },
+        {
+          section_id: 'section-resources',
+          proposal_id: 'session-1',
+          section_kind: 'resources_pilot_viability',
+          section_status: 'generated',
+          section_version: 1,
+          title: 'Resources, pilot and viability readiness inputs',
+          content_markdown: '## Boundary\nThis section is not a viability score, approval decision, ranking, or financial model.',
+          source_refs: [],
+          gap_refs: ['gap-resources'],
+          generated_by_run_id: 'run-resources',
+          warnings: ['This section is not a viability score, approval decision, ranking, or financial model.'],
+          created_at: '2026-05-24T15:10:00.000Z',
+        },
+      ],
+    };
+
+    const presentation = deriveSessionPresentation(auditWithResourcesPilot);
+
+    expect(presentation.currentResourcesPilotViabilityQuestion).toBe(
+      'What operational risks should be tracked before pilot launch?',
+    );
+    expect(presentation.currentMedicalDeviceTriageQuestion).toBe(
+      'Que uso previsto deberia revisar una persona competente?',
+    );
+    expect(presentation.currentQuestion).toBe('What operational risks should be tracked before pilot launch?');
+    expect(presentation.resourcesPilotViabilityModuleChat?.chat_status).toBe('waiting_for_user');
+    expect(presentation.latestResourcesPilotViabilitySection).toMatchObject({
+      section_id: 'section-resources',
+      title: 'Resources, pilot and viability readiness inputs',
+    });
+  });
 });

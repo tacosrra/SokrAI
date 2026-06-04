@@ -10,6 +10,7 @@ ALTER TABLE agent_runs
         'basic_report_compose',
         'data_ai_privacy_gap',
         'medical_device_triage',
+        'resources_pilot_viability',
         'json_repair'
     ));
 

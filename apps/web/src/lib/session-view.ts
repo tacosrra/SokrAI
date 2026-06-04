@@ -59,16 +59,19 @@ export interface SessionPresentation {
   solutionModuleChat: ModuleChat | null;
   dataAiPrivacyModuleChat: ModuleChat | null;
   medicalDeviceTriageModuleChat: ModuleChat | null;
+  resourcesPilotViabilityModuleChat: ModuleChat | null;
   latestProblemSection: GeneratedSection | null;
   latestSolutionSection: GeneratedSection | null;
   latestDataAiPrivacySection: GeneratedSection | null;
   latestMedicalDeviceTriageSection: GeneratedSection | null;
+  latestResourcesPilotViabilitySection: GeneratedSection | null;
   detectedGaps: string[];
   latestDiagnosis: string[];
   currentQuestion: string;
   currentSolutionQuestion: string;
   currentDataAiPrivacyQuestion: string;
   currentMedicalDeviceTriageQuestion: string;
+  currentResourcesPilotViabilityQuestion: string;
   completionReason: string;
   warnings: string[];
   turns: ConversationTurn[];
@@ -270,6 +273,8 @@ export function deriveSessionPresentation(audit: SessionAuditView): SessionPrese
   const dataAiPrivacyModuleChat = audit.module_chats.find((chat) => chat.module === 'data_ai_privacy') ?? null;
   const medicalDeviceTriageModuleChat =
     audit.module_chats.find((chat) => chat.module === 'medical_device_triage') ?? null;
+  const resourcesPilotViabilityModuleChat =
+    audit.module_chats.find((chat) => chat.module === 'resources_pilot_viability') ?? null;
   const activeSolutionTurn = solutionModuleChat?.turns.find((turn) =>
     turn.turn_id === solutionModuleChat.active_turn_id,
   ) ?? null;
@@ -278,6 +283,9 @@ export function deriveSessionPresentation(audit: SessionAuditView): SessionPrese
   ) ?? null;
   const activeMedicalDeviceTriageTurn = medicalDeviceTriageModuleChat?.turns.find((turn) =>
     turn.turn_id === medicalDeviceTriageModuleChat.active_turn_id,
+  ) ?? null;
+  const activeResourcesPilotViabilityTurn = resourcesPilotViabilityModuleChat?.turns.find((turn) =>
+    turn.turn_id === resourcesPilotViabilityModuleChat.active_turn_id,
   ) ?? null;
   const latestProblemSection = [...audit.generated_sections]
     .reverse()
@@ -303,10 +311,17 @@ export function deriveSessionPresentation(audit: SessionAuditView): SessionPrese
       section.section_kind === 'medical_device_triage' &&
       ['draft', 'generated', 'accepted', 'needs_revision'].includes(section.section_status),
     ) ?? null;
+  const latestResourcesPilotViabilitySection = [...audit.generated_sections]
+    .reverse()
+    .find((section) =>
+      section.section_kind === 'resources_pilot_viability' &&
+      ['draft', 'generated', 'accepted', 'needs_revision'].includes(section.section_status),
+    ) ?? null;
   const currentProblemQuestion = openTurn?.question_text ?? latestSnapshot?.next_question_text ?? '';
   const currentSolutionQuestion = activeSolutionTurn?.question_text ?? '';
   const currentDataAiPrivacyQuestion = activeDataAiPrivacyTurn?.question_text ?? '';
   const currentMedicalDeviceTriageQuestion = activeMedicalDeviceTriageTurn?.question_text ?? '';
+  const currentResourcesPilotViabilityQuestion = activeResourcesPilotViabilityTurn?.question_text ?? '';
 
   return {
     sessionId: audit.session.id,
@@ -322,15 +337,18 @@ export function deriveSessionPresentation(audit: SessionAuditView): SessionPrese
     solutionModuleChat,
     dataAiPrivacyModuleChat,
     medicalDeviceTriageModuleChat,
+    resourcesPilotViabilityModuleChat,
     latestProblemSection,
     latestSolutionSection,
     latestDataAiPrivacySection,
     latestMedicalDeviceTriageSection,
+    latestResourcesPilotViabilitySection,
     detectedGaps: gaps.length > 0
       ? gaps.map((gap) => `${gap.field}: ${gap.description}`)
       : latestSnapshot?.detected_gaps_json ?? [],
     latestDiagnosis: latestResolvedTurn?.diagnosis_json ?? [],
     currentQuestion:
+      currentResourcesPilotViabilityQuestion ||
       currentMedicalDeviceTriageQuestion ||
       currentDataAiPrivacyQuestion ||
       currentSolutionQuestion ||
@@ -338,6 +356,7 @@ export function deriveSessionPresentation(audit: SessionAuditView): SessionPrese
     currentSolutionQuestion,
     currentDataAiPrivacyQuestion,
     currentMedicalDeviceTriageQuestion,
+    currentResourcesPilotViabilityQuestion,
     completionReason:
       latestResolvedTurn?.completion_reason ??
       latestSnapshot?.completion_reason ??

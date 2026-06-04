@@ -14,6 +14,10 @@ import type {
   ProposalStartRequest,
   ProposalStartResponse,
   RequestExecutionResponse,
+  ResourcesPilotViabilityReplyRequest,
+  ResourcesPilotViabilityReplyResponse,
+  ResourcesPilotViabilityStartRequest,
+  ResourcesPilotViabilityStartResponse,
   SessionAuditView,
   SolutionReplyRequest,
   SolutionReplyResponse,
@@ -30,6 +34,8 @@ import {
   parseMedicalDeviceTriageReplyResponse,
   parseMedicalDeviceTriageStartResponse,
   parseRequestExecutionResponse,
+  parseResourcesPilotViabilityReplyResponse,
+  parseResourcesPilotViabilityStartResponse,
   parseSessionAuditView,
   parseSolutionReplyResponse,
   parseSolutionStartResponse,
@@ -338,6 +344,40 @@ export async function replyMedicalDeviceTriage(
       : undefined,
     timeoutMs: REPLY_SESSION_TIMEOUT_MS,
     parse: parseMedicalDeviceTriageReplyResponse,
+  });
+}
+
+export async function startResourcesPilotViability(
+  payload: ResourcesPilotViabilityStartRequest,
+): Promise<ResourcesPilotViabilityStartResponse> {
+  return requestJson({
+    url: joinUrl(WEBHOOK_BASE_URL, '/webhook/resources-pilot-viability-start-v1'),
+    method: 'POST',
+    payload,
+    headers: payload.request_id
+      ? {
+          'x-request-id': payload.request_id,
+        }
+      : undefined,
+    timeoutMs: REPLY_SESSION_TIMEOUT_MS,
+    parse: parseResourcesPilotViabilityStartResponse,
+  });
+}
+
+export async function replyResourcesPilotViability(
+  payload: ResourcesPilotViabilityReplyRequest,
+): Promise<ResourcesPilotViabilityReplyResponse> {
+  return requestJson({
+    url: joinUrl(WEBHOOK_BASE_URL, '/webhook/resources-pilot-viability-reply-v1'),
+    method: 'POST',
+    payload,
+    headers: payload.request_id
+      ? {
+          'x-request-id': payload.request_id,
+        }
+      : undefined,
+    timeoutMs: REPLY_SESSION_TIMEOUT_MS,
+    parse: parseResourcesPilotViabilityReplyResponse,
   });
 }
 

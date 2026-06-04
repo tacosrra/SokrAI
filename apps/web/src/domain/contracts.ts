@@ -1,4 +1,9 @@
-export type Stage = 'problem_definition' | 'solution_definition' | 'data_ai_privacy' | 'medical_device_triage';
+export type Stage =
+  | 'problem_definition'
+  | 'solution_definition'
+  | 'data_ai_privacy'
+  | 'medical_device_triage'
+  | 'resources_pilot_viability';
 
 export type AgentStatus = 'continue' | 'done' | 'blocked';
 
@@ -9,7 +14,7 @@ export type SessionStatus =
   | 'blocked'
   | 'failed';
 
-export type AlphaModule = 'problem' | 'solution' | 'data_ai_privacy' | 'medical_device_triage';
+export type AlphaModule = 'problem' | 'solution' | 'data_ai_privacy' | 'medical_device_triage' | 'resources_pilot_viability';
 
 export type ProposalStatus = 'draft' | 'active' | 'completed' | 'blocked' | 'failed' | 'archived';
 
@@ -50,7 +55,7 @@ export type ChatStatus =
 
 export type ChatTurnStatus = 'awaiting_user' | 'processing' | 'resolved' | 'failed' | 'skipped';
 
-export type SectionKind = 'problem' | 'solution' | 'data_ai_privacy' | 'medical_device_triage';
+export type SectionKind = 'problem' | 'solution' | 'data_ai_privacy' | 'medical_device_triage' | 'resources_pilot_viability';
 
 export type SectionStatus = 'draft' | 'generated' | 'accepted' | 'needs_revision' | 'superseded';
 
@@ -270,6 +275,18 @@ export interface MedicalDeviceTriageState {
   requires_competent_human_review: boolean;
 }
 
+export interface ResourcesPilotViabilityState {
+  human_resources: string;
+  technical_resources: string;
+  pilot_environment: string;
+  dependencies: string[];
+  indicators_metrics: string[];
+  constraints: string[];
+  operational_risks: string[];
+  assumptions: string[];
+  uncertainties: string[];
+}
+
 export interface ProposalStartFile {
   file_name: string;
   mime_type: 'application/pdf';
@@ -421,6 +438,39 @@ export interface MedicalDeviceTriageReplyResponse {
   warnings: string[];
 }
 
+export interface ResourcesPilotViabilityStartRequest {
+  request_id?: string;
+  session_id: string;
+}
+
+export interface ResourcesPilotViabilityStartResponse {
+  session_id: string;
+  stage: 'resources_pilot_viability';
+  agent_status: AgentStatus;
+  updated_resources_pilot_viability: ResourcesPilotViabilityState;
+  diagnosis: string[];
+  next_question: string;
+  completion_reason: string;
+  warnings: string[];
+}
+
+export interface ResourcesPilotViabilityReplyRequest {
+  request_id?: string;
+  session_id: string;
+  answer: string;
+}
+
+export interface ResourcesPilotViabilityReplyResponse {
+  session_id: string;
+  stage: 'resources_pilot_viability';
+  agent_status: AgentStatus;
+  updated_resources_pilot_viability: ResourcesPilotViabilityState;
+  diagnosis: string[];
+  next_question: string;
+  completion_reason: string;
+  warnings: string[];
+}
+
 export interface ErrorResponse {
   error_code: string;
   safe_message: string;
@@ -440,6 +490,8 @@ export interface RequestExecutionResponse {
     | 'data_ai_privacy_reply'
     | 'medical_device_triage_start'
     | 'medical_device_triage_reply'
+    | 'resources_pilot_viability_start'
+    | 'resources_pilot_viability_reply'
     | 'unknown';
   status: 'pending' | 'completed' | 'failed' | 'not_found';
   session_id?: string;
@@ -489,6 +541,7 @@ export interface AgentRun {
     | 'basic_report_compose'
     | 'data_ai_privacy_gap'
     | 'medical_device_triage'
+    | 'resources_pilot_viability'
     | 'json_repair';
   agent_name: string;
   prompt_name: string;

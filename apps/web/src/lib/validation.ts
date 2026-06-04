@@ -29,6 +29,9 @@ import type {
   ProposalSourceKind,
   ProposalStartResponse,
   RequestExecutionResponse,
+  ResourcesPilotViabilityReplyResponse,
+  ResourcesPilotViabilityStartResponse,
+  ResourcesPilotViabilityState,
   ReportStatus,
   SessionAuditView,
   SessionEvent,
@@ -46,8 +49,8 @@ type JsonRecord = Record<string, unknown>;
 const WRAPPER_KEYS = ['body', 'data', 'payload', 'result', 'response', 'output', 'json'] as const;
 
 const AGENT_STATUSES: AgentStatus[] = ['continue', 'done', 'blocked'];
-const ALPHA_MODULES = ['problem', 'solution', 'data_ai_privacy', 'medical_device_triage'] as const;
-const SECTION_KINDS = ['problem', 'solution', 'data_ai_privacy', 'medical_device_triage'] as const;
+const ALPHA_MODULES = ['problem', 'solution', 'data_ai_privacy', 'medical_device_triage', 'resources_pilot_viability'] as const;
+const SECTION_KINDS = ['problem', 'solution', 'data_ai_privacy', 'medical_device_triage', 'resources_pilot_viability'] as const;
 const MEDICAL_DEVICE_TRIAGE_STATUSES: MedicalDeviceTriageStatus[] = [
   'applicable',
   'not_applicable',
@@ -479,6 +482,40 @@ function parseMedicalDeviceTriageState(value: unknown, label: string): MedicalDe
   };
 }
 
+function hasResourcesPilotViabilityShape(record: JsonRecord): boolean {
+  return [
+    'human_resources',
+    'technical_resources',
+    'pilot_environment',
+    'dependencies',
+    'indicators_metrics',
+    'constraints',
+    'operational_risks',
+    'assumptions',
+    'uncertainties',
+  ].every((key) => Object.prototype.hasOwnProperty.call(record, key));
+}
+
+function parseResourcesPilotViabilityState(value: unknown, label: string): ResourcesPilotViabilityState {
+  const record = expectRecord(value, label);
+
+  if (!hasResourcesPilotViabilityShape(record)) {
+    throw new Error(`Expected ${label} to match resources pilot viability state`);
+  }
+
+  return {
+    human_resources: expectString(record.human_resources, `${label}.human_resources`),
+    technical_resources: expectString(record.technical_resources, `${label}.technical_resources`),
+    pilot_environment: expectString(record.pilot_environment, `${label}.pilot_environment`),
+    dependencies: expectStringArray(record.dependencies, `${label}.dependencies`),
+    indicators_metrics: expectStringArray(record.indicators_metrics, `${label}.indicators_metrics`),
+    constraints: expectStringArray(record.constraints, `${label}.constraints`),
+    operational_risks: expectStringArray(record.operational_risks, `${label}.operational_risks`),
+    assumptions: expectStringArray(record.assumptions, `${label}.assumptions`),
+    uncertainties: expectStringArray(record.uncertainties, `${label}.uncertainties`),
+  };
+}
+
 function parseSessionRecord(value: unknown): SessionRecord {
   const record = expectRecord(value, 'session');
 
@@ -786,6 +823,7 @@ function parseAgentRun(value: unknown, label: string): AgentRun {
       'basic_report_compose',
       'data_ai_privacy_gap',
       'medical_device_triage',
+      'resources_pilot_viability',
       'json_repair',
     ]),
     agent_name: expectString(record.agent_name, `${label}.agent_name`),
@@ -1123,6 +1161,72 @@ export function parseMedicalDeviceTriageReplyResponse(value: unknown): MedicalDe
   };
 }
 
+export function parseResourcesPilotViabilityStartResponse(value: unknown): ResourcesPilotViabilityStartResponse {
+  const record = expectRecord(
+    unwrapContractValue(value),
+    'resources pilot viability start response',
+  );
+
+  return {
+    session_id: expectString(record.session_id, 'resources pilot viability start response.session_id'),
+    stage: expectEnum(
+      record.stage,
+      'resources pilot viability start response.stage',
+      ['resources_pilot_viability'],
+    ),
+    agent_status: expectEnum(
+      record.agent_status,
+      'resources pilot viability start response.agent_status',
+      AGENT_STATUSES,
+    ),
+    updated_resources_pilot_viability: parseResourcesPilotViabilityState(
+      record.updated_resources_pilot_viability,
+      'resources pilot viability start response.updated_resources_pilot_viability',
+    ),
+    diagnosis: expectStringArray(record.diagnosis, 'resources pilot viability start response.diagnosis'),
+    next_question: expectString(record.next_question, 'resources pilot viability start response.next_question'),
+    completion_reason: expectOptionalString(
+      record.completion_reason,
+      '',
+      'resources pilot viability start response.completion_reason',
+    ),
+    warnings: expectOptionalStringArray(record.warnings, [], 'resources pilot viability start response.warnings'),
+  };
+}
+
+export function parseResourcesPilotViabilityReplyResponse(value: unknown): ResourcesPilotViabilityReplyResponse {
+  const record = expectRecord(
+    unwrapContractValue(value),
+    'resources pilot viability reply response',
+  );
+
+  return {
+    session_id: expectString(record.session_id, 'resources pilot viability reply response.session_id'),
+    stage: expectEnum(
+      record.stage,
+      'resources pilot viability reply response.stage',
+      ['resources_pilot_viability'],
+    ),
+    agent_status: expectEnum(
+      record.agent_status,
+      'resources pilot viability reply response.agent_status',
+      AGENT_STATUSES,
+    ),
+    updated_resources_pilot_viability: parseResourcesPilotViabilityState(
+      record.updated_resources_pilot_viability,
+      'resources pilot viability reply response.updated_resources_pilot_viability',
+    ),
+    diagnosis: expectStringArray(record.diagnosis, 'resources pilot viability reply response.diagnosis'),
+    next_question: expectString(record.next_question, 'resources pilot viability reply response.next_question'),
+    completion_reason: expectOptionalString(
+      record.completion_reason,
+      '',
+      'resources pilot viability reply response.completion_reason',
+    ),
+    warnings: expectOptionalStringArray(record.warnings, [], 'resources pilot viability reply response.warnings'),
+  };
+}
+
 export function parseErrorResponse(value: unknown): ErrorResponse {
   const record = expectRecord(unwrapContractValue(value), 'error response');
 
@@ -1158,6 +1262,8 @@ export function parseRequestExecutionResponse(value: unknown): RequestExecutionR
         'data_ai_privacy_reply',
         'medical_device_triage_start',
         'medical_device_triage_reply',
+        'resources_pilot_viability_start',
+        'resources_pilot_viability_reply',
         'unknown',
       ],
     ),

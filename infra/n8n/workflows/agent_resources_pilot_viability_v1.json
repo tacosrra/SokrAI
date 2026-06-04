@@ -1,0 +1,144 @@
+{
+  "id": "f47c65d2-559b-4958-9ad7-b41ac7905438",
+  "name": "agent_resources_pilot_viability_v1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent-resources-pilot-viability-v1",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "5b0833ab-6ad7-49e7-8d3c-cc5d517a4ccf",
+      "name": "Webhook_AgentResourcesPilotViability",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        260,
+        300
+      ],
+      "webhookId": "agent-resources-pilot-viability-v1"
+    },
+    {
+      "parameters": {
+        "keepOnlySet": false,
+        "values": {
+          "string": [
+            {
+              "name": "request_id",
+              "value": "={{ $node[\"Webhook_AgentResourcesPilotViability\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_AgentResourcesPilotViability\"].json.body?.request_id || $execution.id }}"
+            },
+            {
+              "name": "workflow_version",
+              "value": "agent_resources_pilot_viability_v1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "52621895-91bb-4211-89d9-96fb974505cd",
+      "name": "Set_AgentPayload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:3001/internal/agents/resources-pilot-viability/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-shared-secret",
+              "value": "={{ $env.INTERNAL_SHARED_SECRET }}"
+            },
+            {
+              "name": "x-request-id",
+              "value": "={{ $node[\"Webhook_AgentResourcesPilotViability\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_AgentResourcesPilotViability\"].json.body?.request_id || $execution.id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { request_id: ($node[\"Webhook_AgentResourcesPilotViability\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_AgentResourcesPilotViability\"].json.body?.request_id || $execution.id), workflow_version: $json.workflow_version, workflow_execution_id: $execution.id, session_id: $node[\"Webhook_AgentResourcesPilotViability\"].json.body.session_id, trigger: $node[\"Webhook_AgentResourcesPilotViability\"].json.body.trigger } }}",
+        "options": {
+          "timeout": 450000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "f998cc86-0588-42d9-98d8-dbd803227e87",
+      "name": "HTTP_RunResourcesPilotViabilityTurn",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        820,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.body ?? $json }}",
+        "options": {
+          "responseCode": "={{ Number($json.statusCode ?? 200) }}"
+        }
+      },
+      "id": "c43a0e31-7f4f-44cb-8a85-820f5d773665",
+      "name": "Respond_AgentTurn",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook_AgentResourcesPilotViability": {
+      "main": [
+        [
+          {
+            "node": "Set_AgentPayload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set_AgentPayload": {
+      "main": [
+        [
+          {
+            "node": "HTTP_RunResourcesPilotViabilityTurn",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP_RunResourcesPilotViabilityTurn": {
+      "main": [
+        [
+          {
+            "node": "Respond_AgentTurn",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "agent_resources_pilot_viability_v1"
+}

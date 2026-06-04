@@ -13,9 +13,11 @@ interface SessionWorkspaceProps {
   onSolutionReply: (answer: string) => Promise<void>;
   onDataAiPrivacyReply: (answer: string) => Promise<void>;
   onMedicalDeviceTriageReply: (answer: string) => Promise<void>;
+  onResourcesPilotViabilityReply: (answer: string) => Promise<void>;
   onStartSolution: () => Promise<void>;
   onStartDataAiPrivacy: () => Promise<void>;
   onStartMedicalDeviceTriage: () => Promise<void>;
+  onStartResourcesPilotViability: () => Promise<void>;
   presentation: SessionPresentation;
 }
 
@@ -27,9 +29,11 @@ export function SessionWorkspace({
   onSolutionReply,
   onDataAiPrivacyReply,
   onMedicalDeviceTriageReply,
+  onResourcesPilotViabilityReply,
   onStartSolution,
   onStartDataAiPrivacy,
   onStartMedicalDeviceTriage,
+  onStartResourcesPilotViability,
   presentation,
 }: SessionWorkspaceProps) {
   const [reply, setReply] = useState('');
@@ -57,6 +61,11 @@ export function SessionWorkspace({
 
     if (!reply.trim()) {
       setFeedback('La respuesta no puede ir vacía.');
+      return;
+    }
+
+    if (presentation.currentResourcesPilotViabilityQuestion) {
+      await onResourcesPilotViabilityReply(reply.trim());
       return;
     }
 
@@ -93,7 +102,16 @@ export function SessionWorkspace({
     turn.turn_id === presentation.medicalDeviceTriageModuleChat?.active_turn_id &&
     turn.turn_status === 'awaiting_user',
   ) ?? false;
-  const canReply = canMedicalDeviceTriageReply || canDataAiPrivacyReply || canSolutionReply || canProblemReply;
+  const canResourcesPilotViabilityReply = presentation.resourcesPilotViabilityModuleChat?.turns.some((turn) =>
+    turn.turn_id === presentation.resourcesPilotViabilityModuleChat?.active_turn_id &&
+    turn.turn_status === 'awaiting_user',
+  ) ?? false;
+  const canReply =
+    canResourcesPilotViabilityReply ||
+    canMedicalDeviceTriageReply ||
+    canDataAiPrivacyReply ||
+    canSolutionReply ||
+    canProblemReply;
   const canStartSolution = Boolean(
     presentation.latestProblemSection &&
       !canSolutionReply &&
@@ -111,6 +129,12 @@ export function SessionWorkspace({
       !canMedicalDeviceTriageReply &&
       presentation.medicalDeviceTriageModuleChat?.chat_status !== 'completed' &&
       presentation.medicalDeviceTriageModuleChat?.chat_status !== 'waiting_for_user',
+  );
+  const canStartResourcesPilotViability = Boolean(
+    presentation.latestSolutionSection &&
+      !canResourcesPilotViabilityReply &&
+      presentation.resourcesPilotViabilityModuleChat?.chat_status !== 'completed' &&
+      presentation.resourcesPilotViabilityModuleChat?.chat_status !== 'waiting_for_user',
   );
   const resolvedTurns = audit.turns.filter((turn) => Boolean(turn.answer_text?.trim())).length;
 
@@ -174,7 +198,9 @@ export function SessionWorkspace({
 
       <section className="question-callout">
         <span className="question-callout__label">
-          {presentation.currentMedicalDeviceTriageQuestion
+          {presentation.currentResourcesPilotViabilityQuestion
+            ? 'Pregunta abierta de recursos/piloto'
+            : presentation.currentMedicalDeviceTriageQuestion
             ? 'Pregunta abierta de medical-device triage'
             : presentation.currentDataAiPrivacyQuestion
             ? 'Pregunta abierta de datos/IA/privacidad'
@@ -268,6 +294,37 @@ export function SessionWorkspace({
         <section className="question-callout question-callout--muted">
           <span className="question-callout__label">{presentation.latestMedicalDeviceTriageSection.title}</span>
           <p>{presentation.latestMedicalDeviceTriageSection.content_markdown}</p>
+        </section>
+      ) : null}
+
+      {presentation.latestSolutionSection ? (
+        <section className="question-callout">
+          <span className="question-callout__label">Recursos, piloto e insumos operativos</span>
+          <p>
+            {presentation.latestResourcesPilotViabilitySection
+              ? `Se generó ${presentation.latestResourcesPilotViabilitySection.title} v${presentation.latestResourcesPilotViabilitySection.section_version}.`
+              : presentation.resourcesPilotViabilityModuleChat
+                ? `Estado: ${presentation.resourcesPilotViabilityModuleChat.chat_status.replaceAll('_', ' ')}.`
+                : 'La solución ya tiene sección generada y el módulo puede recoger recursos, entorno, dependencias, métricas, restricciones y riesgos operativos.'}
+          </p>
+
+          {canStartResourcesPilotViability ? (
+            <button
+              className="button button--secondary"
+              type="button"
+              onClick={() => void onStartResourcesPilotViability()}
+              disabled={isReplying}
+            >
+              {isReplying ? 'Procesando…' : 'Iniciar recursos/piloto'}
+            </button>
+          ) : null}
+        </section>
+      ) : null}
+
+      {presentation.latestResourcesPilotViabilitySection ? (
+        <section className="question-callout question-callout--muted">
+          <span className="question-callout__label">{presentation.latestResourcesPilotViabilitySection.title}</span>
+          <p>{presentation.latestResourcesPilotViabilitySection.content_markdown}</p>
         </section>
       ) : null}
 
@@ -367,7 +424,9 @@ export function SessionWorkspace({
               value={reply}
               onChange={(event) => setReply(event.target.value)}
               placeholder={
-                presentation.currentMedicalDeviceTriageQuestion
+                presentation.currentResourcesPilotViabilityQuestion
+                  ? 'Describe equipo, recursos tecnicos, entorno piloto, dependencias, metricas, restricciones y riesgos operativos.'
+                  : presentation.currentMedicalDeviceTriageQuestion
                   ? 'Describe uso previsto, papel clinico, evidencia faltante, incertidumbre y revision humana competente.'
                   : presentation.currentDataAiPrivacyQuestion
                   ? 'Describe datos tratados, fuentes, rol de IA, controles, validacion y revision humana competente.'
@@ -384,6 +443,8 @@ export function SessionWorkspace({
               <p>
                 {presentation.currentMedicalDeviceTriageQuestion
                   ? 'Responde solo con gaps/questions/uncertainty y competent human review; no clasifiques.'
+                  : presentation.currentResourcesPilotViabilityQuestion
+                  ? 'Responde con insumos operativos concretos; no incluyas score, aprobacion, ranking ni modelo financiero.'
                   : presentation.currentDataAiPrivacyQuestion
                   ? 'Responde con gaps, incertidumbre y revision humana competente; no emitas decisiones definitivas.'
                   : presentation.currentSolutionQuestion

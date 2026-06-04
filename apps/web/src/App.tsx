@@ -9,10 +9,12 @@ import {
   fetchSessionAudit,
   replyDataAiPrivacy,
   replyMedicalDeviceTriage,
+  replyResourcesPilotViability,
   replySolution,
   replySession,
   startDataAiPrivacy,
   startMedicalDeviceTriage,
+  startResourcesPilotViability,
   startSolution,
   startSession,
 } from './lib/api';
@@ -51,7 +53,9 @@ type RecoverableRequestKind =
   | 'data_ai_privacy_start'
   | 'data_ai_privacy_reply'
   | 'medical_device_triage_start'
-  | 'medical_device_triage_reply';
+  | 'medical_device_triage_reply'
+  | 'resources_pilot_viability_start'
+  | 'resources_pilot_viability_reply';
 
 interface ModeCardProps {
   activeMode: ModeView;
@@ -84,7 +88,9 @@ function createClientRequestId(
     | 'data-ai-privacy-start'
     | 'data-ai-privacy-reply'
     | 'medical-device-triage-start'
-    | 'medical-device-triage-reply',
+    | 'medical-device-triage-reply'
+    | 'resources-pilot-viability-start'
+    | 'resources-pilot-viability-reply',
 ): string {
   return `web-${prefix}-${crypto.randomUUID()}`;
 }
@@ -121,6 +127,14 @@ function hasCompletedMedicalDeviceTriageRequest(audit: SessionAuditView, request
   return audit.runs.some((run) =>
     run.request_id === requestId &&
     run.run_purpose === 'medical_device_triage' &&
+    run.status === 'completed',
+  );
+}
+
+function hasCompletedResourcesPilotViabilityRequest(audit: SessionAuditView, requestId: string): boolean {
+  return audit.runs.some((run) =>
+    run.request_id === requestId &&
+    run.run_purpose === 'resources_pilot_viability' &&
     run.status === 'completed',
   );
 }
@@ -164,6 +178,16 @@ function hasMedicalDeviceTriageRecoveryArtifacts(audit: SessionAuditView): boole
     presentation.medicalDeviceTriageModuleChat ||
       presentation.currentMedicalDeviceTriageQuestion ||
       presentation.latestMedicalDeviceTriageSection,
+  );
+}
+
+function hasResourcesPilotViabilityRecoveryArtifacts(audit: SessionAuditView): boolean {
+  const presentation = deriveSessionPresentation(audit);
+
+  return Boolean(
+    presentation.resourcesPilotViabilityModuleChat ||
+      presentation.currentResourcesPilotViabilityQuestion ||
+      presentation.latestResourcesPilotViabilitySection,
   );
 }
 
@@ -997,6 +1021,155 @@ export function App() {
     }
   }
 
+  async function handleStartResourcesPilotViability() {
+    if (!activeAudit) {
+      return;
+    }
+
+    const requestId = createClientRequestId('resources-pilot-viability-start');
+    setIsReplying(true);
+    setBanner({
+      tone: 'info',
+      text: 'Iniciando recursos/piloto para recoger insumos operativos minimos…',
+    });
+
+    try {
+      const result = await startResourcesPilotViability({
+        request_id: requestId,
+        session_id: activeAudit.session.id,
+      });
+
+      await loadSession(result.session_id, {
+        successMessage: `Recursos/piloto iniciado. Agent status: ${result.agent_status}.`,
+        skipBannerOnStart: true,
+      });
+    } catch (error) {
+      if (isRecoverableWorkflowDeliveryError(error)) {
+        setBanner({
+          tone: 'info',
+          text:
+            error.errorCode === 'request_timeout'
+              ? `La llamada para iniciar recursos/piloto vencio en el navegador. Recuperando el resultado del workflow para request_id ${requestId}…`
+              : `La respuesta de inicio de recursos/piloto llego con un formato inesperado. Intentando recuperar el estado real con request_id ${requestId}…`,
+        });
+
+        try {
+          const sessionId = await recoverTimedOutRequest(requestId, 'resources_pilot_viability_start');
+          await loadSession(sessionId, {
+            successMessage: 'Recursos/piloto recuperado tras completar el workflow fuera del tiempo de espera inicial.',
+            skipBannerOnStart: true,
+          });
+          return;
+        } catch (recoveryError) {
+          try {
+            const recoveredAudit = await loadSession(activeAudit.session.id, {
+              skipBannerOnStart: true,
+              suppressSuccessBanner: true,
+            });
+
+            if (recoveredAudit && hasResourcesPilotViabilityRecoveryArtifacts(recoveredAudit)) {
+              setBanner({
+                tone: 'success',
+                text: 'Se recupero el estado de recursos/piloto directamente desde la API tras expirar el inicio.',
+              });
+              return;
+            }
+          } catch {
+            // Preserve the original recovery error when the direct session refresh also fails.
+          }
+
+          setBanner({
+            tone: 'error',
+            text: mapApiError(recoveryError),
+          });
+          return;
+        }
+      }
+
+      setBanner({
+        tone: 'error',
+        text: mapApiError(error),
+      });
+    } finally {
+      setIsReplying(false);
+    }
+  }
+
+  async function handleResourcesPilotViabilityReply(answer: string) {
+    if (!activeAudit) {
+      return;
+    }
+
+    const requestId = createClientRequestId('resources-pilot-viability-reply');
+    setIsReplying(true);
+    setBanner({
+      tone: 'info',
+      text: 'Respuesta de recursos/piloto enviada. Actualizando insumos operativos persistidos…',
+    });
+
+    try {
+      const result = await replyResourcesPilotViability({
+        request_id: requestId,
+        session_id: activeAudit.session.id,
+        answer,
+      });
+
+      await loadSession(result.session_id, {
+        successMessage: `Turno recursos/piloto procesado. Agent status: ${result.agent_status}.`,
+        skipBannerOnStart: true,
+      });
+    } catch (error) {
+      if (isRecoverableWorkflowDeliveryError(error)) {
+        setBanner({
+          tone: 'info',
+          text:
+            error.errorCode === 'request_timeout'
+              ? `La llamada del turno recursos/piloto vencio en el navegador. Recuperando el resultado del workflow para request_id ${requestId}…`
+              : `La respuesta del turno recursos/piloto llego con un formato inesperado. Intentando recuperar el estado real con request_id ${requestId}…`,
+        });
+
+        try {
+          const sessionId = await recoverTimedOutRequest(requestId, 'resources_pilot_viability_reply');
+          await loadSession(sessionId, {
+            successMessage: 'Turno recursos/piloto recuperado tras completar el workflow fuera del tiempo de espera inicial.',
+            skipBannerOnStart: true,
+          });
+          return;
+        } catch (recoveryError) {
+          try {
+            const recoveredAudit = await loadSession(activeAudit.session.id, {
+              skipBannerOnStart: true,
+              suppressSuccessBanner: true,
+            });
+
+            if (recoveredAudit && hasCompletedResourcesPilotViabilityRequest(recoveredAudit, requestId)) {
+              setBanner({
+                tone: 'success',
+                text: 'Se recupero el estado de recursos/piloto directamente desde la API tras expirar el turno.',
+              });
+              return;
+            }
+          } catch {
+            // Preserve the original recovery error when the direct session refresh also fails.
+          }
+
+          setBanner({
+            tone: 'error',
+            text: mapApiError(recoveryError),
+          });
+          return;
+        }
+      }
+
+      setBanner({
+        tone: 'error',
+        text: mapApiError(error),
+      });
+    } finally {
+      setIsReplying(false);
+    }
+  }
+
   function handleStartFreshSession() {
     setActiveAudit(null);
     setActiveReport(null);
@@ -1136,9 +1309,11 @@ export function App() {
               onSolutionReply={handleSolutionReply}
               onDataAiPrivacyReply={handleDataAiPrivacyReply}
               onMedicalDeviceTriageReply={handleMedicalDeviceTriageReply}
+              onResourcesPilotViabilityReply={handleResourcesPilotViabilityReply}
               onStartSolution={handleStartSolution}
               onStartDataAiPrivacy={handleStartDataAiPrivacy}
               onStartMedicalDeviceTriage={handleStartMedicalDeviceTriage}
+              onStartResourcesPilotViability={handleStartResourcesPilotViability}
               presentation={presentation}
             />
           </section>

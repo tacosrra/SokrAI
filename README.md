@@ -16,7 +16,7 @@ Guia detallada de arranque y prueba:
 - Persistencia en `PostgreSQL`
 - Interfaz operativa en `apps/web` para demo local y uso humano
 - Carriles operativos Alpha: `problem_definition_agent` y `solution_definition_agent`
-- Modulos Clinic Pilot: `data_ai_privacy_gap_agent` y `medical_device_triage_agent` con perfil fijo `hospital_clinic_v1`
+- Modulos Clinic Pilot: `data_ai_privacy_gap_agent`, `medical_device_triage_agent` y `resources_pilot_viability_agent`
 - Una pregunta principal por turno
 - Persistencia de sesiones, turnos, snapshots, agent runs y eventos
 - Reanudacion por `session_id`
@@ -31,6 +31,7 @@ Guia detallada de arranque y prueba:
 - OCR para PDFs escaneados
 - BI/dashboard amplio o superficies multi-lane fuera de los carriles Alpha de problema y solucion
 - Dictamen legal/regulatorio/clinico/privacidad/medical-device, cumplimiento definitivo, aprobacion/rechazo, scoring o clasificacion definitiva medical device
+- Scoring de viabilidad, ranking, decision go/no-go, modelo financiero detallado, RAG o PDF/export para recursos/piloto
 
 ## Estructura
 
@@ -128,6 +129,7 @@ Cada `AlphaGap` persistido incluye:
 - `module`, limitado a `problem` o `solution`
 - PR9 amplia `module` con `data_ai_privacy` para gaps sensibles tras la seccion de solucion
 - PR10 amplia `module` con `medical_device_triage` para gaps, preguntas e incertidumbre no definitivos tras datos/IA/privacidad
+- PR11 amplia `module` con `resources_pilot_viability` para recursos, entorno piloto, dependencias, indicadores, restricciones y riesgos operativos tras la seccion de solucion
 - `gap_kind` y `gap_status`
 - `origin`, para distinguir campo estructurado, `missing_information`, ambiguedad, fuente interna o regla del sistema
 - `absence`, con campos revisados y razon cuando falta informacion
@@ -168,6 +170,22 @@ preguntas, incertidumbre y `requires competent human review`.
 Este modulo no emite clasificacion MDR, decision de producto sanitario,
 dictamen legal/regulatorio/clinico, cumplimiento definitivo, aprobacion,
 rechazo ni scoring.
+
+## Modulo recursos/piloto/viabilidad
+
+PR11 anade el modulo `resources_pilot_viability_agent` para recoger informacion
+minima de ejecucion del piloto: recursos humanos, recursos tecnicos, entorno
+piloto, dependencias, indicadores/metricas, restricciones, riesgos operativos,
+supuestos e incertidumbres.
+
+Solo requiere que existan las secciones `problem` y `solution`. Las secciones
+`data_ai_privacy` y `medical_device_triage` se usan como contexto opcional si ya
+existen, pero no son prerequisito duro. La seccion generada se guarda en
+`generated_sections.section_kind = "resources_pilot_viability"` y se muestra en
+el workspace/auditoria.
+
+Este modulo no emite score de viabilidad, ranking, priorizacion,
+aprobacion/rechazo, decision go/no-go, modelo financiero, RAG ni PDF/export.
 
 ## Arranque local
 
@@ -238,10 +256,10 @@ pnpm install --store-dir ./.pnpm-store
 docker compose up -d postgres ollama api n8n
 docker compose exec ollama ollama pull qwen2.5:3b-instruct
 docker compose exec api pnpm migrate
-for workflow in proposal_start_v1.json proposal_reply_v1.json agent_problem_definition_v1.json solution_start_v1.json solution_reply_v1.json agent_solution_definition_v1.json data_ai_privacy_start_v1.json data_ai_privacy_reply_v1.json agent_data_ai_privacy_gap_v1.json medical_device_triage_start_v1.json medical_device_triage_reply_v1.json agent_medical_device_triage_v1.json; do
+for workflow in proposal_start_v1.json proposal_reply_v1.json agent_problem_definition_v1.json solution_start_v1.json solution_reply_v1.json agent_solution_definition_v1.json data_ai_privacy_start_v1.json data_ai_privacy_reply_v1.json agent_data_ai_privacy_gap_v1.json medical_device_triage_start_v1.json medical_device_triage_reply_v1.json agent_medical_device_triage_v1.json resources_pilot_viability_start_v1.json resources_pilot_viability_reply_v1.json agent_resources_pilot_viability_v1.json; do
   docker compose exec -T -u node n8n n8n import:workflow --input="/workflows/${workflow}"
 done
-for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json infra/n8n/workflows/data_ai_privacy_start_v1.json infra/n8n/workflows/data_ai_privacy_reply_v1.json infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json infra/n8n/workflows/medical_device_triage_start_v1.json infra/n8n/workflows/medical_device_triage_reply_v1.json infra/n8n/workflows/agent_medical_device_triage_v1.json; do
+for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json infra/n8n/workflows/data_ai_privacy_start_v1.json infra/n8n/workflows/data_ai_privacy_reply_v1.json infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json infra/n8n/workflows/medical_device_triage_start_v1.json infra/n8n/workflows/medical_device_triage_reply_v1.json infra/n8n/workflows/agent_medical_device_triage_v1.json infra/n8n/workflows/resources_pilot_viability_start_v1.json infra/n8n/workflows/resources_pilot_viability_reply_v1.json infra/n8n/workflows/agent_resources_pilot_viability_v1.json; do
   workflow_id="$(awk -F'"' '/^[[:space:]]*"id":[[:space:]]*"/ { print $4; exit }' "$workflow_path")"
   docker compose exec -T -u node n8n n8n publish:workflow --id="$workflow_id"
 done
@@ -351,8 +369,11 @@ Archivos:
 - `infra/n8n/workflows/medical_device_triage_start_v1.json`
 - `infra/n8n/workflows/medical_device_triage_reply_v1.json`
 - `infra/n8n/workflows/agent_medical_device_triage_v1.json`
+- `infra/n8n/workflows/resources_pilot_viability_start_v1.json`
+- `infra/n8n/workflows/resources_pilot_viability_reply_v1.json`
+- `infra/n8n/workflows/agent_resources_pilot_viability_v1.json`
 
-Abre `http://localhost:5678`, importa y publica los doce workflows, y asegúrate de que `INTERNAL_SHARED_SECRET` coincide entre `.env`, la API y `n8n`.
+Abre `http://localhost:5678`, importa y publica los quince workflows, y asegúrate de que `INTERNAL_SHARED_SECRET` coincide entre `.env`, la API y `n8n`.
 
 Los exports de workflow de esta version eliminan reintentos sincronos en nodos `HTTP Request` y propagan `statusCode + body` de la API al webhook para que un `ollama_timeout` o cualquier error controlado llegue a la UI como JSON consistente. Si reimportas los workflows, publica la nueva version exportada del repo.
 
@@ -439,8 +460,11 @@ La extension Clinic Pilot, despues de cerrar la solucion, es:
 4. iniciar `medical_device_triage_start_v1` cuando exista la seccion de datos/IA/privacidad
 5. responder con `medical_device_triage_reply_v1` hasta `agent_status = "done"` o `blocked`
 6. revisar la seccion `generated_sections.section_kind = "medical_device_triage"` en `GET /api/v1/sessions/:sessionId`
+7. iniciar `resources_pilot_viability_start_v1` cuando exista la seccion de solucion
+8. responder con `resources_pilot_viability_reply_v1` hasta `agent_status = "done"` o `blocked`
+9. revisar la seccion `generated_sections.section_kind = "resources_pilot_viability"` en `GET /api/v1/sessions/:sessionId`
 
-Esta extension genera gaps, preguntas e incertidumbre de datos/IA/privacidad y medical-device triage para revision humana competente. No forma parte del `BasicAlphaReport` y no emite dictamen legal, regulatorio, clinico, de privacidad, cumplimiento definitivo, aprobacion/rechazo, scoring ni clasificacion medical-device.
+Esta extension genera gaps, preguntas e incertidumbre de datos/IA/privacidad, medical-device triage y recursos/piloto para revision humana competente. No forma parte del `BasicAlphaReport` y no emite dictamen legal, regulatorio, clinico, de privacidad, cumplimiento definitivo, aprobacion/rechazo, scoring, clasificacion medical-device, ranking, decision go/no-go, modelo financiero ni PDF/export.
 
 Al cerrar el carril de problema, la API conserva la compatibilidad de resume con
 `conversation_turns`, `session_snapshots` y `agent_runs`, y tambien escribe el

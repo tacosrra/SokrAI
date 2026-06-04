@@ -29,6 +29,11 @@ import proposalStartRequestSchema from '../../../../contracts/schemas/proposal-s
 import proposalStartResponseSchema from '../../../../contracts/schemas/proposal-start.response.schema.json';
 import regulatoryProfileSchema from '../../../../contracts/schemas/regulatory-profile.schema.json';
 import requestExecutionResponseSchema from '../../../../contracts/schemas/request-execution.response.schema.json';
+import resourcesPilotViabilityReplyRequestSchema from '../../../../contracts/schemas/resources-pilot-viability-reply.request.schema.json';
+import resourcesPilotViabilityReplyResponseSchema from '../../../../contracts/schemas/resources-pilot-viability-reply.response.schema.json';
+import resourcesPilotViabilityStartRequestSchema from '../../../../contracts/schemas/resources-pilot-viability-start.request.schema.json';
+import resourcesPilotViabilityStartResponseSchema from '../../../../contracts/schemas/resources-pilot-viability-start.response.schema.json';
+import resourcesPilotViabilityTurnSchema from '../../../../contracts/schemas/resources-pilot-viability-turn.schema.json';
 import solutionDefinitionTurnSchema from '../../../../contracts/schemas/solution-definition-turn.schema.json';
 import solutionReplyRequestSchema from '../../../../contracts/schemas/solution-reply.request.schema.json';
 import solutionReplyResponseSchema from '../../../../contracts/schemas/solution-reply.response.schema.json';
@@ -63,6 +68,11 @@ import type {
   ProposalStartResponse,
   RegulatoryProfile,
   RequestExecutionResponse,
+  ResourcesPilotViabilityReplyRequest,
+  ResourcesPilotViabilityReplyResponse,
+  ResourcesPilotViabilityStartRequest,
+  ResourcesPilotViabilityStartResponse,
+  ResourcesPilotViabilityTurn,
   SolutionDefinitionTurn,
   SolutionReplyRequest,
   SolutionReplyResponse,
@@ -95,6 +105,7 @@ ajv.addSchema(problemDefinitionTurnSchema, problemDefinitionTurnSchema.$id);
 ajv.addSchema(solutionDefinitionTurnSchema, solutionDefinitionTurnSchema.$id);
 ajv.addSchema(dataAiPrivacyTurnSchema, dataAiPrivacyTurnSchema.$id);
 ajv.addSchema(medicalDeviceTriageTurnSchema, medicalDeviceTriageTurnSchema.$id);
+ajv.addSchema(resourcesPilotViabilityTurnSchema, resourcesPilotViabilityTurnSchema.$id);
 ajv.addSchema(proposalStartRequestSchema, proposalStartRequestSchema.$id);
 ajv.addSchema(proposalStartResponseSchema, proposalStartResponseSchema.$id);
 ajv.addSchema(proposalReplyRequestSchema, proposalReplyRequestSchema.$id);
@@ -111,6 +122,10 @@ ajv.addSchema(medicalDeviceTriageStartRequestSchema, medicalDeviceTriageStartReq
 ajv.addSchema(medicalDeviceTriageStartResponseSchema, medicalDeviceTriageStartResponseSchema.$id);
 ajv.addSchema(medicalDeviceTriageReplyRequestSchema, medicalDeviceTriageReplyRequestSchema.$id);
 ajv.addSchema(medicalDeviceTriageReplyResponseSchema, medicalDeviceTriageReplyResponseSchema.$id);
+ajv.addSchema(resourcesPilotViabilityStartRequestSchema, resourcesPilotViabilityStartRequestSchema.$id);
+ajv.addSchema(resourcesPilotViabilityStartResponseSchema, resourcesPilotViabilityStartResponseSchema.$id);
+ajv.addSchema(resourcesPilotViabilityReplyRequestSchema, resourcesPilotViabilityReplyRequestSchema.$id);
+ajv.addSchema(resourcesPilotViabilityReplyResponseSchema, resourcesPilotViabilityReplyResponseSchema.$id);
 ajv.addSchema(requestExecutionResponseSchema, requestExecutionResponseSchema.$id);
 ajv.addSchema(errorResponseSchema, errorResponseSchema.$id);
 
@@ -170,6 +185,11 @@ export const schemaIds = {
   proposalStartResponse: proposalStartResponseSchema.$id,
   regulatoryProfile: regulatoryProfileSchema.$id,
   requestExecutionResponse: requestExecutionResponseSchema.$id,
+  resourcesPilotViabilityReplyRequest: resourcesPilotViabilityReplyRequestSchema.$id,
+  resourcesPilotViabilityReplyResponse: resourcesPilotViabilityReplyResponseSchema.$id,
+  resourcesPilotViabilityStartRequest: resourcesPilotViabilityStartRequestSchema.$id,
+  resourcesPilotViabilityStartResponse: resourcesPilotViabilityStartResponseSchema.$id,
+  resourcesPilotViabilityTurn: resourcesPilotViabilityTurnSchema.$id,
   solutionDefinitionTurn: solutionDefinitionTurnSchema.$id,
   solutionReplyRequest: solutionReplyRequestSchema.$id,
   solutionReplyResponse: solutionReplyResponseSchema.$id,
@@ -207,6 +227,11 @@ export const schemaDocuments = {
   proposalStartResponse: proposalStartResponseSchema,
   regulatoryProfile: regulatoryProfileSchema,
   requestExecutionResponse: requestExecutionResponseSchema,
+  resourcesPilotViabilityReplyRequest: resourcesPilotViabilityReplyRequestSchema,
+  resourcesPilotViabilityReplyResponse: resourcesPilotViabilityReplyResponseSchema,
+  resourcesPilotViabilityStartRequest: resourcesPilotViabilityStartRequestSchema,
+  resourcesPilotViabilityStartResponse: resourcesPilotViabilityStartResponseSchema,
+  resourcesPilotViabilityTurn: resourcesPilotViabilityTurnSchema,
   solutionDefinitionTurn: solutionDefinitionTurnSchema,
   solutionReplyRequest: solutionReplyRequestSchema,
   solutionReplyResponse: solutionReplyResponseSchema,
@@ -311,6 +336,38 @@ export function assertMedicalDeviceTriageReplyResponse(payload: unknown): Medica
   );
 }
 
+export function assertResourcesPilotViabilityStartRequest(payload: unknown): ResourcesPilotViabilityStartRequest {
+  return assertSchema<ResourcesPilotViabilityStartRequest>(
+    schemaIds.resourcesPilotViabilityStartRequest,
+    payload,
+    'invalid_resources_pilot_viability_start_request',
+  );
+}
+
+export function assertResourcesPilotViabilityStartResponse(payload: unknown): ResourcesPilotViabilityStartResponse {
+  return assertSchema<ResourcesPilotViabilityStartResponse>(
+    schemaIds.resourcesPilotViabilityStartResponse,
+    payload,
+    'invalid_resources_pilot_viability_start_response',
+  );
+}
+
+export function assertResourcesPilotViabilityReplyRequest(payload: unknown): ResourcesPilotViabilityReplyRequest {
+  return assertSchema<ResourcesPilotViabilityReplyRequest>(
+    schemaIds.resourcesPilotViabilityReplyRequest,
+    payload,
+    'invalid_resources_pilot_viability_reply_request',
+  );
+}
+
+export function assertResourcesPilotViabilityReplyResponse(payload: unknown): ResourcesPilotViabilityReplyResponse {
+  return assertSchema<ResourcesPilotViabilityReplyResponse>(
+    schemaIds.resourcesPilotViabilityReplyResponse,
+    payload,
+    'invalid_resources_pilot_viability_reply_response',
+  );
+}
+
 export function assertStructuredBrief(payload: unknown): StructuredBrief {
   return assertSchema<StructuredBrief>(schemaIds.structuredBrief, payload, 'invalid_structured_brief');
 }
@@ -380,6 +437,14 @@ export function assertMedicalDeviceTriageTurn(payload: unknown): MedicalDeviceTr
     schemaIds.medicalDeviceTriageTurn,
     payload,
     'invalid_medical_device_triage_turn',
+  );
+}
+
+export function assertResourcesPilotViabilityTurn(payload: unknown): ResourcesPilotViabilityTurn {
+  return assertSchema<ResourcesPilotViabilityTurn>(
+    schemaIds.resourcesPilotViabilityTurn,
+    payload,
+    'invalid_resources_pilot_viability_turn',
   );
 }
 
