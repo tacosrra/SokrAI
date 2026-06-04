@@ -15,10 +15,11 @@ El objetivo de esta guia es que puedas:
 
 ## 1. Que levanta esta v1
 
-La v1 implementa dos carriles operativos Alpha:
+La v1 implementa dos carriles operativos Alpha y el primer modulo Clinic Pilot:
 
 - `problem_definition_agent`
 - `solution_definition_agent`
+- `data_ai_privacy_gap_agent` con perfil fijo `hospital_clinic_v1`
 
 Y un flujo end-to-end con estos componentes:
 
@@ -129,6 +130,9 @@ Estos son los paths importantes para arrancar y probar la v1:
 - `infra/n8n/workflows/solution_start_v1.json`
 - `infra/n8n/workflows/solution_reply_v1.json`
 - `infra/n8n/workflows/agent_solution_definition_v1.json`
+- `infra/n8n/workflows/data_ai_privacy_start_v1.json`
+- `infra/n8n/workflows/data_ai_privacy_reply_v1.json`
+- `infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json`
 - `contracts/schemas/`
 - `prompts/v1/`
 - `examples/proposal-start.payload.json`
@@ -405,7 +409,8 @@ Desde la UI puedes:
 2. ver el `structured_brief` generado,
 3. inspeccionar gaps, warnings y trazabilidad,
 4. responder la pregunta socratica actual,
-5. retomar sesiones anteriores con `session_id` o desde `localStorage`.
+5. iniciar y responder el modulo de datos/IA/privacidad tras cerrar solucion,
+6. retomar sesiones anteriores con `session_id` o desde `localStorage`.
 
 ### Frontend fuera de Docker
 
@@ -502,7 +507,7 @@ Usa las credenciales:
 - usuario: valor de `N8N_BASIC_AUTH_USER`
 - password: valor de `N8N_BASIC_AUTH_PASSWORD`
 
-### 11.2 Importar los seis workflows
+### 11.2 Importar los nueve workflows
 
 Importa estos archivos:
 
@@ -512,6 +517,9 @@ Importa estos archivos:
 - `infra/n8n/workflows/solution_start_v1.json`
 - `infra/n8n/workflows/solution_reply_v1.json`
 - `infra/n8n/workflows/agent_solution_definition_v1.json`
+- `infra/n8n/workflows/data_ai_privacy_start_v1.json`
+- `infra/n8n/workflows/data_ai_privacy_reply_v1.json`
+- `infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json`
 
 ### 11.3 Que hace cada workflow
 
@@ -547,6 +555,24 @@ Importa estos archivos:
   - valida y persiste el resultado
   - al completar, genera la seccion `solution` de forma deterministica
 
+- `data_ai_privacy_start_v1`
+  - recibe `session_id` cuando ya existen las secciones `problem` y `solution`
+  - usa el perfil regulatorio `hospital_clinic_v1`
+  - llama a la API interna del modulo de datos/IA/privacidad
+  - devuelve la primera pregunta del modulo o el cierre si ya queda suficientemente aclarado
+
+- `data_ai_privacy_reply_v1`
+  - recibe `session_id + answer`
+  - persiste la respuesta de usuario en el chat Alpha `data_ai_privacy`
+  - invoca la API interna del agente de gaps de datos/IA/privacidad
+  - devuelve el nuevo estado del modulo
+
+- `agent_data_ai_privacy_gap_v1`
+  - ejecuta un turno del agente de gaps de datos/IA/privacidad
+  - valida y persiste el resultado
+  - aplica las reglas de no dictamen antes de persistir salida sensible
+  - al completar, genera la seccion `data_ai_privacy` de forma deterministica
+
 ### 11.4 Publicar workflows
 
 Despues de importarlos, publicalos en n8n.
@@ -561,6 +587,8 @@ Si no estan publicados, el webhook no respondera como esperas.
 - `POST http://localhost:5678/webhook/proposal-reply-v1`
 - `POST http://localhost:5678/webhook/solution-start-v1`
 - `POST http://localhost:5678/webhook/solution-reply-v1`
+- `POST http://localhost:5678/webhook/data-ai-privacy-start-v1`
+- `POST http://localhost:5678/webhook/data-ai-privacy-reply-v1`
 
 ### API de inspeccion
 
@@ -577,9 +605,17 @@ Estas rutas existen, pero normalmente las usa n8n:
 - `POST /internal/sessions/solution-start`
 - `POST /internal/sessions/solution-reply`
 - `POST /internal/agents/solution-definition/run`
+- `POST /internal/sessions/data-ai-privacy-start`
+- `POST /internal/sessions/data-ai-privacy-reply`
 - `POST /internal/reports/basic-alpha/compose`
 - `GET /api/v1/requests/:requestId`
 - `POST /api/v1/requests/:requestId/recover`
+
+### Webhooks internos reutilizables de n8n
+
+- `POST http://localhost:5678/webhook/agent-problem-definition-v1`
+- `POST http://localhost:5678/webhook/agent-solution-definition-v1`
+- `POST http://localhost:5678/webhook/agent-data-ai-privacy-gap-v1`
 
 Todas las rutas internas exigen:
 
@@ -723,7 +759,63 @@ curl -sS \
 Repite hasta `agent_status = "done"`. Al completar, `GET /api/v1/sessions/:sessionId`
 debe incluir una fila en `generated_sections` con `section_kind = "solution"`.
 
-### 13.6 Componer y leer el reporte basico Alpha
+### 13.6 Iniciar el modulo datos/IA/privacidad PR9
+
+Cuando existan las secciones `problem` y `solution`, inicia el modulo Clinic
+Pilot de datos/IA/privacidad con el perfil fijo `hospital_clinic_v1`:
+
+```bash
+curl -sS \
+  -X POST \
+  http://localhost:5678/webhook/data-ai-privacy-start-v1 \
+  -H 'Content-Type: application/json' \
+  --data '{"session_id":"replace-with-session-id","profile_id":"hospital_clinic_v1"}'
+```
+
+Respuesta esperada:
+
+```json
+{
+  "session_id": "uuid",
+  "stage": "data_ai_privacy",
+  "profile_id": "hospital_clinic_v1",
+  "agent_status": "continue|done|blocked",
+  "updated_data_ai_privacy": {
+    "...": "..."
+  },
+  "diagnosis": [
+    "..."
+  ],
+  "next_question": "¿...?",
+  "completion_reason": "",
+  "warnings": [
+    "requires competent human review"
+  ]
+}
+```
+
+### 13.7 Responder turnos de datos/IA/privacidad
+
+Llama a `data-ai-privacy-reply-v1` con:
+
+```bash
+curl -sS \
+  -X POST \
+  http://localhost:5678/webhook/data-ai-privacy-reply-v1 \
+  -H 'Content-Type: application/json' \
+  --data '{"session_id":"replace-with-session-id","answer":"Los datos vienen de admision y notas de triaje; privacidad, ciberseguridad y regulatorio revisan antes del piloto."}'
+```
+
+Repite hasta `agent_status = "done"`. Al completar, `GET
+/api/v1/sessions/:sessionId` debe incluir:
+
+- una fila en `generated_sections` con `section_kind = "data_ai_privacy"`
+- `profile_id = "hospital_clinic_v1"` en las respuestas del modulo
+- warnings con `requires competent human review`
+- ningun dictamen, aprobacion/rechazo, cumplimiento definitivo ni
+  clasificacion definitiva de producto sanitario en la seccion generada
+
+### 13.8 Componer y leer el reporte basico Alpha
 
 Cuando existan las secciones `problem` y `solution`, compón el reporte con la
 API interna:
@@ -910,14 +1002,15 @@ curl -i http://localhost:3001/healthz
 Luego:
 
 1. abre `http://localhost:5678`
-2. importa y publica los 6 workflows
+2. importa y publica los 9 workflows
 3. abre `http://localhost:3000`
 4. crea una propuesta nueva desde la UI
 5. guarda `session_id`
 6. responde el siguiente turno desde la UI o por webhook
 7. cuando el problema quede completo, inicia y responde el carril de solucion
-8. consulta `GET /api/v1/sessions/:sessionId`
-9. ejecuta `bash scripts/smoke-core.sh`
+8. cuando la solucion quede completa, inicia y responde el modulo datos/IA/privacidad
+9. consulta `GET /api/v1/sessions/:sessionId`
+10. ejecuta `bash scripts/smoke-core.sh`
 
 ## 18. Prueba minima esperada de negocio
 
@@ -940,6 +1033,11 @@ Una prueba manual minima satisfactoria de la v1 es:
 5. tras uno o varios turnos, el carril llega a:
    - `agent_status = "done"`
    - `next_question = ""`
+6. inicias y completas `solution_definition_agent`
+7. inicias `data_ai_privacy_gap_agent` con `hospital_clinic_v1`
+8. confirmas que la seccion `data_ai_privacy` conserva warnings de revision
+   humana competente y no contiene dictamen, aprobacion/rechazo, cumplimiento
+   definitivo ni clasificacion definitiva de producto sanitario
 
 ## 19. Pruebas de depuracion utiles
 

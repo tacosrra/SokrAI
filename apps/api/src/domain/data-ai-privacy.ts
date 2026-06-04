@@ -27,19 +27,35 @@ const MAX_OPEN_UNCERTAINTIES_FOR_COMPLETION = 2;
 
 const FORBIDDEN_OUTPUT_PATTERNS = [
   /\bdictamen\b/i,
+  /\bopinion\s+(legal|regulatoria|clinica|de privacidad)\b/i,
   /\bcompliant\b/i,
   /\bnon[-\s]?compliant\b/i,
   /\bcumple\b/i,
   /\bincumple\b/i,
+  /\bcumplimiento\s+definitivo\b/i,
+  /\bincumplimiento\s+definitivo\b/i,
+  /\bconforme\b/i,
+  /\bno\s+conforme\b/i,
   /\bapproved\b/i,
   /\brejected\b/i,
   /\bapproval\b/i,
   /\brejection\b/i,
+  /\baprobado\b/i,
+  /\baprobada\b/i,
+  /\brechazado\b/i,
+  /\brechazada\b/i,
   /\bscore\b/i,
+  /\bscoring\b/i,
+  /\bpuntuacion\b/i,
   /\branking\b/i,
+  /\bpriorizacion\b/i,
   /\bmedical device class\b/i,
-  /\bclass\s+(i|ii|iii)\b/i,
+  /\bclass\s+(i|ii|iii|iia|iib)\b/i,
+  /\bclase\s+(i|ii|iii|iia|iib)\b/i,
   /\bmdr classified\b/i,
+  /\bclasificad[oa]\s+como\s+(producto sanitario|medical device)\b/i,
+  /\b(producto sanitario|medical device)\s+clase\s+(i|ii|iii|iia|iib)\b/i,
+  /\bno\s+es\s+(producto sanitario|medical device)\b/i,
   /\bclassified as a medical device\b/i,
   /\bnot a medical device\b/i,
   /\blegal opinion\b/i,
@@ -64,8 +80,17 @@ function dedupe(items: string[]): string[] {
   return Array.from(new Set(items.map((item) => item.trim()).filter(Boolean)));
 }
 
+function normalizeForSensitiveSearch(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase();
+}
+
 function hasForbiddenOutput(value: string): boolean {
-  return FORBIDDEN_OUTPUT_PATTERNS.some((pattern) => pattern.test(value));
+  const normalized = normalizeForSensitiveSearch(value);
+
+  return FORBIDDEN_OUTPUT_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
 function scrubForbiddenOutput(value: string): { value: string; changed: boolean } {
@@ -272,6 +297,9 @@ export function evaluateDataAiPrivacyCompletion(state: DataAiPrivacyState): bool
   );
 }
 
+/**
+ * Selects at most three unresolved gap refs for the next persisted question.
+ */
 export function selectDataAiPrivacyGapRefs(gaps: AlphaGap[], state: DataAiPrivacyState): string[] {
   const missing = computeDataAiPrivacyMissingInformation(state);
 
@@ -291,6 +319,9 @@ export function selectDataAiPrivacyGapRefs(gaps: AlphaGap[], state: DataAiPrivac
     .map((gap) => gap.gap_id);
 }
 
+/**
+ * Keeps the persistence-facing gap queue bounded to unresolved data/AI/privacy gaps.
+ */
 export function classifyDataAiPrivacyGapStatuses(
   gaps: AlphaGap[],
   state: DataAiPrivacyState,
@@ -346,6 +377,9 @@ export function buildDataAiPrivacySectionSourceRefs(
   return Array.from(sourcesById.values());
 }
 
+/**
+ * Renders only deterministic, review-bound section text after model output was scrubbed.
+ */
 export function renderDataAiPrivacySection(
   state: DataAiPrivacyState,
   params: { sourceCount: number; gapCount: number },
@@ -409,6 +443,9 @@ export function containsForbiddenDataAiPrivacyOutput(value: unknown): boolean {
   return hasForbiddenOutput(JSON.stringify(value));
 }
 
+/**
+ * Last code-owned guardrail before sensitive data/AI/privacy output is persisted.
+ */
 export function enforceDataAiPrivacyTurnGuardrails(
   turn: DataAiPrivacyTurn,
   latestAnswer?: string,

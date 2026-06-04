@@ -3,7 +3,13 @@ ALTER TABLE agent_runs
 
 ALTER TABLE agent_runs
     ADD CONSTRAINT agent_runs_run_purpose_check
-    CHECK (run_purpose IN ('brief_extraction', 'problem_definition', 'solution_definition', 'json_repair'));
+    CHECK (run_purpose IN (
+        'brief_extraction',
+        'problem_definition',
+        'solution_definition',
+        'data_ai_privacy_gap',
+        'json_repair'
+    ));
 
 ALTER TABLE chat_turns
     ADD COLUMN IF NOT EXISTS answer_request_id TEXT;

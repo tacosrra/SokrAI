@@ -78,6 +78,32 @@ describe('data AI privacy domain rules', () => {
     expect(serialized).toContain(DATA_AI_PRIVACY_REVIEW_WARNING);
   });
 
+  it('replaces Spanish approval, compliance and classification wording before persistence', () => {
+    const turn: DataAiPrivacyTurn = {
+      agent_status: 'done',
+      diagnosis: [
+        'La propuesta queda aprobada y conforme.',
+        'Clasificado como producto sanitario clase IIb.',
+      ],
+      updated_data_ai_privacy: {
+        ...completeState,
+        regulatory_context: 'Cumplimiento definitivo: no conforme y rechazado por privacidad.',
+        human_review_plan: 'El comite indica que no es producto sanitario.',
+      },
+      next_question: '',
+      completion_reason: 'done',
+    };
+
+    const guarded = enforceDataAiPrivacyTurnGuardrails(turn);
+    const serialized = JSON.stringify(guarded.turn);
+
+    expect(guarded.turn.agent_status).toBe('continue');
+    expect(serialized).not.toMatch(
+      /aprobada|aprobado|rechazado|rechazada|conforme|no conforme|cumplimiento definitivo|clasificado como producto sanitario|clase IIb|no es producto sanitario/i,
+    );
+    expect(serialized).toContain(DATA_AI_PRIVACY_REVIEW_WARNING);
+  });
+
   it('forces vague answers back to continue', () => {
     const turn: DataAiPrivacyTurn = {
       agent_status: 'done',

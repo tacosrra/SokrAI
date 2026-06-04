@@ -701,5 +701,38 @@ async function recoverRequestExecution(params: {
     return params.sessionStore.getRequestExecutionStatus(params.requestId);
   }
 
+  if (currentStatus.request_kind === 'data_ai_privacy_start' && currentStatus.session_id) {
+    try {
+      await params.dataAiPrivacyService.execute({
+        context: {
+          requestId: params.requestId,
+          workflowVersion: 'request_recovery_v1',
+        },
+        sessionId: currentStatus.session_id,
+        trigger: 'start',
+      });
+    } catch (error) {
+      const refreshedStatus = await params.sessionStore.getRequestExecutionStatus(params.requestId);
+
+      if (refreshedStatus.status !== 'pending') {
+        return refreshedStatus;
+      }
+
+      if (
+        error instanceof AppError &&
+        (
+          error.errorCode === 'data_ai_privacy_start_already_initialized' ||
+          error.errorCode === 'data_ai_privacy_start_already_completed'
+        )
+      ) {
+        return refreshedStatus;
+      }
+
+      throw error;
+    }
+
+    return params.sessionStore.getRequestExecutionStatus(params.requestId);
+  }
+
   return currentStatus;
 }

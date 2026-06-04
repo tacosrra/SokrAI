@@ -2,11 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { FastifyInstance } from 'fastify';
 
+import type { Database } from '../../apps/api/src/repositories/database';
 import { QueueLanguageModelClient } from '../helpers/fake-language-model-client';
 import { buildTestApp, readFixture } from '../helpers/test-environment';
 
 describe('data AI privacy flow integration', () => {
   let app: FastifyInstance | undefined;
+  let database: Database | undefined;
 
   afterEach(async () => {
     if (app) {
@@ -14,6 +16,7 @@ describe('data AI privacy flow integration', () => {
       app = undefined;
     }
 
+    database = undefined;
     vi.restoreAllMocks();
   });
 
@@ -82,6 +85,121 @@ describe('data AI privacy flow integration', () => {
 
     expect(dataStart.statusCode).toBe(409);
     expect(dataStart.body.error_code).toBe('solution_section_required_for_data_ai_privacy');
+  });
+
+  it('replays data AI privacy reply request ids without duplicating answer side effects', async () => {
+    ({ app, database } = await buildTestApp(await createDataAiPrivacyFlowModel()));
+
+    const sessionId = await completeAlphaFlow(app);
+    await dataAiPrivacyStartFlow(app, 'req-data-retry-start', sessionId);
+
+    const answer =
+      'Los datos vienen de admision y notas de triaje; privacidad y ciberseguridad revisan antes del piloto.';
+    const first = await dataAiPrivacyReplyFlow(app, 'req-data-retry', sessionId, answer);
+    const replay = await dataAiPrivacyReplyFlow(app, 'req-data-retry', sessionId, answer);
+
+    expect(first.statusCode).toBe(200);
+    expect(replay.statusCode).toBe(200);
+    expect(replay.body.run_id).toBe(first.body.run_id);
+
+    const counts = await database!.query<{
+      answer_sources: string;
+      data_sections: string;
+      request_runs: string;
+      answer_resolved_events: string;
+    }>(
+      [
+        'SELECT',
+        '  (SELECT COUNT(*) FROM proposal_sources ps',
+        '   JOIN proposals p ON p.id = ps.proposal_id',
+        '   WHERE p.session_id = $1 AND ps.source_kind = \'user_answer\' AND ps.metadata_json->>\'request_id\' = $2) AS answer_sources,',
+        '  (SELECT COUNT(*) FROM generated_sections gs',
+        '   JOIN proposals p ON p.id = gs.proposal_id',
+        '   WHERE p.session_id = $1 AND gs.section_kind = \'data_ai_privacy\') AS data_sections,',
+        '  (SELECT COUNT(*) FROM agent_runs ar',
+        '   WHERE ar.session_id = $1 AND ar.request_id = $2 AND ar.run_purpose = \'data_ai_privacy_gap\') AS request_runs,',
+        '  (SELECT COUNT(*) FROM audit_events ae',
+        '   JOIN proposals p ON p.id = ae.proposal_id',
+        '   WHERE p.session_id = $1 AND ae.request_id = $2 AND ae.event_type = \'data_ai_privacy_answer_resolved\') AS answer_resolved_events',
+      ].join(' '),
+      [sessionId, 'req-data-retry'],
+    );
+
+    expect(Number(counts.rows[0].answer_sources)).toBe(1);
+    expect(Number(counts.rows[0].data_sections)).toBe(1);
+    expect(Number(counts.rows[0].request_runs)).toBe(1);
+    expect(Number(counts.rows[0].answer_resolved_events)).toBe(1);
+  });
+
+  it('persists data AI privacy repair failure and marks the active turn failed', async () => {
+    const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
+    const doneProblemTurn = await readFixture('expected', 'problem-definition.done.json');
+    const continueSolutionTurn = await readFixture('expected', 'solution-definition.continue.json');
+    const doneSolutionTurn = await readFixture('expected', 'solution-definition.done.json');
+    const continueDataTurn = await readFixture('expected', 'data-ai-privacy.continue.json');
+    const startAgentTurn = {
+      agent_status: 'continue',
+      diagnosis: ['Falta identificar con precision quien responde hoy por el problema'],
+      updated_problem_definition: {
+        problem_owner: '',
+        problem_statement: structuredBrief.problem_statement,
+        evidence_of_problem: structuredBrief.evidence_of_problem,
+        scope: structuredBrief.scope,
+        current_alternatives: structuredBrief.current_alternatives,
+        assumptions: structuredBrief.assumptions,
+        ambiguities_remaining: structuredBrief.ambiguities,
+      },
+      next_question: 'Que equipo o responsable responde hoy por este problema en urgencias?',
+      completion_reason: '',
+    };
+    ({ app, database } = await buildTestApp(new QueueLanguageModelClient([
+      JSON.stringify(structuredBrief),
+      JSON.stringify(startAgentTurn),
+      JSON.stringify(doneProblemTurn),
+      JSON.stringify(continueSolutionTurn),
+      JSON.stringify(doneSolutionTurn),
+      JSON.stringify(continueDataTurn),
+      'not json',
+      'not json',
+    ])));
+
+    const sessionId = await completeAlphaFlow(app);
+    await dataAiPrivacyStartFlow(app, 'req-data-error-start', sessionId);
+    const response = await dataAiPrivacyReplyFlow(
+      app,
+      'req-data-error-reply',
+      sessionId,
+      'No lo se todavia, debe revisarlo privacidad.',
+    );
+    const persisted = await database!.query<{
+      run_status: string;
+      repair_attempted: boolean;
+      chat_status: string;
+      failed_turns: string;
+    }>(
+      [
+        'SELECT',
+        '  ar.status AS run_status,',
+        '  ar.repair_attempted AS repair_attempted,',
+        '  mc.chat_status AS chat_status,',
+        '  (SELECT COUNT(*) FROM chat_turns ct',
+        '   WHERE ct.proposal_id = p.id AND ct.module = \'data_ai_privacy\' AND ct.turn_status = \'failed\') AS failed_turns',
+        'FROM proposals p',
+        'JOIN agent_runs ar ON ar.session_id = p.session_id AND ar.request_id = $2',
+        'JOIN module_chats mc ON mc.proposal_id = p.id AND mc.module = \'data_ai_privacy\'',
+        'WHERE p.session_id = $1',
+      ].join(' '),
+      [sessionId, 'req-data-error-reply'],
+    );
+
+    expect(response.statusCode).toBe(502);
+    expect(response.body.error_code).toBe('invalid_model_json_after_repair');
+    expect(persisted.rows[0]).toMatchObject({
+      run_status: 'repair_failed',
+      repair_attempted: true,
+      chat_status: 'failed',
+    });
+    expect(Number(persisted.rows[0].failed_turns)).toBe(1);
   });
 });
 

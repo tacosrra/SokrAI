@@ -133,6 +133,16 @@ function formatSessionDate(value: string) {
   });
 }
 
+function hasDataAiPrivacyRecoveryArtifacts(audit: SessionAuditView): boolean {
+  const presentation = deriveSessionPresentation(audit);
+
+  return Boolean(
+    presentation.dataAiPrivacyModuleChat ||
+      presentation.currentDataAiPrivacyQuestion ||
+      presentation.latestDataAiPrivacySection,
+  );
+}
+
 function ModeCard({
   activeMode,
   callout,
@@ -250,8 +260,8 @@ export function App() {
 
   async function loadSession(
     sessionId: string,
-    options?: { successMessage?: string; skipBannerOnStart?: boolean },
-  ) {
+    options?: { successMessage?: string; skipBannerOnStart?: boolean; suppressSuccessBanner?: boolean },
+  ): Promise<SessionAuditView | null> {
     if (!options?.skipBannerOnStart) {
       setBanner({
         tone: 'info',
@@ -275,18 +285,24 @@ export function App() {
         setActiveReport(null);
       }
 
-      setBanner({
-        tone: 'success',
-        text:
-          options?.successMessage ??
-          `Sesión ${audit.session.id} cargada con ${audit.turns.length} turnos persistidos.`,
-      });
+      if (!options?.suppressSuccessBanner) {
+        setBanner({
+          tone: 'success',
+          text:
+            options?.successMessage ??
+            `Sesión ${audit.session.id} cargada con ${audit.turns.length} turnos persistidos.`,
+        });
+      }
+
+      return audit;
     } catch (error) {
       setActiveReport(null);
       setBanner({
         tone: 'error',
         text: mapApiError(error),
       });
+
+      return null;
     } finally {
       setIsLoadingSession(false);
     }
@@ -706,11 +722,18 @@ export function App() {
           return;
         } catch (recoveryError) {
           try {
-            await loadSession(activeAudit.session.id, {
-              successMessage: 'Se recupero el estado de la sesion directamente desde la API tras expirar el inicio de datos/IA/privacidad.',
+            const recoveredAudit = await loadSession(activeAudit.session.id, {
               skipBannerOnStart: true,
+              suppressSuccessBanner: true,
             });
-            return;
+
+            if (recoveredAudit && hasDataAiPrivacyRecoveryArtifacts(recoveredAudit)) {
+              setBanner({
+                tone: 'success',
+                text: 'Se recupero el estado de datos/IA/privacidad directamente desde la API tras expirar el inicio.',
+              });
+              return;
+            }
           } catch {
             // Preserve the original recovery error when the direct session refresh also fails.
           }
@@ -1029,7 +1052,9 @@ export function App() {
               defaultSessionId={defaultSessionId}
               isLoading={isLoadingSession}
               recentSessions={recentSessions}
-              onLoad={loadSession}
+              onLoad={async (sessionId) => {
+                await loadSession(sessionId);
+              }}
             />
           )}
         </section>
