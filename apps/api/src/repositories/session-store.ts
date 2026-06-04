@@ -72,7 +72,9 @@ export interface AgentRunRecord {
     | 'brief_extraction'
     | 'problem_definition'
     | 'solution_definition'
+    | 'basic_report_compose'
     | 'data_ai_privacy_gap'
+    | 'medical_device_triage'
     | 'json_repair';
   agent_name: string;
   prompt_name: string;
@@ -148,6 +150,8 @@ export interface RequestExecutionLookup {
     | 'solution_reply'
     | 'data_ai_privacy_start'
     | 'data_ai_privacy_reply'
+    | 'medical_device_triage_start'
+    | 'medical_device_triage_reply'
     | 'unknown';
   status: 'pending' | 'completed' | 'failed' | 'not_found';
   session_id?: string;
@@ -983,6 +987,53 @@ export class SessionStore {
       return toRequestExecutionFromRun(requestId, 'data_ai_privacy_start', dataAiPrivacyRun);
     }
 
+    const medicalDeviceTriageReplyTurn = await this.findAlphaTurnByAnswerRequestId(
+      requestId,
+      'medical_device_triage',
+    );
+
+    if (medicalDeviceTriageReplyTurn) {
+      const medicalDeviceTriageRun = await this.findLatestAgentRunStatus(requestId, 'medical_device_triage');
+
+      if (medicalDeviceTriageRun) {
+        return toRequestExecutionFromRun(requestId, 'medical_device_triage_reply', medicalDeviceTriageRun);
+      }
+
+      if (medicalDeviceTriageReplyTurn.turn_status === 'resolved') {
+        return {
+          request_id: requestId,
+          request_kind: 'medical_device_triage_reply',
+          status: 'completed',
+          session_id: medicalDeviceTriageReplyTurn.proposal_id,
+        };
+      }
+
+      if (medicalDeviceTriageReplyTurn.turn_status === 'failed') {
+        return {
+          request_id: requestId,
+          request_kind: 'medical_device_triage_reply',
+          status: 'failed',
+          session_id: medicalDeviceTriageReplyTurn.proposal_id,
+          error_code: 'medical_device_triage_reply_processing_failed',
+          safe_message: 'The medical-device triage reply was persisted but the turn failed before completing',
+          retryable: true,
+        };
+      }
+
+      return {
+        request_id: requestId,
+        request_kind: 'medical_device_triage_reply',
+        status: 'pending',
+        session_id: medicalDeviceTriageReplyTurn.proposal_id,
+      };
+    }
+
+    const medicalDeviceTriageRun = await this.findLatestAgentRunStatus(requestId, 'medical_device_triage');
+
+    if (medicalDeviceTriageRun) {
+      return toRequestExecutionFromRun(requestId, 'medical_device_triage_start', medicalDeviceTriageRun);
+    }
+
     const solutionDefinitionRun = await this.findLatestAgentRunStatus(requestId, 'solution_definition');
 
     if (solutionDefinitionRun) {
@@ -1016,7 +1067,7 @@ export class SessionStore {
 
   private async findAlphaTurnByAnswerRequestId(
     requestId: string,
-    module: 'problem' | 'solution' | 'data_ai_privacy',
+    module: 'problem' | 'solution' | 'data_ai_privacy' | 'medical_device_triage',
   ): Promise<AlphaChatTurnStatusLookup | null> {
     const result = await this.database.query<AlphaChatTurnStatusLookup>(
       [

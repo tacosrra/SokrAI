@@ -5,6 +5,11 @@ import type {
   DataAiPrivacyStartRequest,
   DataAiPrivacyStartResponse,
   DataAiPrivacyState,
+  MedicalDeviceTriageReplyRequest,
+  MedicalDeviceTriageReplyResponse,
+  MedicalDeviceTriageStartRequest,
+  MedicalDeviceTriageStartResponse,
+  MedicalDeviceTriageState,
   ProblemDefinitionState,
   ProposalReplyRequest,
   ProposalReplyResponse,
@@ -67,6 +72,16 @@ export interface DataAiPrivacyReplyContextCommand {
   payload: DataAiPrivacyReplyRequest;
 }
 
+export interface MedicalDeviceTriageStartContextCommand {
+  context: WorkflowContext;
+  payload: MedicalDeviceTriageStartRequest;
+}
+
+export interface MedicalDeviceTriageReplyContextCommand {
+  context: WorkflowContext;
+  payload: MedicalDeviceTriageReplyRequest;
+}
+
 export interface RunProblemDefinitionCommand {
   context: WorkflowContext;
   sessionId: string;
@@ -80,6 +95,12 @@ export interface RunSolutionDefinitionCommand {
 }
 
 export interface RunDataAiPrivacyCommand {
+  context: WorkflowContext;
+  sessionId: string;
+  trigger: 'start' | 'reply';
+}
+
+export interface RunMedicalDeviceTriageCommand {
   context: WorkflowContext;
   sessionId: string;
   trigger: 'start' | 'reply';
@@ -120,3 +141,15 @@ export interface DataAiPrivacyAgentResponseState {
 }
 
 export type DataAiPrivacyStartServiceResponse = DataAiPrivacyStartResponse;
+
+export interface MedicalDeviceTriageRunResponse extends MedicalDeviceTriageReplyResponse {
+  run_id: string;
+}
+
+export interface MedicalDeviceTriageAgentResponseState {
+  updatedMedicalDeviceTriage: MedicalDeviceTriageState;
+  detectedGaps: string[];
+  response: MedicalDeviceTriageReplyResponse;
+}
+
+export type MedicalDeviceTriageStartServiceResponse = MedicalDeviceTriageStartResponse;

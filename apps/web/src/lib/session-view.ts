@@ -58,14 +58,17 @@ export interface SessionPresentation {
   problemModuleChat: ModuleChat | null;
   solutionModuleChat: ModuleChat | null;
   dataAiPrivacyModuleChat: ModuleChat | null;
+  medicalDeviceTriageModuleChat: ModuleChat | null;
   latestProblemSection: GeneratedSection | null;
   latestSolutionSection: GeneratedSection | null;
   latestDataAiPrivacySection: GeneratedSection | null;
+  latestMedicalDeviceTriageSection: GeneratedSection | null;
   detectedGaps: string[];
   latestDiagnosis: string[];
   currentQuestion: string;
   currentSolutionQuestion: string;
   currentDataAiPrivacyQuestion: string;
+  currentMedicalDeviceTriageQuestion: string;
   completionReason: string;
   warnings: string[];
   turns: ConversationTurn[];
@@ -265,11 +268,16 @@ export function deriveSessionPresentation(audit: SessionAuditView): SessionPrese
   const problemModuleChat = audit.module_chats.find((chat) => chat.module === 'problem') ?? null;
   const solutionModuleChat = audit.module_chats.find((chat) => chat.module === 'solution') ?? null;
   const dataAiPrivacyModuleChat = audit.module_chats.find((chat) => chat.module === 'data_ai_privacy') ?? null;
+  const medicalDeviceTriageModuleChat =
+    audit.module_chats.find((chat) => chat.module === 'medical_device_triage') ?? null;
   const activeSolutionTurn = solutionModuleChat?.turns.find((turn) =>
     turn.turn_id === solutionModuleChat.active_turn_id,
   ) ?? null;
   const activeDataAiPrivacyTurn = dataAiPrivacyModuleChat?.turns.find((turn) =>
     turn.turn_id === dataAiPrivacyModuleChat.active_turn_id,
+  ) ?? null;
+  const activeMedicalDeviceTriageTurn = medicalDeviceTriageModuleChat?.turns.find((turn) =>
+    turn.turn_id === medicalDeviceTriageModuleChat.active_turn_id,
   ) ?? null;
   const latestProblemSection = [...audit.generated_sections]
     .reverse()
@@ -289,9 +297,16 @@ export function deriveSessionPresentation(audit: SessionAuditView): SessionPrese
       section.section_kind === 'data_ai_privacy' &&
       ['draft', 'generated', 'accepted', 'needs_revision'].includes(section.section_status),
     ) ?? null;
+  const latestMedicalDeviceTriageSection = [...audit.generated_sections]
+    .reverse()
+    .find((section) =>
+      section.section_kind === 'medical_device_triage' &&
+      ['draft', 'generated', 'accepted', 'needs_revision'].includes(section.section_status),
+    ) ?? null;
   const currentProblemQuestion = openTurn?.question_text ?? latestSnapshot?.next_question_text ?? '';
   const currentSolutionQuestion = activeSolutionTurn?.question_text ?? '';
   const currentDataAiPrivacyQuestion = activeDataAiPrivacyTurn?.question_text ?? '';
+  const currentMedicalDeviceTriageQuestion = activeMedicalDeviceTriageTurn?.question_text ?? '';
 
   return {
     sessionId: audit.session.id,
@@ -306,16 +321,23 @@ export function deriveSessionPresentation(audit: SessionAuditView): SessionPrese
     problemModuleChat,
     solutionModuleChat,
     dataAiPrivacyModuleChat,
+    medicalDeviceTriageModuleChat,
     latestProblemSection,
     latestSolutionSection,
     latestDataAiPrivacySection,
+    latestMedicalDeviceTriageSection,
     detectedGaps: gaps.length > 0
       ? gaps.map((gap) => `${gap.field}: ${gap.description}`)
       : latestSnapshot?.detected_gaps_json ?? [],
     latestDiagnosis: latestResolvedTurn?.diagnosis_json ?? [],
-    currentQuestion: currentDataAiPrivacyQuestion || currentSolutionQuestion || currentProblemQuestion,
+    currentQuestion:
+      currentMedicalDeviceTriageQuestion ||
+      currentDataAiPrivacyQuestion ||
+      currentSolutionQuestion ||
+      currentProblemQuestion,
     currentSolutionQuestion,
     currentDataAiPrivacyQuestion,
+    currentMedicalDeviceTriageQuestion,
     completionReason:
       latestResolvedTurn?.completion_reason ??
       latestSnapshot?.completion_reason ??

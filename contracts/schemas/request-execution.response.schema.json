@@ -18,6 +18,8 @@
         "solution_reply",
         "data_ai_privacy_start",
         "data_ai_privacy_reply",
+        "medical_device_triage_start",
+        "medical_device_triage_reply",
         "unknown"
       ]
     },

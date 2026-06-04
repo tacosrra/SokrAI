@@ -4,6 +4,8 @@ import {
   parseBasicAlphaReport,
   parseDataAiPrivacyReplyResponse,
   parseDataAiPrivacyStartResponse,
+  parseMedicalDeviceTriageReplyResponse,
+  parseMedicalDeviceTriageStartResponse,
   parseProposalReplyResponse,
   parseProposalStartResponse,
   parseRequestExecutionResponse,
@@ -179,6 +181,18 @@ const validDataAiPrivacyState = {
   requires_competent_human_review: true,
 };
 
+const validMedicalDeviceTriageState = {
+  triage_status: 'uncertain',
+  activation_signals: ['clinical decision support'],
+  uncertainties: ['Intended-use boundary requires competent human review.'],
+  intended_use_claims: [],
+  clinical_decision_role: '',
+  evidence_needed: ['Clarify whether the assistant influences clinical triage.'],
+  human_review_plan: 'requires competent human review',
+  needs_human_review: true,
+  requires_competent_human_review: true,
+};
+
 function createAuditView(runs: unknown[] = []) {
   return {
     session: {
@@ -337,6 +351,70 @@ describe('parseDataAiPrivacyReplyResponse', () => {
 
     expect(response.agent_status).toBe('done');
     expect(response.completion_reason).toContain('human review');
+  });
+});
+
+describe('parseMedicalDeviceTriageStartResponse', () => {
+  it('accepts PR10 start responses and unwraps workflow proxy payloads', () => {
+    const response = parseMedicalDeviceTriageStartResponse({
+      body: JSON.stringify({
+        session_id: 'session-1',
+        stage: 'medical_device_triage',
+        profile_id: 'hospital_clinic_v1',
+        activation_result: 'uncertain',
+        agent_status: 'continue',
+        updated_medical_device_triage: validMedicalDeviceTriageState,
+        diagnosis: ['Medical-device signals or uncertainty are present.'],
+        next_question: 'Que uso previsto deberia revisarse?',
+        completion_reason: '',
+        warnings: ['requires competent human review'],
+      }),
+    });
+
+    expect(response.stage).toBe('medical_device_triage');
+    expect(response.activation_result).toBe('uncertain');
+    expect(response.updated_medical_device_triage.requires_competent_human_review).toBe(true);
+  });
+
+  it('rejects malformed PR10 start responses', () => {
+    expect(() =>
+      parseMedicalDeviceTriageStartResponse({
+        session_id: 'session-1',
+        stage: 'medical_device_triage',
+        profile_id: 'hospital_clinic_v1',
+        activation_result: 'Class IIa',
+        agent_status: 'continue',
+        updated_medical_device_triage: validMedicalDeviceTriageState,
+        diagnosis: [],
+        next_question: 'Que falta?',
+        warnings: [],
+      }),
+    ).toThrow(/activation_result/);
+  });
+});
+
+describe('parseMedicalDeviceTriageReplyResponse', () => {
+  it('accepts PR10 reply responses', () => {
+    const response = parseMedicalDeviceTriageReplyResponse({
+      session_id: 'session-1',
+      stage: 'medical_device_triage',
+      profile_id: 'hospital_clinic_v1',
+      activation_result: 'applicable',
+      agent_status: 'done',
+      updated_medical_device_triage: {
+        ...validMedicalDeviceTriageState,
+        triage_status: 'applicable',
+        intended_use_claims: ['The assistant drafts triage suggestions for staff review.'],
+        clinical_decision_role: 'The assistant may influence triage prioritization before staff review.',
+      },
+      diagnosis: ['Gaps are sufficiently clear for review.'],
+      next_question: '',
+      completion_reason: 'medical-device triage gaps sufficiently clarified for human review',
+      warnings: ['requires competent human review'],
+    });
+
+    expect(response.agent_status).toBe('done');
+    expect(response.updated_medical_device_triage.triage_status).toBe('applicable');
   });
 });
 

@@ -16,7 +16,7 @@ Guia detallada de arranque y prueba:
 - Persistencia en `PostgreSQL`
 - Interfaz operativa en `apps/web` para demo local y uso humano
 - Carriles operativos Alpha: `problem_definition_agent` y `solution_definition_agent`
-- Modulo Clinic Pilot: `data_ai_privacy_gap_agent` con perfil fijo `hospital_clinic_v1`
+- Modulos Clinic Pilot: `data_ai_privacy_gap_agent` y `medical_device_triage_agent` con perfil fijo `hospital_clinic_v1`
 - Una pregunta principal por turno
 - Persistencia de sesiones, turnos, snapshots, agent runs y eventos
 - Reanudacion por `session_id`
@@ -126,7 +126,8 @@ Durante `proposal_start_v1`, la API genera gaps iniciales de forma determinista 
 Cada `AlphaGap` persistido incluye:
 
 - `module`, limitado a `problem` o `solution`
-- PR9 amplia `module` con `data_ai_privacy` solo para gaps sensibles tras la seccion de solucion
+- PR9 amplia `module` con `data_ai_privacy` para gaps sensibles tras la seccion de solucion
+- PR10 amplia `module` con `medical_device_triage` para gaps, preguntas e incertidumbre no definitivos tras datos/IA/privacidad
 - `gap_kind` y `gap_status`
 - `origin`, para distinguir campo estructurado, `missing_information`, ambiguedad, fuente interna o regla del sistema
 - `absence`, con campos revisados y razon cuando falta informacion
@@ -155,6 +156,18 @@ para evitar decisiones definitivas, aprobacion/rechazo, scoring o clasificacion
 medical-device. La seccion generada se guarda en `generated_sections` con
 `section_kind = "data_ai_privacy"` y se muestra en el workspace; el Basic Alpha
 Report sigue siendo Alpha-only.
+
+## Modulo medical-device triage
+
+PR10 anade el modulo condicional `medical_device_triage_agent` despues de
+datos/IA/privacidad. Solo puede iniciarse cuando ya existen las secciones
+`problem`, `solution` y `data_ai_privacy`; registra `applicable`, `uncertain` o
+`not_applicable` como estado de triage no definitivo y limita su salida a gaps,
+preguntas, incertidumbre y `requires competent human review`.
+
+Este modulo no emite clasificacion MDR, decision de producto sanitario,
+dictamen legal/regulatorio/clinico, cumplimiento definitivo, aprobacion,
+rechazo ni scoring.
 
 ## Arranque local
 
@@ -225,10 +238,10 @@ pnpm install --store-dir ./.pnpm-store
 docker compose up -d postgres ollama api n8n
 docker compose exec ollama ollama pull qwen2.5:3b-instruct
 docker compose exec api pnpm migrate
-for workflow in proposal_start_v1.json proposal_reply_v1.json agent_problem_definition_v1.json solution_start_v1.json solution_reply_v1.json agent_solution_definition_v1.json data_ai_privacy_start_v1.json data_ai_privacy_reply_v1.json agent_data_ai_privacy_gap_v1.json; do
+for workflow in proposal_start_v1.json proposal_reply_v1.json agent_problem_definition_v1.json solution_start_v1.json solution_reply_v1.json agent_solution_definition_v1.json data_ai_privacy_start_v1.json data_ai_privacy_reply_v1.json agent_data_ai_privacy_gap_v1.json medical_device_triage_start_v1.json medical_device_triage_reply_v1.json agent_medical_device_triage_v1.json; do
   docker compose exec -T -u node n8n n8n import:workflow --input="/workflows/${workflow}"
 done
-for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json infra/n8n/workflows/data_ai_privacy_start_v1.json infra/n8n/workflows/data_ai_privacy_reply_v1.json infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json; do
+for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json infra/n8n/workflows/data_ai_privacy_start_v1.json infra/n8n/workflows/data_ai_privacy_reply_v1.json infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json infra/n8n/workflows/medical_device_triage_start_v1.json infra/n8n/workflows/medical_device_triage_reply_v1.json infra/n8n/workflows/agent_medical_device_triage_v1.json; do
   workflow_id="$(awk -F'"' '/^[[:space:]]*"id":[[:space:]]*"/ { print $4; exit }' "$workflow_path")"
   docker compose exec -T -u node n8n n8n publish:workflow --id="$workflow_id"
 done
@@ -335,8 +348,11 @@ Archivos:
 - `infra/n8n/workflows/data_ai_privacy_start_v1.json`
 - `infra/n8n/workflows/data_ai_privacy_reply_v1.json`
 - `infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json`
+- `infra/n8n/workflows/medical_device_triage_start_v1.json`
+- `infra/n8n/workflows/medical_device_triage_reply_v1.json`
+- `infra/n8n/workflows/agent_medical_device_triage_v1.json`
 
-Abre `http://localhost:5678`, importa y publica los nueve workflows, y asegúrate de que `INTERNAL_SHARED_SECRET` coincide entre `.env`, la API y `n8n`.
+Abre `http://localhost:5678`, importa y publica los doce workflows, y asegúrate de que `INTERNAL_SHARED_SECRET` coincide entre `.env`, la API y `n8n`.
 
 Los exports de workflow de esta version eliminan reintentos sincronos en nodos `HTTP Request` y propagan `statusCode + body` de la API al webhook para que un `ollama_timeout` o cualquier error controlado llegue a la UI como JSON consistente. Si reimportas los workflows, publica la nueva version exportada del repo.
 
@@ -415,13 +431,16 @@ El flujo normal Alpha es:
 7. componer el informe con `POST /internal/reports/basic-alpha/compose`
 8. leerlo con `GET /api/v1/sessions/:sessionId/report`
 
-La extension Clinic Pilot de PR9, despues de cerrar la solucion, es:
+La extension Clinic Pilot, despues de cerrar la solucion, es:
 
 1. iniciar `data_ai_privacy_start_v1` con `profile_id = "hospital_clinic_v1"`
 2. responder con `data_ai_privacy_reply_v1` hasta `agent_status = "done"` o `blocked`
 3. revisar la seccion `generated_sections.section_kind = "data_ai_privacy"` en `GET /api/v1/sessions/:sessionId`
+4. iniciar `medical_device_triage_start_v1` cuando exista la seccion de datos/IA/privacidad
+5. responder con `medical_device_triage_reply_v1` hasta `agent_status = "done"` o `blocked`
+6. revisar la seccion `generated_sections.section_kind = "medical_device_triage"` en `GET /api/v1/sessions/:sessionId`
 
-Esta extension genera gaps y preguntas de datos/IA/privacidad para revision humana competente. No forma parte del `BasicAlphaReport` y no emite dictamen legal, regulatorio, clinico, de privacidad, cumplimiento definitivo, aprobacion/rechazo, scoring ni clasificacion medical-device.
+Esta extension genera gaps, preguntas e incertidumbre de datos/IA/privacidad y medical-device triage para revision humana competente. No forma parte del `BasicAlphaReport` y no emite dictamen legal, regulatorio, clinico, de privacidad, cumplimiento definitivo, aprobacion/rechazo, scoring ni clasificacion medical-device.
 
 Al cerrar el carril de problema, la API conserva la compatibilidad de resume con
 `conversation_turns`, `session_snapshots` y `agent_runs`, y tambien escribe el
@@ -443,6 +462,13 @@ con el perfil fijo `hospital_clinic_v1`. Este modulo genera una seccion
 del modulo; sigue siendo un marco de preguntas/gaps para revision humana
 competente, no un motor de cumplimiento.
 
+Tras cerrar datos/IA/privacidad, el Clinic Pilot PR10 puede abrir
+`module = "medical_device_triage"` con el mismo perfil fijo. Este modulo genera
+una seccion `section_kind = "medical_device_triage"` y audita activation state,
+guardrails, gaps, turnos y fuentes; sigue siendo un marco de preguntas/gaps e
+incertidumbre para revision humana competente, no una clasificacion legal,
+regulatoria o MDR.
+
 El reporte basico Alpha se compone de forma deterministica desde el brief,
 gaps actuales, seccion de problema, seccion de solucion, fuentes internas,
 referencias de auditoria y advertencias fijas. La ruta publica
@@ -450,8 +476,9 @@ referencias de auditoria y advertencias fijas. La ruta publica
 `BasicAlphaReport`; no expone `raw_model_output`, prompts, parametros de modelo
 ni payloads crudos de los `agent_runs`.
 
-Siguen fuera de alcance en esta PR: plan de negocio, costes, legal/regulatorio,
-medical device, PDF export, RAG, scoring y aprobacion/rechazo.
+Siguen fuera de alcance en esta PR: plan de negocio, costes, dictamen
+legal/regulatorio, clasificacion definitiva medical-device, PDF export, RAG,
+scoring y aprobacion/rechazo.
 
 ## Tests
 

@@ -7,7 +7,9 @@ ALTER TABLE agent_runs
         'brief_extraction',
         'problem_definition',
         'solution_definition',
+        'basic_report_compose',
         'data_ai_privacy_gap',
+        'medical_device_triage',
         'json_repair'
     ));
 

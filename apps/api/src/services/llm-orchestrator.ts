@@ -1,5 +1,6 @@
 import {
   assertDataAiPrivacyTurn,
+  assertMedicalDeviceTriageTurn,
   assertProblemDefinitionTurn,
   assertSolutionDefinitionTurn,
   assertStructuredBrief,
@@ -9,6 +10,8 @@ import {
 import type {
   DataAiPrivacyTurn,
   GeneratedSection,
+  MedicalDeviceTriageTurn,
+  MedicalDeviceTriageStatus,
   ProblemDefinitionTurn,
   RegulatoryProfile,
   SolutionDefinitionTurn,
@@ -177,6 +180,67 @@ export class LlmOrchestrator {
       userPrompt,
       validate: assertDataAiPrivacyTurn,
       responseSchema: schemaDocuments.dataAiPrivacyTurn,
+    });
+  }
+
+  async runMedicalDeviceTriage(input: {
+    structuredBrief: StructuredBrief;
+    problemSection: Pick<GeneratedSection, 'title' | 'content_markdown' | 'source_refs'>;
+    solutionSection: Pick<GeneratedSection, 'title' | 'content_markdown' | 'source_refs'>;
+    dataAiPrivacySection?: Pick<GeneratedSection, 'title' | 'content_markdown' | 'source_refs'> | null;
+    regulatoryProfile: RegulatoryProfile;
+    activationResult: {
+      triage_status: MedicalDeviceTriageStatus;
+      activation_signals: string[];
+      uncertainties: string[];
+      needs_human_review: boolean;
+      requires_competent_human_review: boolean;
+    };
+    recentTurns: Array<{ question_text: string; answer_text: string | null; diagnosis: string[] }>;
+    latestAnswer?: string;
+  }): Promise<GenerationResult<MedicalDeviceTriageTurn>> {
+    const prompt = await loadPrompt('medical-device-triage-agent');
+    const userPrompt = [
+      'Return a single bounded medical-device triage turn.',
+      '',
+      `Output schema id: ${schemaIds.medicalDeviceTriageTurn}`,
+      '',
+      'Input JSON:',
+      JSON.stringify(
+        {
+          structured_brief: input.structuredBrief,
+          problem_section: {
+            title: input.problemSection.title,
+            content_markdown: input.problemSection.content_markdown,
+            source_refs: input.problemSection.source_refs.map((source) => source.source_id),
+          },
+          solution_section: {
+            title: input.solutionSection.title,
+            content_markdown: input.solutionSection.content_markdown,
+            source_refs: input.solutionSection.source_refs.map((source) => source.source_id),
+          },
+          data_ai_privacy_section: input.dataAiPrivacySection
+            ? {
+                title: input.dataAiPrivacySection.title,
+                content_markdown: input.dataAiPrivacySection.content_markdown,
+                source_refs: input.dataAiPrivacySection.source_refs.map((source) => source.source_id),
+              }
+            : null,
+          regulatory_profile: input.regulatoryProfile,
+          activation_result: input.activationResult,
+          recent_turns: input.recentTurns,
+          latest_user_answer: input.latestAnswer ?? null,
+        },
+        null,
+        2,
+      ),
+    ].join('\n');
+
+    return this.generateWithRepair<MedicalDeviceTriageTurn>({
+      prompt,
+      userPrompt,
+      validate: assertMedicalDeviceTriageTurn,
+      responseSchema: schemaDocuments.medicalDeviceTriageTurn,
     });
   }
 

@@ -4,8 +4,10 @@ import {
   fetchBasicAlphaReport,
   recoverRequestExecution,
   replyDataAiPrivacy,
+  replyMedicalDeviceTriage,
   replySolution,
   startDataAiPrivacy,
+  startMedicalDeviceTriage,
   startSession,
   startSolution,
 } from './api';
@@ -113,6 +115,46 @@ const DATA_AI_PRIVACY_REPLY_RESPONSE = {
   diagnosis: ['Los gaps quedan suficientemente claros para revision humana.'],
   next_question: '',
   completion_reason: 'data AI privacy gaps sufficiently clarified for human review',
+};
+
+const MEDICAL_DEVICE_TRIAGE_STATE = {
+  triage_status: 'uncertain',
+  activation_signals: ['clinical decision support'],
+  uncertainties: ['Intended-use boundary requires competent human review.'],
+  intended_use_claims: [],
+  clinical_decision_role: '',
+  evidence_needed: ['Clarify whether the assistant influences clinical triage.'],
+  human_review_plan: 'requires competent human review',
+  needs_human_review: true,
+  requires_competent_human_review: true,
+};
+
+const MEDICAL_DEVICE_TRIAGE_START_RESPONSE = {
+  session_id: 'session-1',
+  stage: 'medical_device_triage',
+  profile_id: 'hospital_clinic_v1',
+  activation_result: 'uncertain',
+  agent_status: 'continue',
+  updated_medical_device_triage: MEDICAL_DEVICE_TRIAGE_STATE,
+  diagnosis: ['Medical-device signals or uncertainty are present.'],
+  next_question: 'Que uso previsto deberia revisarse?',
+  completion_reason: '',
+  warnings: ['requires competent human review'],
+};
+
+const MEDICAL_DEVICE_TRIAGE_REPLY_RESPONSE = {
+  ...MEDICAL_DEVICE_TRIAGE_START_RESPONSE,
+  activation_result: 'applicable',
+  agent_status: 'done',
+  updated_medical_device_triage: {
+    ...MEDICAL_DEVICE_TRIAGE_STATE,
+    triage_status: 'applicable',
+    intended_use_claims: ['The assistant drafts triage suggestions for staff review.'],
+    clinical_decision_role: 'The assistant may influence triage prioritization before staff review.',
+  },
+  diagnosis: ['Gaps are sufficiently clear for review.'],
+  next_question: '',
+  completion_reason: 'medical-device triage gaps sufficiently clarified for human review',
 };
 
 const BASIC_ALPHA_REPORT_RESPONSE = {
@@ -426,6 +468,72 @@ describe('requestJson transport options', () => {
       errorCode: 'invalid_response_contract',
       statusCode: 502,
     });
+  });
+
+  it('posts medical-device triage start payloads to the PR10 webhook with request id', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(MEDICAL_DEVICE_TRIAGE_START_RESPONSE), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }),
+    );
+    stubGlobal('fetch', fetchMock);
+
+    const result = await startMedicalDeviceTriage({
+      request_id: 'web-medical-device-start-1',
+      session_id: 'session-1',
+      profile_id: 'hospital_clinic_v1',
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toBe('/webhook/medical-device-triage-start-v1');
+    expect(init.method).toBe('POST');
+    expect(init.headers).toEqual({
+      'Content-Type': 'application/json',
+      'x-request-id': 'web-medical-device-start-1',
+    });
+    expect(JSON.parse(String(init.body))).toEqual({
+      request_id: 'web-medical-device-start-1',
+      session_id: 'session-1',
+      profile_id: 'hospital_clinic_v1',
+    });
+    expect(result).toEqual(MEDICAL_DEVICE_TRIAGE_START_RESPONSE);
+  });
+
+  it('posts medical-device triage reply payloads to the PR10 webhook with request id', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(MEDICAL_DEVICE_TRIAGE_REPLY_RESPONSE), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }),
+    );
+    stubGlobal('fetch', fetchMock);
+
+    const result = await replyMedicalDeviceTriage({
+      request_id: 'web-medical-device-reply-1',
+      session_id: 'session-1',
+      answer: 'Clinical governance reviews intended use before pilot use.',
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toBe('/webhook/medical-device-triage-reply-v1');
+    expect(init.method).toBe('POST');
+    expect(init.headers).toEqual({
+      'Content-Type': 'application/json',
+      'x-request-id': 'web-medical-device-reply-1',
+    });
+    expect(JSON.parse(String(init.body))).toEqual({
+      request_id: 'web-medical-device-reply-1',
+      session_id: 'session-1',
+      answer: 'Clinical governance reviews intended use before pilot use.',
+    });
+    expect(result).toEqual(MEDICAL_DEVICE_TRIAGE_REPLY_RESPONSE);
   });
 
   it('fetches a Basic Alpha report from the session report endpoint', async () => {

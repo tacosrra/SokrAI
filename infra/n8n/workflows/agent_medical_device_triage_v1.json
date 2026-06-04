@@ -1,0 +1,144 @@
+{
+  "id": "c19c1c2e-9799-46cb-a98f-e56591383f25",
+  "name": "agent_medical_device_triage_v1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent-medical-device-triage-v1",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "d52ed158-8e62-45bb-8fe2-c277b1cf6d31",
+      "name": "Webhook_AgentMedicalDeviceTriage",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        260,
+        300
+      ],
+      "webhookId": "agent-medical-device-triage-v1"
+    },
+    {
+      "parameters": {
+        "keepOnlySet": false,
+        "values": {
+          "string": [
+            {
+              "name": "request_id",
+              "value": "={{ $node[\"Webhook_AgentMedicalDeviceTriage\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_AgentMedicalDeviceTriage\"].json.body?.request_id || $execution.id }}"
+            },
+            {
+              "name": "workflow_version",
+              "value": "agent_medical_device_triage_v1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "bb4bfb57-01df-4b48-9bde-45272fd300db",
+      "name": "Set_AgentPayload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:3001/internal/agents/medical-device-triage/run",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-shared-secret",
+              "value": "={{ $env.INTERNAL_SHARED_SECRET }}"
+            },
+            {
+              "name": "x-request-id",
+              "value": "={{ $node[\"Webhook_AgentMedicalDeviceTriage\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_AgentMedicalDeviceTriage\"].json.body?.request_id || $execution.id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { request_id: ($node[\"Webhook_AgentMedicalDeviceTriage\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_AgentMedicalDeviceTriage\"].json.body?.request_id || $execution.id), workflow_version: $json.workflow_version, workflow_execution_id: $execution.id, session_id: $node[\"Webhook_AgentMedicalDeviceTriage\"].json.body.session_id, trigger: $node[\"Webhook_AgentMedicalDeviceTriage\"].json.body.trigger } }}",
+        "options": {
+          "timeout": 450000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "a0f8b70e-3059-40b6-8315-7f694772b6f3",
+      "name": "HTTP_RunMedicalDeviceTriageTurn",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        820,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.body ?? $json }}",
+        "options": {
+          "responseCode": "={{ Number($json.statusCode ?? 200) }}"
+        }
+      },
+      "id": "eb4a5465-5538-4ce1-a8c2-6284fdfe5068",
+      "name": "Respond_AgentTurn",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1100,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook_AgentMedicalDeviceTriage": {
+      "main": [
+        [
+          {
+            "node": "Set_AgentPayload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set_AgentPayload": {
+      "main": [
+        [
+          {
+            "node": "HTTP_RunMedicalDeviceTriageTurn",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP_RunMedicalDeviceTriageTurn": {
+      "main": [
+        [
+          {
+            "node": "Respond_AgentTurn",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "agent_medical_device_triage_v1"
+}

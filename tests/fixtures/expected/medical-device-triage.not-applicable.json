@@ -1,0 +1,19 @@
+{
+  "agent_status": "done",
+  "diagnosis": [
+    "No medical-device signals or uncertainty are present in persisted proposal material."
+  ],
+  "updated_medical_device_triage": {
+    "triage_status": "not_applicable",
+    "activation_signals": [],
+    "uncertainties": [],
+    "intended_use_claims": [],
+    "clinical_decision_role": "",
+    "evidence_needed": [],
+    "human_review_plan": "",
+    "needs_human_review": false,
+    "requires_competent_human_review": false
+  },
+  "next_question": "",
+  "completion_reason": "medical-device triage recorded as not_applicable for current persisted material"
+}

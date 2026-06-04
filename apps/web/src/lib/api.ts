@@ -5,6 +5,10 @@ import type {
   DataAiPrivacyStartRequest,
   DataAiPrivacyStartResponse,
   ErrorResponse,
+  MedicalDeviceTriageReplyRequest,
+  MedicalDeviceTriageReplyResponse,
+  MedicalDeviceTriageStartRequest,
+  MedicalDeviceTriageStartResponse,
   ProposalReplyRequest,
   ProposalReplyResponse,
   ProposalStartRequest,
@@ -23,6 +27,8 @@ import {
   parseDataAiPrivacyStartResponse,
   parseProposalReplyResponse,
   parseProposalStartResponse,
+  parseMedicalDeviceTriageReplyResponse,
+  parseMedicalDeviceTriageStartResponse,
   parseRequestExecutionResponse,
   parseSessionAuditView,
   parseSolutionReplyResponse,
@@ -298,6 +304,40 @@ export async function replyDataAiPrivacy(
       : undefined,
     timeoutMs: REPLY_SESSION_TIMEOUT_MS,
     parse: parseDataAiPrivacyReplyResponse,
+  });
+}
+
+export async function startMedicalDeviceTriage(
+  payload: MedicalDeviceTriageStartRequest,
+): Promise<MedicalDeviceTriageStartResponse> {
+  return requestJson({
+    url: joinUrl(WEBHOOK_BASE_URL, '/webhook/medical-device-triage-start-v1'),
+    method: 'POST',
+    payload,
+    headers: payload.request_id
+      ? {
+          'x-request-id': payload.request_id,
+        }
+      : undefined,
+    timeoutMs: REPLY_SESSION_TIMEOUT_MS,
+    parse: parseMedicalDeviceTriageStartResponse,
+  });
+}
+
+export async function replyMedicalDeviceTriage(
+  payload: MedicalDeviceTriageReplyRequest,
+): Promise<MedicalDeviceTriageReplyResponse> {
+  return requestJson({
+    url: joinUrl(WEBHOOK_BASE_URL, '/webhook/medical-device-triage-reply-v1'),
+    method: 'POST',
+    payload,
+    headers: payload.request_id
+      ? {
+          'x-request-id': payload.request_id,
+        }
+      : undefined,
+    timeoutMs: REPLY_SESSION_TIMEOUT_MS,
+    parse: parseMedicalDeviceTriageReplyResponse,
   });
 }
 

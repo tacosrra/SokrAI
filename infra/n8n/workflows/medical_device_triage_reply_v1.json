@@ -1,0 +1,144 @@
+{
+  "id": "94d06048-051a-41cd-8739-18fe1c265107",
+  "name": "medical_device_triage_reply_v1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "medical-device-triage-reply-v1",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "ee6a924d-7cb1-4d4c-949f-305e01b5a69d",
+      "name": "Webhook_MedicalDeviceTriageReply",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        260,
+        300
+      ],
+      "webhookId": "medical-device-triage-reply-v1"
+    },
+    {
+      "parameters": {
+        "keepOnlySet": false,
+        "values": {
+          "string": [
+            {
+              "name": "request_id",
+              "value": "={{ $node[\"Webhook_MedicalDeviceTriageReply\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_MedicalDeviceTriageReply\"].json.body?.request_id || $execution.id }}"
+            },
+            {
+              "name": "workflow_version",
+              "value": "medical_device_triage_reply_v1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5a391037-a72d-4a43-83e0-a87a7c7bc9b1",
+      "name": "Set_ReplyPayload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:3001/internal/sessions/medical-device-triage-reply",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-shared-secret",
+              "value": "={{ $env.INTERNAL_SHARED_SECRET }}"
+            },
+            {
+              "name": "x-request-id",
+              "value": "={{ $node[\"Webhook_MedicalDeviceTriageReply\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_MedicalDeviceTriageReply\"].json.body?.request_id || $execution.id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { request_id: ($node[\"Webhook_MedicalDeviceTriageReply\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_MedicalDeviceTriageReply\"].json.body?.request_id || $execution.id), workflow_version: $json.workflow_version, workflow_execution_id: $execution.id, payload: $node[\"Webhook_MedicalDeviceTriageReply\"].json.body } }}",
+        "options": {
+          "timeout": 450000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "af17f1b3-0f03-43fd-af8e-64b610c5fbfc",
+      "name": "HTTP_ReplyMedicalDeviceTriage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.body ?? $json }}",
+        "options": {
+          "responseCode": "={{ Number($json.statusCode ?? 200) }}"
+        }
+      },
+      "id": "06c50e77-f397-45d9-989b-80a6f016646d",
+      "name": "Respond_Reply",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1080,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook_MedicalDeviceTriageReply": {
+      "main": [
+        [
+          {
+            "node": "Set_ReplyPayload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set_ReplyPayload": {
+      "main": [
+        [
+          {
+            "node": "HTTP_ReplyMedicalDeviceTriage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP_ReplyMedicalDeviceTriage": {
+      "main": [
+        [
+          {
+            "node": "Respond_Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "medical_device_triage_reply_v1"
+}

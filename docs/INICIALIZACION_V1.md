@@ -15,11 +15,12 @@ El objetivo de esta guia es que puedas:
 
 ## 1. Que levanta esta v1
 
-La v1 implementa dos carriles operativos Alpha y el primer modulo Clinic Pilot:
+La v1 implementa dos carriles operativos Alpha y los primeros modulos Clinic Pilot:
 
 - `problem_definition_agent`
 - `solution_definition_agent`
 - `data_ai_privacy_gap_agent` con perfil fijo `hospital_clinic_v1`
+- `medical_device_triage_agent` condicional y no definitivo con perfil fijo `hospital_clinic_v1`
 
 Y un flujo end-to-end con estos componentes:
 
@@ -133,6 +134,9 @@ Estos son los paths importantes para arrancar y probar la v1:
 - `infra/n8n/workflows/data_ai_privacy_start_v1.json`
 - `infra/n8n/workflows/data_ai_privacy_reply_v1.json`
 - `infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json`
+- `infra/n8n/workflows/medical_device_triage_start_v1.json`
+- `infra/n8n/workflows/medical_device_triage_reply_v1.json`
+- `infra/n8n/workflows/agent_medical_device_triage_v1.json`
 - `contracts/schemas/`
 - `prompts/v1/`
 - `examples/proposal-start.payload.json`
@@ -507,7 +511,7 @@ Usa las credenciales:
 - usuario: valor de `N8N_BASIC_AUTH_USER`
 - password: valor de `N8N_BASIC_AUTH_PASSWORD`
 
-### 11.2 Importar los nueve workflows
+### 11.2 Importar los doce workflows
 
 Importa estos archivos:
 
@@ -520,6 +524,9 @@ Importa estos archivos:
 - `infra/n8n/workflows/data_ai_privacy_start_v1.json`
 - `infra/n8n/workflows/data_ai_privacy_reply_v1.json`
 - `infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json`
+- `infra/n8n/workflows/medical_device_triage_start_v1.json`
+- `infra/n8n/workflows/medical_device_triage_reply_v1.json`
+- `infra/n8n/workflows/agent_medical_device_triage_v1.json`
 
 ### 11.3 Que hace cada workflow
 
@@ -572,6 +579,24 @@ Importa estos archivos:
   - valida y persiste el resultado
   - aplica las reglas de no dictamen antes de persistir salida sensible
   - al completar, genera la seccion `data_ai_privacy` de forma deterministica
+
+- `medical_device_triage_start_v1`
+  - recibe `session_id` cuando ya existen las secciones `problem`, `solution` y `data_ai_privacy`
+  - usa el perfil regulatorio `hospital_clinic_v1`
+  - llama a la API interna del modulo medical-device triage
+  - devuelve `applicable`, `uncertain` o `not_applicable` sin clasificacion definitiva
+
+- `medical_device_triage_reply_v1`
+  - recibe `session_id + answer`
+  - persiste la respuesta de usuario en el chat Alpha `medical_device_triage`
+  - invoca la API interna del agente medical-device triage
+  - devuelve el nuevo estado del modulo
+
+- `agent_medical_device_triage_v1`
+  - ejecuta un turno del agente medical-device triage
+  - valida y persiste el resultado
+  - aplica guardrails de no dictamen ni clasificacion MDR antes de persistir salida sensible
+  - al completar, genera la seccion `medical_device_triage` de forma deterministica
 
 ### 11.4 Publicar workflows
 
@@ -815,7 +840,62 @@ Repite hasta `agent_status = "done"`. Al completar, `GET
 - ningun dictamen, aprobacion/rechazo, cumplimiento definitivo ni
   clasificacion definitiva de producto sanitario en la seccion generada
 
-### 13.8 Componer y leer el reporte basico Alpha
+### 13.8 Iniciar el triage medical-device PR10
+
+Cuando exista la seccion `data_ai_privacy`, inicia el modulo condicional
+medical-device triage con el mismo perfil fijo `hospital_clinic_v1`:
+
+```bash
+curl -sS \
+  -X POST \
+  http://localhost:5678/webhook/medical-device-triage-start-v1 \
+  -H 'Content-Type: application/json' \
+  --data '{"session_id":"replace-with-session-id","profile_id":"hospital_clinic_v1"}'
+```
+
+Respuesta esperada:
+
+```json
+{
+  "session_id": "uuid",
+  "stage": "medical_device_triage",
+  "profile_id": "hospital_clinic_v1",
+  "activation_result": "applicable|uncertain|not_applicable",
+  "agent_status": "continue|done|blocked",
+  "updated_medical_device_triage": {
+    "...": "..."
+  },
+  "diagnosis": [
+    "..."
+  ],
+  "next_question": "¿...?",
+  "completion_reason": "",
+  "warnings": [
+    "requires competent human review"
+  ]
+}
+```
+
+Si `agent_status = "continue"`, responde con informacion ficticia y acotada:
+
+```bash
+curl -sS \
+  -X POST \
+  http://localhost:5678/webhook/medical-device-triage-reply-v1 \
+  -H 'Content-Type: application/json' \
+  --data '{"session_id":"replace-with-session-id","answer":"La herramienta solo prepararia senales para revision humana competente; falta aclarar uso previsto, papel en decisiones clinicas y evidencia antes de cualquier piloto."}'
+```
+
+Repite hasta `agent_status = "done"` o `blocked`. Al completar, `GET
+/api/v1/sessions/:sessionId` debe incluir:
+
+- una fila en `generated_sections` con `section_kind = "medical_device_triage"`
+- `activation_result` registrado como `applicable`, `uncertain` o `not_applicable`
+- warnings con `requires competent human review` cuando aplique revision humana
+- ningun dictamen, decision de producto sanitario, clasificacion MDR,
+  aprobacion/rechazo, cumplimiento definitivo ni scoring
+
+### 13.9 Componer y leer el reporte basico Alpha
 
 Cuando existan las secciones `problem` y `solution`, compón el reporte con la
 API interna:
@@ -1002,7 +1082,7 @@ curl -i http://localhost:3001/healthz
 Luego:
 
 1. abre `http://localhost:5678`
-2. importa y publica los 9 workflows
+2. importa y publica los 12 workflows
 3. abre `http://localhost:3000`
 4. crea una propuesta nueva desde la UI
 5. guarda `session_id`
@@ -1035,8 +1115,9 @@ Una prueba manual minima satisfactoria de la v1 es:
    - `next_question = ""`
 6. inicias y completas `solution_definition_agent`
 7. inicias `data_ai_privacy_gap_agent` con `hospital_clinic_v1`
-8. confirmas que la seccion `data_ai_privacy` conserva warnings de revision
-   humana competente y no contiene dictamen, aprobacion/rechazo, cumplimiento
+8. inicias `medical_device_triage_agent` cuando exista la seccion de datos/IA/privacidad
+9. confirmas que las secciones `data_ai_privacy` y `medical_device_triage` conservan warnings de revision
+   humana competente y no contienen dictamen, aprobacion/rechazo, cumplimiento
    definitivo ni clasificacion definitiva de producto sanitario
 
 ## 19. Pruebas de depuracion utiles
@@ -1456,11 +1537,15 @@ Considera que la inicializacion esta bien hecha si puedes marcar todo esto:
 - `curl http://localhost:3001/healthz` devuelve `{"status":"ok"}`
 - `docker compose exec ollama ollama list` muestra el modelo configurado
 - `docker compose exec api pnpm migrate` termina sin error
-- has importado y publicado los 6 workflows
+- has importado y publicado los 12 workflows
 - `POST /webhook/proposal-start-v1` devuelve `session_id`
 - `POST /webhook/proposal-reply-v1` reutiliza ese `session_id`
 - `POST /webhook/solution-start-v1` inicia el carril de solucion tras completar el problema
 - `POST /webhook/solution-reply-v1` reutiliza ese `session_id`
+- `POST /webhook/data-ai-privacy-start-v1` inicia el carril de datos/IA/privacidad tras completar la solucion
+- `POST /webhook/data-ai-privacy-reply-v1` reutiliza ese `session_id`
+- `POST /webhook/medical-device-triage-start-v1` inicia el triage medical-device condicional tras datos/IA/privacidad
+- `POST /webhook/medical-device-triage-reply-v1` reutiliza ese `session_id`
 - `GET /api/v1/sessions/:sessionId` devuelve session, documentos, fuentes, gaps, turnos, runs,
   snapshots, eventos, `module_chats` y `generated_sections`
 - `POST /internal/reports/basic-alpha/compose` persiste un unico reporte por propuesta

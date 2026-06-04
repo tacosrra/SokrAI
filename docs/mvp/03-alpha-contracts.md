@@ -1,6 +1,6 @@
 # Alpha contract inventory
 
-PR 2A defines schema-backed contracts and TypeScript domain types for the MVP Alpha data model. These contracts are groundwork for later persistence, workflow, and UI work; they do not implement database tables, repositories, UI behavior, RAG, Clinic Pilot modules, PDF export, enterprise auth, or remote AI provider behavior.
+PR 2A defined schema-backed contracts and TypeScript domain types for the MVP Alpha data model. Later PRs extend the inventory with persisted Alpha/Clinic contracts while keeping RAG, PDF export, enterprise auth, and remote AI provider behavior outside this v1 surface.
 
 ## Contract files
 
@@ -8,10 +8,10 @@ PR 2A defines schema-backed contracts and TypeScript domain types for the MVP Al
 | --- | --- | --- |
 | `ProposalSource` | `contracts/schemas/proposal-source.schema.json` | Stable provenance reference for user-provided or internally generated Alpha material. |
 | `ProposalDocument` | `contracts/schemas/proposal-document.schema.json` | Pasted or uploaded source material payload shape. |
-| `AlphaGap` | `contracts/schemas/alpha-gap.schema.json` | Descriptive information gap for problem, solution, or data/AI/privacy work. |
+| `AlphaGap` | `contracts/schemas/alpha-gap.schema.json` | Descriptive information gap for problem, solution, data/AI/privacy, or medical-device triage work. |
 | `ChatTurn` | `contracts/schemas/chat-turn.schema.json` | One question/answer turn with bounded diagnosis. |
-| `ModuleChat` | `contracts/schemas/module-chat.schema.json` | Problem, solution, or data/AI/privacy chat lifecycle and turns. |
-| `GeneratedSection` | `contracts/schemas/generated-section.schema.json` | Versioned generated problem, solution, or data/AI/privacy section. |
+| `ModuleChat` | `contracts/schemas/module-chat.schema.json` | Problem, solution, data/AI/privacy, or medical-device triage chat lifecycle and turns. |
+| `GeneratedSection` | `contracts/schemas/generated-section.schema.json` | Versioned generated problem, solution, data/AI/privacy, or medical-device triage section. |
 | `AlphaProposal` | `contracts/schemas/alpha-proposal.schema.json` | Aggregate contract that composes brief, documents, sources, gaps, chats, sections, and audit references. |
 | `BasicAlphaReport` | `contracts/schemas/basic-alpha-report.schema.json` | Implemented in-app structured Alpha report, without PDF/export fields or raw model output. |
 | `SolutionDefinitionTurn` | `contracts/schemas/solution-definition-turn.schema.json` | Bounded model output for the solution-definition lane. |
@@ -21,6 +21,9 @@ PR 2A defines schema-backed contracts and TypeScript domain types for the MVP Al
 | `DataAiPrivacyTurn` | `contracts/schemas/data-ai-privacy-turn.schema.json` | Bounded model output for sensitive data/AI/privacy gap clarification. |
 | `DataAiPrivacyStartRequest` / `DataAiPrivacyStartResponse` | `contracts/schemas/data-ai-privacy-start.*.schema.json` | Starts the sensitive lane after the solution section exists. |
 | `DataAiPrivacyReplyRequest` / `DataAiPrivacyReplyResponse` | `contracts/schemas/data-ai-privacy-reply.*.schema.json` | Persists a sensitive-lane answer and returns the next bounded state. |
+| `MedicalDeviceTriageTurn` | `contracts/schemas/medical-device-triage-turn.schema.json` | Bounded, non-definitive output for conditional medical-device triage. |
+| `MedicalDeviceTriageStartRequest` / `MedicalDeviceTriageStartResponse` | `contracts/schemas/medical-device-triage-start.*.schema.json` | Starts triage after the data/AI/privacy section exists, returning `applicable`, `uncertain`, or `not_applicable`. |
+| `MedicalDeviceTriageReplyRequest` / `MedicalDeviceTriageReplyResponse` | `contracts/schemas/medical-device-triage-reply.*.schema.json` | Persists a triage answer and returns the next bounded state. |
 
 `structured-brief.schema.json` remains canonical and is referenced by aggregate/report contracts rather than duplicated.
 
@@ -34,10 +37,10 @@ PR 2A defines schema-backed contracts and TypeScript domain types for the MVP Al
 | Gap | `gap_kind` | `missing_information`, `ambiguous_information`, `unsupported_claim`, `needs_user_confirmation` | Descriptive gap kind, not scoring or approval. |
 | Gap | `gap_status` | `open`, `in_progress`, `resolved`, `deferred`, `not_applicable` | Gap resolution state for later chats. |
 | Gap | `origin` | `structured_brief_field`, `structured_brief_missing_information`, `structured_brief_ambiguity`, `proposal_source`, `system_rule` | Deterministic provenance for why the gap exists. |
-| Module chat | `module` | `problem`, `solution`, `data_ai_privacy` | Implemented Alpha/Clinic module values. |
-| Module chat | `chat_status` | `not_started`, `active`, `waiting_for_user`, `ready_to_generate`, `completed`, `blocked`, `failed` | Chat lifecycle for problem and solution modules. |
+| Module chat | `module` | `problem`, `solution`, `data_ai_privacy`, `medical_device_triage` | Implemented Alpha/Clinic module values. |
+| Module chat | `chat_status` | `not_started`, `active`, `waiting_for_user`, `ready_to_generate`, `completed`, `blocked`, `failed` | Chat lifecycle for Alpha/Clinic modules. |
 | Chat turn | `turn_status` | `awaiting_user`, `processing`, `resolved`, `failed`, `skipped` | Turn lifecycle for modular chats. |
-| Generated section | `section_kind` | `problem`, `solution`, `data_ai_privacy` | Generated section kind. |
+| Generated section | `section_kind` | `problem`, `solution`, `data_ai_privacy`, `medical_device_triage` | Generated section kind. |
 | Generated section | `section_status` | `draft`, `generated`, `accepted`, `needs_revision`, `superseded` | Versioned section lifecycle. |
 | Basic report | `report_status` | `draft`, `ready`, `needs_revision` | In-app report readiness state. |
 | Audit reference | `audit_refs[].kind` | `agent_run`, `audit_event`, `snapshot`, `chat_turn` | Reference-only audit linkage. |
@@ -94,9 +97,8 @@ n8n/internal orchestration. The public app-facing read model is
 contract; raw `agent_runs` output remains available in the audit endpoint but is
 not copied into the report payload or UI.
 
-Still excluded: PDF/export fields, Clinic Pilot modules, legal/regulatory or
-medical-device decisions, RAG citations, scoring, ranking, approval and
-rejection.
+Still excluded: PDF/export fields, legal/regulatory or medical-device
+decisions, RAG citations, scoring, ranking, approval and rejection.
 
 ## Data/AI/privacy Clinic lane
 
@@ -121,18 +123,36 @@ compliance/non-compliance; approval/rejection; ranking/scoring; or definitive
 medical-device classification. Basic Alpha report remains Alpha-only and does
 not include the sensitive section.
 
+## Medical-device triage Clinic lane
+
+PR 10 adds `medical_device_triage` as a conditional, non-definitive Clinic Pilot
+module. It reuses the same Alpha primitives:
+
+- `module_chats.module = 'medical_device_triage'`
+- `chat_turns.module = 'medical_device_triage'`
+- `alpha_gaps.module = 'medical_device_triage'`
+- `agent_runs.run_purpose = 'medical_device_triage'`
+- `generated_sections.section_kind = 'medical_device_triage'`
+
+The lane starts only after a current generated data/AI/privacy section exists.
+It records `applicable`, `uncertain`, or `not_applicable` as triage state only;
+this is not a legal, regulatory, product, MDR, approval, rejection, or final
+classification decision. Allowed outputs are bounded gaps, questions,
+uncertainty, evidence needs, intended-use claims for review, and the exact
+marker `requires competent human review`.
+
 ## GeneratedSection versioning
 
 `GeneratedSection.section_version` is required and must be an integer starting at `1`.
 Consumers must preserve it when reading, replaying, or rendering generated sections.
 Persistence orders versions by `section_kind`, `section_version`, `created_at`, and id; callers must not infer currentness from array position alone or omit `section_version` from cached payloads.
 
-## PR2A exclusions
+## Historical PR2A exclusions
 
 - No `db/migrations` changes or SQL constraints.
 - No repositories, persistence calls, or current session status reinterpretation.
 - No UI components or runtime API calls.
 - No RAG, pgvector, embeddings, corpus citations, or context packs.
-- No Clinic Pilot regulatory, medical-device, cost, scoring, or resource modules.
+- No cost, scoring, or resource modules.
 - No PDF export fields such as `pdf_url`.
 - No enterprise auth, remote AI provider, VPS, merges, or cherry-picks.

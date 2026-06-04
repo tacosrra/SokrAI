@@ -18,7 +18,8 @@
       "enum": [
         "problem",
         "solution",
-        "data_ai_privacy"
+        "data_ai_privacy",
+        "medical_device_triage"
       ]
     },
     "gap_kind": {

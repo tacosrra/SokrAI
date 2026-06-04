@@ -11,6 +11,11 @@ import type {
   DataAiPrivacyStartResponse as ApiDataAiPrivacyStartResponse,
   DataAiPrivacyState as ApiDataAiPrivacyState,
   GeneratedSection as ApiGeneratedSection,
+  MedicalDeviceTriageReplyRequest as ApiMedicalDeviceTriageReplyRequest,
+  MedicalDeviceTriageReplyResponse as ApiMedicalDeviceTriageReplyResponse,
+  MedicalDeviceTriageStartRequest as ApiMedicalDeviceTriageStartRequest,
+  MedicalDeviceTriageStartResponse as ApiMedicalDeviceTriageStartResponse,
+  MedicalDeviceTriageState as ApiMedicalDeviceTriageState,
   ModuleChat as ApiModuleChat,
   ProposalDocument as ApiProposalDocument,
   ProposalSource as ApiProposalSource,
@@ -31,6 +36,11 @@ import type {
   DataAiPrivacyStartResponse as WebDataAiPrivacyStartResponse,
   DataAiPrivacyState as WebDataAiPrivacyState,
   GeneratedSection as WebGeneratedSection,
+  MedicalDeviceTriageReplyRequest as WebMedicalDeviceTriageReplyRequest,
+  MedicalDeviceTriageReplyResponse as WebMedicalDeviceTriageReplyResponse,
+  MedicalDeviceTriageStartRequest as WebMedicalDeviceTriageStartRequest,
+  MedicalDeviceTriageStartResponse as WebMedicalDeviceTriageStartResponse,
+  MedicalDeviceTriageState as WebMedicalDeviceTriageState,
   ModuleChat as WebModuleChat,
   ProposalDocument as WebProposalDocument,
   ProposalSource as WebProposalSource,
@@ -61,5 +71,10 @@ describe('Alpha contract type mirrors', () => {
     expectTypeOf<ApiDataAiPrivacyStartResponse>().toEqualTypeOf<WebDataAiPrivacyStartResponse>();
     expectTypeOf<ApiDataAiPrivacyReplyRequest>().toEqualTypeOf<WebDataAiPrivacyReplyRequest>();
     expectTypeOf<ApiDataAiPrivacyReplyResponse>().toEqualTypeOf<WebDataAiPrivacyReplyResponse>();
+    expectTypeOf<ApiMedicalDeviceTriageState>().toEqualTypeOf<WebMedicalDeviceTriageState>();
+    expectTypeOf<ApiMedicalDeviceTriageStartRequest>().toEqualTypeOf<WebMedicalDeviceTriageStartRequest>();
+    expectTypeOf<ApiMedicalDeviceTriageStartResponse>().toEqualTypeOf<WebMedicalDeviceTriageStartResponse>();
+    expectTypeOf<ApiMedicalDeviceTriageReplyRequest>().toEqualTypeOf<WebMedicalDeviceTriageReplyRequest>();
+    expectTypeOf<ApiMedicalDeviceTriageReplyResponse>().toEqualTypeOf<WebMedicalDeviceTriageReplyResponse>();
   });
 });

@@ -1,0 +1,28 @@
+{
+  "agent_status": "continue",
+  "diagnosis": [
+    "Medical-device signals or uncertainty are present and intended-use claims need clarification."
+  ],
+  "updated_medical_device_triage": {
+    "triage_status": "applicable",
+    "activation_signals": [
+      "clinical decision support",
+      "risk stratification"
+    ],
+    "uncertainties": [
+      "The intended use and clinical decision role require competent human review."
+    ],
+    "intended_use_claims": [
+      "The proposal says the software supports triage decisions."
+    ],
+    "clinical_decision_role": "The software may influence triage prioritization before staff review.",
+    "evidence_needed": [
+      "Clarify intended use, clinical workflow boundaries, and validation evidence."
+    ],
+    "human_review_plan": "Clinical governance and regulatory owners review gaps/questions/uncertainty before pilot use.",
+    "needs_human_review": true,
+    "requires_competent_human_review": true
+  },
+  "next_question": "Que uso previsto y papel clinico deberia revisar una persona competente antes del piloto?",
+  "completion_reason": ""
+}

@@ -463,4 +463,115 @@ describe('LlmOrchestrator', () => {
     expect(client.calls[0].userPrompt).toContain('source-problem');
     expect(client.calls[0].userPrompt).toContain('source-solution');
   });
+
+  it('uses the medical-device triage schema and includes activation and prior sections in the prompt', async () => {
+    const client = new QueueLanguageModelClient([
+      JSON.stringify({
+        agent_status: 'continue',
+        diagnosis: ['intended use needs clarification'],
+        updated_medical_device_triage: {
+          triage_status: 'uncertain',
+          activation_signals: ['clinical decision support'],
+          uncertainties: ['Intended-use boundary requires competent human review.'],
+          intended_use_claims: [],
+          clinical_decision_role: '',
+          evidence_needed: ['Clarify whether the assistant influences clinical triage.'],
+          human_review_plan: 'requires competent human review',
+          needs_human_review: true,
+          requires_competent_human_review: true,
+        },
+        next_question: 'What intended use should be reviewed by a competent human?',
+        completion_reason: '',
+      }),
+    ]);
+    const orchestrator = new LlmOrchestrator(createConfig(), client);
+
+    await orchestrator.runMedicalDeviceTriage({
+      structuredBrief: {
+        project_title: 'Proyecto',
+        goal: 'Aclarar medical-device uncertainty',
+        target_user: 'Urgencias',
+        problem_owner: 'Direccion medica',
+        problem_statement: 'El triaje se retrasa',
+        evidence_of_problem: 'Esperas frecuentes',
+        current_alternatives: 'Proceso manual',
+        scope: 'Urgencias hospitalarias',
+        constraints_known: [],
+        assumptions: [],
+        ambiguities: [],
+        missing_information: [],
+      },
+      problemSection: {
+        title: 'Problem definition',
+        content_markdown: 'El triaje se retrasa en horas punta.',
+        source_refs: [
+          {
+            source_id: 'source-problem',
+            source_kind: 'generated_section',
+            label: 'Problem section',
+            created_at: '2026-06-04T10:00:00.000Z',
+          },
+        ],
+      },
+      solutionSection: {
+        title: 'Solution definition',
+        content_markdown: 'Un asistente prepara resumenes de triaje.',
+        source_refs: [
+          {
+            source_id: 'source-solution',
+            source_kind: 'generated_section',
+            label: 'Solution section',
+            created_at: '2026-06-04T10:00:00.000Z',
+          },
+        ],
+      },
+      dataAiPrivacySection: {
+        title: 'Data, AI and privacy gaps',
+        content_markdown: 'Data and privacy uncertainty requires competent human review.',
+        source_refs: [
+          {
+            source_id: 'source-data',
+            source_kind: 'generated_section',
+            label: 'Data AI privacy section',
+            created_at: '2026-06-04T10:00:00.000Z',
+          },
+        ],
+      },
+      regulatoryProfile: {
+        profile_id: 'hospital_clinic_v1',
+        profile_version: 'v1',
+        display_name: 'Hospital clinic v1',
+        families: [
+          {
+            family_id: 'mdr',
+            label: 'MDR',
+            scope_note: 'Medical-device uncertainty context.',
+          },
+        ],
+        allowed_outputs: ['gaps', 'questions', 'uncertainty', 'requires competent human review'],
+        forbidden_outputs: ['definitive medical device classification'],
+        review_statement: 'requires competent human review',
+      },
+      activationResult: {
+        triage_status: 'uncertain',
+        activation_signals: ['clinical decision support'],
+        uncertainties: ['Intended-use boundary requires competent human review.'],
+        needs_human_review: true,
+        requires_competent_human_review: true,
+      },
+      recentTurns: [],
+    });
+
+    expect(client.calls).toHaveLength(1);
+    expect(client.calls[0].systemPrompt).toContain('Prompt: medical-device-triage-agent@v1');
+    expect(client.calls[0].responseSchema).toMatchObject({
+      $id: schemaDocuments.medicalDeviceTriageTurn.$id,
+      title: schemaDocuments.medicalDeviceTriageTurn.title,
+    });
+    expect(client.calls[0].userPrompt).toContain('"activation_result"');
+    expect(client.calls[0].userPrompt).toContain('"triage_status": "uncertain"');
+    expect(client.calls[0].userPrompt).toContain('source-data');
+    expect(client.calls[0].userPrompt).not.toContain('legal corpus');
+    expect(client.calls[0].userPrompt).not.toContain('RAG');
+  });
 });
