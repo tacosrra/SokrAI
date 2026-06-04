@@ -272,9 +272,6 @@ export function computeResourcesPilotViabilityMissingInformation(state: Resource
     }
 
     if (field === 'uncertainties') {
-      if (state.uncertainties.length === 0) {
-        missing.push(field);
-      }
       continue;
     }
 

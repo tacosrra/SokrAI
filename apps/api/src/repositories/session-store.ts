@@ -1088,6 +1088,20 @@ export class SessionStore {
       return toRequestExecutionFromRun(requestId, 'resources_pilot_viability_start', resourcesPilotViabilityRun);
     }
 
+    const resourcesPilotViabilityStart = await this.findAlphaAuditEventRequestSession(
+      requestId,
+      'resources_pilot_viability_start_requested',
+    );
+
+    if (resourcesPilotViabilityStart) {
+      return {
+        request_id: requestId,
+        request_kind: 'resources_pilot_viability_start',
+        status: 'pending',
+        session_id: resourcesPilotViabilityStart.session_id,
+      };
+    }
+
     const solutionDefinitionRun = await this.findLatestAgentRunStatus(requestId, 'solution_definition');
 
     if (solutionDefinitionRun) {
@@ -1131,6 +1145,24 @@ export class SessionStore {
         'LIMIT 1',
       ].join(' '),
       [requestId, module],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+  private async findAlphaAuditEventRequestSession(
+    requestId: string,
+    eventType: string,
+  ): Promise<{ session_id: string } | null> {
+    const result = await this.database.query<{ session_id: string }>(
+      [
+        'SELECT session_id',
+        'FROM audit_events',
+        'WHERE request_id = $1 AND event_type = $2 AND session_id IS NOT NULL',
+        'ORDER BY created_at DESC, event_seq DESC',
+        'LIMIT 1',
+      ].join(' '),
+      [requestId, eventType],
     );
 
     return result.rows[0] ?? null;

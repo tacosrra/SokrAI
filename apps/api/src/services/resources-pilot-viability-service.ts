@@ -196,6 +196,10 @@ export class ResourcesPilotViabilityService {
       );
     }
 
+    if (command.trigger === 'start') {
+      await this.recordStartRequested(session.id, requestId);
+    }
+
     const recentTurns = chat.turns
       .filter((turn) => turn.turn_status === 'resolved')
       .slice(-5)
@@ -408,6 +412,23 @@ export class ResourcesPilotViabilityService {
       module: 'resources_pilot_viability',
       chatStatus: 'active',
       warnings: [RESOURCES_PILOT_VIABILITY_WARNING],
+    });
+  }
+
+  private async recordStartRequested(sessionId: string, requestId?: string): Promise<void> {
+    if (!requestId) {
+      return;
+    }
+
+    await this.alphaStore.appendAuditEvent(this.alphaStore.getDatabase(), {
+      proposalId: sessionId,
+      sessionId,
+      eventType: 'resources_pilot_viability_start_requested',
+      actorType: 'workflow',
+      requestId,
+      payloadJson: {
+        module: 'resources_pilot_viability',
+      },
     });
   }
 

@@ -391,12 +391,18 @@ No cambies `N8N_ENCRYPTION_KEY` una vez que `n8n` haya inicializado su volumen p
 - `POST /webhook/solution-reply-v1`
 - `POST /webhook/data-ai-privacy-start-v1`
 - `POST /webhook/data-ai-privacy-reply-v1`
+- `POST /webhook/medical-device-triage-start-v1`
+- `POST /webhook/medical-device-triage-reply-v1`
+- `POST /webhook/resources-pilot-viability-start-v1`
+- `POST /webhook/resources-pilot-viability-reply-v1`
 
 ### Endpoint interno reutilizable
 
 - `POST /webhook/agent-problem-definition-v1`
 - `POST /webhook/agent-solution-definition-v1`
 - `POST /webhook/agent-data-ai-privacy-gap-v1`
+- `POST /webhook/agent-medical-device-triage-v1`
+- `POST /webhook/agent-resources-pilot-viability-v1`
 
 ### API interna para n8n
 
@@ -409,6 +415,12 @@ No cambies `N8N_ENCRYPTION_KEY` una vez que `n8n` haya inicializado su volumen p
 - `POST /internal/sessions/data-ai-privacy-start`
 - `POST /internal/sessions/data-ai-privacy-reply`
 - `POST /internal/agents/data-ai-privacy/run`
+- `POST /internal/sessions/medical-device-triage-start`
+- `POST /internal/sessions/medical-device-triage-reply`
+- `POST /internal/agents/medical-device-triage/run`
+- `POST /internal/sessions/resources-pilot-viability-start`
+- `POST /internal/sessions/resources-pilot-viability-reply`
+- `POST /internal/agents/resources-pilot-viability/run`
 - `POST /internal/reports/basic-alpha/compose`
 
 ### API de inspeccion

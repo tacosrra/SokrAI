@@ -104,6 +104,33 @@ describe('resources pilot viability domain rules', () => {
     expect(guarded.warnings).toContain('Latest resources pilot viability answer was vague; clarification was narrowed');
   });
 
+  it('allows completion with no open uncertainties and no uncertainty missing-information gap', () => {
+    const stateWithoutUncertainties = {
+      ...completeState,
+      uncertainties: [],
+    };
+    const turn: ResourcesPilotViabilityTurn = {
+      agent_status: 'done',
+      diagnosis: ['Operational pilot inputs are clear enough for the section.'],
+      updated_resources_pilot_viability: stateWithoutUncertainties,
+      next_question: '',
+      completion_reason: 'resources pilot viability inputs sufficiently clarified',
+    };
+    const guarded = enforceResourcesPilotViabilityTurnGuardrails(turn);
+
+    expect(computeResourcesPilotViabilityMissingInformation(stateWithoutUncertainties)).not.toContain('uncertainties');
+    expect(guarded.turn.agent_status).toBe('done');
+    expect(guarded.detectedGaps).not.toContain('uncertainties');
+    expect(selectResourcesPilotViabilityGapRefs([
+      {
+        ...baseGap,
+        gap_id: 'gap-uncertainties',
+        gap_kind: 'needs_user_confirmation',
+        field: 'uncertainties',
+      },
+    ], stateWithoutUncertainties)).toEqual([]);
+  });
+
   it('selects at most three PR11 gaps and resolves only PR11 fields', () => {
     const gaps: AlphaGap[] = [
       baseGap,

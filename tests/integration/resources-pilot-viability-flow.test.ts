@@ -128,11 +128,130 @@ describe('resources pilot viability flow integration', () => {
 
     expect(first.statusCode).toBe(200);
     expect(replay.statusCode).toBe(200);
-    expect(replay.body.run_id).toBe(first.body.run_id);
+    expect(replay.body).toMatchObject({
+      stage: first.body.stage,
+      agent_status: first.body.agent_status,
+      completion_reason: first.body.completion_reason,
+    });
     expect(Number(counts.rows[0].answer_sources)).toBe(1);
     expect(Number(counts.rows[0].sections)).toBe(1);
     expect(Number(counts.rows[0].request_runs)).toBe(1);
     expect(Number(counts.rows[0].answer_resolved_events)).toBe(1);
+  });
+
+  it('actively recovers a resources pilot start request after the request marker is persisted', async () => {
+    ({ app, database } = await buildTestApp(await createResourcesPilotStartRecoveryModel()));
+
+    const sessionId = await completeAlphaFlow(app);
+    const firstStart = await resourcesPilotStartFlow(app, 'req-resources-recover-start', sessionId);
+    const pendingStatus = await app.inject({
+      method: 'GET',
+      url: '/api/v1/requests/req-resources-recover-start',
+    });
+    const recoverStatus = await app.inject({
+      method: 'POST',
+      url: '/api/v1/requests/req-resources-recover-start/recover',
+    });
+    const sideEffects = await database!.query<{
+      request_runs: string;
+      resource_chats: string;
+      resource_turns: string;
+      resource_sections: string;
+    }>(
+      [
+        'SELECT',
+        '  (SELECT COUNT(*) FROM agent_runs WHERE request_id = $2 AND run_purpose = \'resources_pilot_viability\') AS request_runs,',
+        '  (SELECT COUNT(*) FROM module_chats mc JOIN proposals p ON p.id = mc.proposal_id',
+        '   WHERE p.session_id = $1 AND mc.module = \'resources_pilot_viability\') AS resource_chats,',
+        '  (SELECT COUNT(*) FROM chat_turns ct JOIN proposals p ON p.id = ct.proposal_id',
+        '   WHERE p.session_id = $1 AND ct.module = \'resources_pilot_viability\') AS resource_turns,',
+        '  (SELECT COUNT(*) FROM generated_sections gs JOIN proposals p ON p.id = gs.proposal_id',
+        '   WHERE p.session_id = $1 AND gs.section_kind = \'resources_pilot_viability\') AS resource_sections',
+      ].join(' '),
+      [sessionId, 'req-resources-recover-start'],
+    );
+
+    expect(firstStart.statusCode).toBe(500);
+    expect(pendingStatus.json()).toMatchObject({
+      request_id: 'req-resources-recover-start',
+      request_kind: 'resources_pilot_viability_start',
+      status: 'pending',
+      session_id: sessionId,
+    });
+    expect(recoverStatus.statusCode).toBe(200);
+    expect(recoverStatus.json()).toMatchObject({
+      request_id: 'req-resources-recover-start',
+      request_kind: 'resources_pilot_viability_start',
+      status: 'completed',
+      session_id: sessionId,
+    });
+    expect(sideEffects.rows[0]).toMatchObject({
+      request_runs: '1',
+      resource_chats: '1',
+      resource_turns: '1',
+      resource_sections: '0',
+    });
+  });
+
+  it('actively recovers a resources pilot reply request without duplicating side effects', async () => {
+    ({ app, database } = await buildTestApp(await createResourcesPilotReplyRecoveryModel()));
+
+    const sessionId = await completeAlphaFlow(app);
+    await resourcesPilotStartFlow(app, 'req-resources-recover-reply-start', sessionId);
+
+    const firstReply = await resourcesPilotReplyFlow(
+      app,
+      'req-resources-recover-reply',
+      sessionId,
+      'El piloto tiene equipo clinico, SSO, entorno ambulatorio, metricas semanales, restricciones y riesgos operativos.',
+    );
+    const pendingStatus = await app.inject({
+      method: 'GET',
+      url: '/api/v1/requests/req-resources-recover-reply',
+    });
+    const recoverStatus = await app.inject({
+      method: 'POST',
+      url: '/api/v1/requests/req-resources-recover-reply/recover',
+    });
+    const sideEffects = await database!.query<{
+      request_runs: string;
+      answer_sources: string;
+      resource_turns: string;
+      resource_sections: string;
+    }>(
+      [
+        'SELECT',
+        '  (SELECT COUNT(*) FROM agent_runs WHERE request_id = $2 AND run_purpose = \'resources_pilot_viability\') AS request_runs,',
+        '  (SELECT COUNT(*) FROM proposal_sources ps JOIN proposals p ON p.id = ps.proposal_id',
+        '   WHERE p.session_id = $1 AND ps.source_kind = \'user_answer\' AND ps.metadata_json->>\'request_id\' = $2) AS answer_sources,',
+        '  (SELECT COUNT(*) FROM chat_turns ct JOIN proposals p ON p.id = ct.proposal_id',
+        '   WHERE p.session_id = $1 AND ct.module = \'resources_pilot_viability\') AS resource_turns,',
+        '  (SELECT COUNT(*) FROM generated_sections gs JOIN proposals p ON p.id = gs.proposal_id',
+        '   WHERE p.session_id = $1 AND gs.section_kind = \'resources_pilot_viability\') AS resource_sections',
+      ].join(' '),
+      [sessionId, 'req-resources-recover-reply'],
+    );
+
+    expect(firstReply.statusCode).toBe(500);
+    expect(pendingStatus.json()).toMatchObject({
+      request_id: 'req-resources-recover-reply',
+      request_kind: 'resources_pilot_viability_reply',
+      status: 'pending',
+      session_id: sessionId,
+    });
+    expect(recoverStatus.statusCode).toBe(200);
+    expect(recoverStatus.json()).toMatchObject({
+      request_id: 'req-resources-recover-reply',
+      request_kind: 'resources_pilot_viability_reply',
+      status: 'completed',
+      session_id: sessionId,
+    });
+    expect(sideEffects.rows[0]).toMatchObject({
+      request_runs: '1',
+      answer_sources: '1',
+      resource_turns: '1',
+      resource_sections: '1',
+    });
   });
 
   it('persists guardrail intervention metadata without exposing unsafe output', async () => {
@@ -185,6 +304,53 @@ describe('resources pilot viability flow integration', () => {
       scope: 'resources_pilot_viability_operational_inputs',
     });
     expect(JSON.stringify(persisted.rows[0].payload_json)).not.toMatch(unsafeResourcesPilotClaims);
+  });
+
+  it('persists resources pilot repair failure and marks the active turn failed', async () => {
+    ({ app, database } = await buildTestApp(await createResourcesPilotRepairFailureModel()));
+
+    const sessionId = await completeAlphaFlow(app);
+    await resourcesPilotStartFlow(app, 'req-resources-error-start', sessionId);
+    const response = await resourcesPilotReplyFlow(
+      app,
+      'req-resources-error-reply',
+      sessionId,
+      'No lo se todavia; el equipo y las dependencias siguen pendientes.',
+    );
+    const persisted = await database!.query<{
+      run_status: string;
+      repair_attempted: boolean;
+      chat_status: string;
+      failed_turns: string;
+      failure_events: string;
+    }>(
+      [
+        'SELECT',
+        '  ar.status AS run_status,',
+        '  ar.repair_attempted AS repair_attempted,',
+        '  mc.chat_status AS chat_status,',
+        '  (SELECT COUNT(*) FROM chat_turns ct',
+        '   WHERE ct.proposal_id = p.id AND ct.module = \'resources_pilot_viability\' AND ct.turn_status = \'failed\') AS failed_turns,',
+        '  (SELECT COUNT(*) FROM audit_events ae',
+        '   WHERE ae.proposal_id = p.id AND ae.request_id = $2',
+        '     AND ae.event_type = \'resources_pilot_viability_answer_failed\') AS failure_events',
+        'FROM proposals p',
+        'JOIN agent_runs ar ON ar.session_id = p.session_id AND ar.request_id = $2',
+        'JOIN module_chats mc ON mc.proposal_id = p.id AND mc.module = \'resources_pilot_viability\'',
+        'WHERE p.session_id = $1',
+      ].join(' '),
+      [sessionId, 'req-resources-error-reply'],
+    );
+
+    expect(response.statusCode).toBe(502);
+    expect(response.body.error_code).toBe('invalid_model_json_after_repair');
+    expect(persisted.rows[0]).toMatchObject({
+      run_status: 'repair_failed',
+      repair_attempted: true,
+      chat_status: 'failed',
+    });
+    expect(Number(persisted.rows[0].failed_turns)).toBe(1);
+    expect(Number(persisted.rows[0].failure_events)).toBe(1);
   });
 });
 
@@ -243,6 +409,42 @@ async function createResourcesPilotViabilityGuardrailModel() {
   return new QueueLanguageModelClient([
     ...base,
     JSON.stringify(unsafeResourcesTurn),
+  ]);
+}
+
+async function createResourcesPilotRepairFailureModel() {
+  const base = await createAlphaModelResponses();
+  const continueResourcesTurn = await readFixture('expected', 'resources-pilot-viability.continue.json');
+
+  return new QueueLanguageModelClient([
+    ...base,
+    JSON.stringify(continueResourcesTurn),
+    'not json',
+    'not json',
+  ]);
+}
+
+async function createResourcesPilotStartRecoveryModel() {
+  const base = await createAlphaModelResponses();
+  const continueResourcesTurn = await readFixture('expected', 'resources-pilot-viability.continue.json');
+
+  return new QueueLanguageModelClient([
+    ...base,
+    new Error('transient resources pilot start failure'),
+    JSON.stringify(continueResourcesTurn),
+  ]);
+}
+
+async function createResourcesPilotReplyRecoveryModel() {
+  const base = await createAlphaModelResponses();
+  const continueResourcesTurn = await readFixture('expected', 'resources-pilot-viability.continue.json');
+  const doneResourcesTurn = await readFixture('expected', 'resources-pilot-viability.done.json');
+
+  return new QueueLanguageModelClient([
+    ...base,
+    JSON.stringify(continueResourcesTurn),
+    new Error('transient resources pilot reply failure'),
+    JSON.stringify(doneResourcesTurn),
   ]);
 }
 

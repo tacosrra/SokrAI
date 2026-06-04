@@ -8,10 +8,10 @@ PR 2A defined schema-backed contracts and TypeScript domain types for the MVP Al
 | --- | --- | --- |
 | `ProposalSource` | `contracts/schemas/proposal-source.schema.json` | Stable provenance reference for user-provided or internally generated Alpha material. |
 | `ProposalDocument` | `contracts/schemas/proposal-document.schema.json` | Pasted or uploaded source material payload shape. |
-| `AlphaGap` | `contracts/schemas/alpha-gap.schema.json` | Descriptive information gap for problem, solution, data/AI/privacy, or medical-device triage work. |
+| `AlphaGap` | `contracts/schemas/alpha-gap.schema.json` | Descriptive information gap for problem, solution, data/AI/privacy, medical-device triage, or resources/pilot/viability work. |
 | `ChatTurn` | `contracts/schemas/chat-turn.schema.json` | One question/answer turn with bounded diagnosis. |
-| `ModuleChat` | `contracts/schemas/module-chat.schema.json` | Problem, solution, data/AI/privacy, or medical-device triage chat lifecycle and turns. |
-| `GeneratedSection` | `contracts/schemas/generated-section.schema.json` | Versioned generated problem, solution, data/AI/privacy, or medical-device triage section. |
+| `ModuleChat` | `contracts/schemas/module-chat.schema.json` | Problem, solution, data/AI/privacy, medical-device triage, or resources/pilot/viability chat lifecycle and turns. |
+| `GeneratedSection` | `contracts/schemas/generated-section.schema.json` | Versioned generated problem, solution, data/AI/privacy, medical-device triage, or resources/pilot/viability section. |
 | `AlphaProposal` | `contracts/schemas/alpha-proposal.schema.json` | Aggregate contract that composes brief, documents, sources, gaps, chats, sections, and audit references. |
 | `BasicAlphaReport` | `contracts/schemas/basic-alpha-report.schema.json` | Implemented in-app structured Alpha report, without PDF/export fields or raw model output. |
 | `SolutionDefinitionTurn` | `contracts/schemas/solution-definition-turn.schema.json` | Bounded model output for the solution-definition lane. |
@@ -24,6 +24,9 @@ PR 2A defined schema-backed contracts and TypeScript domain types for the MVP Al
 | `MedicalDeviceTriageTurn` | `contracts/schemas/medical-device-triage-turn.schema.json` | Bounded, non-definitive output for conditional medical-device triage. |
 | `MedicalDeviceTriageStartRequest` / `MedicalDeviceTriageStartResponse` | `contracts/schemas/medical-device-triage-start.*.schema.json` | Starts triage after the data/AI/privacy section exists, returning `applicable`, `uncertain`, or `not_applicable`. |
 | `MedicalDeviceTriageReplyRequest` / `MedicalDeviceTriageReplyResponse` | `contracts/schemas/medical-device-triage-reply.*.schema.json` | Persists a triage answer and returns the next bounded state. |
+| `ResourcesPilotViabilityTurn` | `contracts/schemas/resources-pilot-viability-turn.schema.json` | Bounded, non-scoring output for operational pilot inputs. |
+| `ResourcesPilotViabilityStartRequest` / `ResourcesPilotViabilityStartResponse` | `contracts/schemas/resources-pilot-viability-start.*.schema.json` | Starts the resources/pilot/viability lane after the solution section exists. |
+| `ResourcesPilotViabilityReplyRequest` / `ResourcesPilotViabilityReplyResponse` | `contracts/schemas/resources-pilot-viability-reply.*.schema.json` | Persists a resources/pilot answer and returns the next bounded state. |
 
 `structured-brief.schema.json` remains canonical and is referenced by aggregate/report contracts rather than duplicated.
 
@@ -37,10 +40,10 @@ PR 2A defined schema-backed contracts and TypeScript domain types for the MVP Al
 | Gap | `gap_kind` | `missing_information`, `ambiguous_information`, `unsupported_claim`, `needs_user_confirmation` | Descriptive gap kind, not scoring or approval. |
 | Gap | `gap_status` | `open`, `in_progress`, `resolved`, `deferred`, `not_applicable` | Gap resolution state for later chats. |
 | Gap | `origin` | `structured_brief_field`, `structured_brief_missing_information`, `structured_brief_ambiguity`, `proposal_source`, `system_rule` | Deterministic provenance for why the gap exists. |
-| Module chat | `module` | `problem`, `solution`, `data_ai_privacy`, `medical_device_triage` | Implemented Alpha/Clinic module values. |
+| Module chat | `module` | `problem`, `solution`, `data_ai_privacy`, `medical_device_triage`, `resources_pilot_viability` | Implemented Alpha/Clinic module values. |
 | Module chat | `chat_status` | `not_started`, `active`, `waiting_for_user`, `ready_to_generate`, `completed`, `blocked`, `failed` | Chat lifecycle for Alpha/Clinic modules. |
 | Chat turn | `turn_status` | `awaiting_user`, `processing`, `resolved`, `failed`, `skipped` | Turn lifecycle for modular chats. |
-| Generated section | `section_kind` | `problem`, `solution`, `data_ai_privacy`, `medical_device_triage` | Generated section kind. |
+| Generated section | `section_kind` | `problem`, `solution`, `data_ai_privacy`, `medical_device_triage`, `resources_pilot_viability` | Generated section kind. |
 | Generated section | `section_status` | `draft`, `generated`, `accepted`, `needs_revision`, `superseded` | Versioned section lifecycle. |
 | Basic report | `report_status` | `draft`, `ready`, `needs_revision` | In-app report readiness state. |
 | Audit reference | `audit_refs[].kind` | `agent_run`, `audit_event`, `snapshot`, `chat_turn` | Reference-only audit linkage. |
@@ -140,6 +143,31 @@ this is not a legal, regulatory, product, MDR, approval, rejection, or final
 classification decision. Allowed outputs are bounded gaps, questions,
 uncertainty, evidence needs, intended-use claims for review, and the exact
 marker `requires competent human review`.
+
+## Resources/pilot/viability Clinic lane
+
+PR 11 adds `resources_pilot_viability` as a bounded operational input module. It
+reuses the same Alpha primitives:
+
+- `module_chats.module = 'resources_pilot_viability'`
+- `chat_turns.module = 'resources_pilot_viability'`
+- `alpha_gaps.module = 'resources_pilot_viability'`
+- `agent_runs.run_purpose = 'resources_pilot_viability'`
+- `generated_sections.section_kind = 'resources_pilot_viability'`
+
+The lane starts only after a current generated solution section exists. It asks
+one primary question per turn, caps diagnosis at three items, stores answer
+idempotency on `chat_turns.answer_request_id`, and renders the final section
+deterministically from persisted operational fields and internal source refs.
+
+Collected inputs are human resources, technical resources, pilot environment,
+dependencies, indicators/metrics, constraints, operational risks, assumptions,
+and any remaining operational uncertainties. An empty uncertainty list is valid
+when the other operational inputs are complete.
+
+The lane does not produce scores, rankings, approvals, go/no-go decisions,
+detailed financial models, RAG conclusions, legal/regulatory/clinical/privacy
+or medical-device determinations, PDF output, or export behavior.
 
 ## GeneratedSection versioning
 
