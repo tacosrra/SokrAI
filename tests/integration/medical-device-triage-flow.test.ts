@@ -151,6 +151,176 @@ describe('medical-device triage flow integration', () => {
     expect(Number(counts.rows[0].request_runs)).toBe(1);
     expect(Number(counts.rows[0].answer_resolved_events)).toBe(1);
   });
+
+  it('persists medical-device guardrail intervention metadata without exposing unsafe output', async () => {
+    ({ app, database } = await buildTestApp(await createMedicalDeviceGuardrailModel()));
+
+    const sessionId = await completeClinicFlow(app, 'req-med-guardrail');
+    const start = await medicalDeviceStartFlow(app, 'req-med-guardrail-start', sessionId);
+    const persisted = await database!.query<{
+      metrics_json: {
+        guardrail_intervention?: {
+          applied?: boolean;
+          reasons?: string[];
+          normalizedFields?: string[];
+          fallbackQuestionApplied?: boolean;
+          scope?: string;
+        };
+      };
+      payload_json: Record<string, unknown>;
+    }>(
+      [
+        'SELECT ar.metrics_json, ae.payload_json',
+        'FROM agent_runs ar',
+        'JOIN audit_events ae ON ae.run_id = ar.id',
+        'WHERE ar.session_id = $1',
+        '  AND ar.request_id = $2',
+        '  AND ar.run_purpose = \'medical_device_triage\'',
+        '  AND ae.event_type = \'medical_device_triage_guardrail_fallback_applied\'',
+      ].join(' '),
+      [sessionId, 'req-med-guardrail-start'],
+    );
+
+    expect(start.statusCode).toBe(200);
+    expect(start.body.agent_status).toBe('continue');
+    expect(start.body.warnings).toContain('Definitive medical-device wording was replaced before persistence');
+    expect(JSON.stringify(start.body)).not.toMatch(/is a medical device|MDR class|approved|rejected/i);
+    expect(persisted.rowCount).toBe(1);
+    expect(persisted.rows[0].metrics_json.guardrail_intervention).toMatchObject({
+      applied: true,
+      reasons: ['forbidden_output_replaced'],
+      fallbackQuestionApplied: true,
+      scope: 'medical_device_triage_gap_question_framework',
+    });
+    expect(persisted.rows[0].metrics_json.guardrail_intervention?.normalizedFields).toEqual(
+      expect.arrayContaining(['diagnosis', 'updated_medical_device_triage.clinical_decision_role']),
+    );
+    expect(persisted.rows[0].payload_json).toMatchObject({
+      reasons: ['forbidden_output_replaced'],
+      fallback_question_applied: true,
+      forced_agent_status: 'continue',
+      competent_human_review_required: true,
+      scope: 'medical_device_triage_gap_question_framework',
+    });
+    expect(JSON.stringify(persisted.rows[0].payload_json)).not.toMatch(/is a medical device|MDR class|approved|rejected/i);
+  });
+
+  it('persists medical-device repair failure and marks the active turn failed', async () => {
+    ({ app, database } = await buildTestApp(await createMedicalDeviceRepairFailureModel()));
+
+    const sessionId = await completeClinicFlow(app, 'req-med-error');
+    await medicalDeviceStartFlow(app, 'req-med-error-start', sessionId);
+    const response = await medicalDeviceReplyFlow(
+      app,
+      'req-med-error-reply',
+      sessionId,
+      'No lo se todavia, debe revisarlo una persona competente.',
+    );
+    const persisted = await database!.query<{
+      run_status: string;
+      repair_attempted: boolean;
+      chat_status: string;
+      failed_turns: string;
+    }>(
+      [
+        'SELECT',
+        '  ar.status AS run_status,',
+        '  ar.repair_attempted AS repair_attempted,',
+        '  mc.chat_status AS chat_status,',
+        '  (SELECT COUNT(*) FROM chat_turns ct',
+        '   WHERE ct.proposal_id = p.id AND ct.module = \'medical_device_triage\' AND ct.turn_status = \'failed\') AS failed_turns',
+        'FROM proposals p',
+        'JOIN agent_runs ar ON ar.session_id = p.session_id AND ar.request_id = $2',
+        'JOIN module_chats mc ON mc.proposal_id = p.id AND mc.module = \'medical_device_triage\'',
+        'WHERE p.session_id = $1',
+      ].join(' '),
+      [sessionId, 'req-med-error-reply'],
+    );
+
+    expect(response.statusCode).toBe(502);
+    expect(response.body.error_code).toBe('invalid_model_json_after_repair');
+    expect(persisted.rows[0]).toMatchObject({
+      run_status: 'repair_failed',
+      repair_attempted: true,
+      chat_status: 'failed',
+    });
+    expect(Number(persisted.rows[0].failed_turns)).toBe(1);
+  });
+
+  it('opens an uncertain medical-device triage turn for clinical uncertainty without explicit signals', async () => {
+    ({ app, database } = await buildTestApp(await createMedicalDeviceUncertainModel()));
+
+    const sessionId = await completeClinicFlow(app, 'req-med-uncertain');
+    const start = await medicalDeviceStartFlow(app, 'req-med-uncertain-start', sessionId);
+    const persisted = await database!.query<{
+      gaps: string;
+      turns: string;
+      review_warnings: string;
+    }>(
+      [
+        'SELECT',
+        '  (SELECT COUNT(*) FROM alpha_gaps ag JOIN proposals p ON p.id = ag.proposal_id',
+        '   WHERE p.session_id = $1 AND ag.module = \'medical_device_triage\') AS gaps,',
+        '  (SELECT COUNT(*) FROM chat_turns ct JOIN proposals p ON p.id = ct.proposal_id',
+        '   WHERE p.session_id = $1 AND ct.module = \'medical_device_triage\' AND ct.turn_status = \'awaiting_user\') AS turns,',
+        '  (SELECT COUNT(*) FROM module_chats mc JOIN proposals p ON p.id = mc.proposal_id',
+        '   WHERE p.session_id = $1 AND mc.module = \'medical_device_triage\'',
+        '     AND mc.warnings_json ? \'requires competent human review\') AS review_warnings',
+      ].join(' '),
+      [sessionId],
+    );
+
+    expect(start.statusCode).toBe(200);
+    expect(start.body.activation_result).toBe('uncertain');
+    expect(start.body.updated_medical_device_triage.requires_competent_human_review).toBe(true);
+    expect(start.body.agent_status).toBe('continue');
+    expect(start.body.next_question).toMatch(/\?$/);
+    expect(Number(persisted.rows[0].gaps)).toBeGreaterThan(0);
+    expect(Number(persisted.rows[0].turns)).toBe(1);
+    expect(Number(persisted.rows[0].review_warnings)).toBe(1);
+  });
+
+  it('persists prerequisite failures for medical-device start request recovery', async () => {
+    ({ app, database } = await buildTestApp(await createDataAiPrivacyPrerequisiteMissingModel()));
+
+    const strongProposal = await readFixture('start', 'strong-proposal.json');
+    const strongAnswer = await readFixture<{ answer: string }>('reply', 'strong-answer.json');
+    const solutionAnswer = await readFixture<{ answer: string }>('reply', 'solution-workflow-change.json');
+    const start = await startFlow(app, 'req-med-prereq-proposal', strongProposal);
+    await replyFlow(app, 'req-med-prereq-problem-done', start.body.session_id, strongAnswer);
+    await solutionStartFlow(app, 'req-med-prereq-solution-start', start.body.session_id);
+    await solutionReplyFlow(app, 'req-med-prereq-solution-reply', start.body.session_id, solutionAnswer);
+
+    const medicalStart = await medicalDeviceStartFlow(app, 'req-med-prereq-start', start.body.session_id);
+    const requestStatus = await app.inject({
+      method: 'GET',
+      url: '/api/v1/requests/req-med-prereq-start',
+    });
+    const recoverStatus = await app.inject({
+      method: 'POST',
+      url: '/api/v1/requests/req-med-prereq-start/recover',
+    });
+    const failedRun = await database!.query<{ status: string; error_code: string | null }>(
+      'SELECT status, error_code FROM agent_runs WHERE request_id = $1 AND run_purpose = $2',
+      ['req-med-prereq-start', 'medical_device_triage'],
+    );
+
+    expect(medicalStart.statusCode).toBe(409);
+    expect(medicalStart.body.error_code).toBe('data_ai_privacy_section_required_for_medical_device_triage');
+    expect(failedRun.rows[0]).toMatchObject({
+      status: 'controlled_error',
+      error_code: 'data_ai_privacy_section_required_for_medical_device_triage',
+    });
+    expect(requestStatus.json()).toMatchObject({
+      request_id: 'req-med-prereq-start',
+      request_kind: 'medical_device_triage_start',
+      status: 'failed',
+      error_code: 'data_ai_privacy_section_required_for_medical_device_triage',
+      session_id: start.body.session_id,
+    });
+    expect(recoverStatus.statusCode).toBe(200);
+    expect(recoverStatus.json().status).toBe('failed');
+  });
 });
 
 async function createMedicalDeviceApplicableModel() {
@@ -334,6 +504,263 @@ async function createMedicalDeviceNotApplicableModel() {
     JSON.stringify(doneSolutionTurn),
     JSON.stringify(continueDataTurn),
     JSON.stringify(doneDataTurn),
+  ]);
+}
+
+async function createMedicalDeviceGuardrailModel() {
+  const { prefix, continueMedicalTurn } = await createApplicableMedicalDeviceBaseOutputs();
+  const guardrailTurn = {
+    ...continueMedicalTurn,
+    diagnosis: ['This is a medical device and MDR class IIb.'],
+    updated_medical_device_triage: {
+      ...continueMedicalTurn.updated_medical_device_triage,
+      clinical_decision_role: 'This is a medical device and approved for use.',
+      evidence_needed: ['MDR class IIb evidence is approved.'],
+      human_review_plan: 'Rejected until MDR class is approved.',
+    },
+    next_question: 'Is this approved as a medical device?',
+  };
+
+  return new QueueLanguageModelClient([
+    ...prefix,
+    JSON.stringify(guardrailTurn),
+  ]);
+}
+
+async function createMedicalDeviceRepairFailureModel() {
+  const { prefix, continueMedicalTurn } = await createApplicableMedicalDeviceBaseOutputs();
+
+  return new QueueLanguageModelClient([
+    ...prefix,
+    JSON.stringify(continueMedicalTurn),
+    'not json',
+    'not json',
+  ]);
+}
+
+async function createApplicableMedicalDeviceBaseOutputs() {
+  const structuredBrief = {
+    ...(await readFixture<Record<string, unknown>>('expected', 'structured-brief.strong.json')),
+    goal: 'Clarify clinical decision support and risk stratification uncertainty before pilot review.',
+    problem_statement: 'The clinical decision support workflow for risk stratification is ambiguous.',
+  };
+  const doneProblemTurn = await readFixture('expected', 'problem-definition.done.json');
+  const continueSolutionTurn = await readFixture('expected', 'solution-definition.continue.json');
+  const doneSolutionTurn = await readFixture('expected', 'solution-definition.done.json');
+  const continueDataTurn = await readFixture('expected', 'data-ai-privacy.continue.json');
+  const doneDataTurn = await readFixture('expected', 'data-ai-privacy.done.json');
+  const continueMedicalTurn = await readFixture<{
+    agent_status: string;
+    diagnosis: string[];
+    updated_medical_device_triage: Record<string, unknown>;
+    next_question: string;
+    completion_reason: string;
+  }>('expected', 'medical-device-triage.applicable.json');
+  const startAgentTurn = {
+    agent_status: 'continue',
+    diagnosis: ['Falta identificar con precision quien responde hoy por el problema'],
+    updated_problem_definition: {
+      problem_owner: '',
+      problem_statement: structuredBrief.problem_statement,
+      evidence_of_problem: structuredBrief.evidence_of_problem,
+      scope: structuredBrief.scope,
+      current_alternatives: structuredBrief.current_alternatives,
+      assumptions: structuredBrief.assumptions,
+      ambiguities_remaining: structuredBrief.ambiguities,
+    },
+    next_question: 'Que equipo o responsable responde hoy por este problema en urgencias?',
+    completion_reason: '',
+  };
+
+  return {
+    prefix: [
+      JSON.stringify(structuredBrief),
+      JSON.stringify(startAgentTurn),
+      JSON.stringify(doneProblemTurn),
+      JSON.stringify(continueSolutionTurn),
+      JSON.stringify(doneSolutionTurn),
+      JSON.stringify(continueDataTurn),
+      JSON.stringify(doneDataTurn),
+    ],
+    continueMedicalTurn,
+  };
+}
+
+async function createMedicalDeviceUncertainModel() {
+  const structuredBrief = {
+    ...(await readFixture<Record<string, unknown>>('expected', 'structured-brief.strong.json')),
+    project_title: 'Hospital follow-up assistant',
+    goal: 'Help hospital teams summarize follow-up context when ownership is unclear.',
+    target_user: 'Hospital coordination staff',
+    problem_owner: 'Hospital operations team',
+    problem_statement: 'Follow-up ownership for patient administration is unclear across shifts.',
+    evidence_of_problem: 'Hospital staff report duplicated calls and unclear handoffs.',
+    current_alternatives: 'Manual notes and phone calls.',
+    scope: 'Administrative follow-up coordination inside the hospital.',
+    constraints_known: ['Internal pilot', 'Staff review before use'],
+    assumptions: ['The assistant prepares summaries only.'],
+    ambiguities: ['It is unclear whether any clinical workflow boundary is affected.'],
+    missing_information: ['Needs review by hospital governance before pilot use.'],
+  };
+  const doneProblemTurn = {
+    agent_status: 'done',
+    diagnosis: ['Hospital follow-up problem is sufficiently defined.'],
+    updated_problem_definition: {
+      problem_owner: structuredBrief.problem_owner,
+      problem_statement: structuredBrief.problem_statement,
+      evidence_of_problem: structuredBrief.evidence_of_problem,
+      scope: structuredBrief.scope,
+      current_alternatives: structuredBrief.current_alternatives,
+      assumptions: structuredBrief.assumptions,
+      ambiguities_remaining: structuredBrief.ambiguities,
+    },
+    next_question: '',
+    completion_reason: 'problem sufficiently defined',
+  };
+  const continueSolutionTurn = {
+    agent_status: 'continue',
+    diagnosis: ['Follow-up workflow details need one more clarification.'],
+    updated_solution_definition: {
+      solution_summary: 'A guided assistant prepares hospital follow-up summaries.',
+      target_user: 'Hospital coordination staff',
+      how_it_works: '',
+      workflow_change: '',
+      current_solutions: 'Manual notes and phone calls.',
+      value_differential: '',
+      scope_limits: 'Administrative follow-up coordination only.',
+      assumptions: [],
+      ambiguities_remaining: ['Workflow handoff details need confirmation.'],
+    },
+    next_question: 'How does the assistant change the hospital follow-up workflow?',
+    completion_reason: '',
+  };
+  const doneSolutionTurn = {
+    agent_status: 'done',
+    diagnosis: ['Hospital follow-up solution is sufficiently defined.'],
+    updated_solution_definition: {
+      solution_summary: 'A guided assistant prepares hospital follow-up summaries.',
+      target_user: 'Hospital coordination staff',
+      how_it_works: 'It gathers administrative notes and drafts a staff-reviewed summary.',
+      workflow_change: 'Staff review the summary before continuing the follow-up handoff.',
+      current_solutions: 'Manual notes and phone calls.',
+      value_differential: 'The summary reduces duplicated calls without changing care decisions.',
+      scope_limits: 'Administrative follow-up coordination only.',
+      assumptions: ['Staff review every generated summary.'],
+      ambiguities_remaining: [],
+    },
+    next_question: '',
+    completion_reason: 'solution sufficiently defined',
+  };
+  const continueDataTurn = {
+    agent_status: 'continue',
+    diagnosis: ['Data sources need detail.'],
+    updated_data_ai_privacy: {
+      personal_or_health_data: 'The pilot may use hospital follow-up notes.',
+      data_sources: '',
+      ai_system_role: 'The AI drafts an administrative summary for staff review.',
+      validation_evidence: '',
+      privacy_governance: '',
+      cybersecurity_controls: '',
+      regulatory_context: 'Sensitive handling remains contextual and unclear.',
+      human_review_plan: '',
+      assumptions: ['Outputs stay internal.'],
+      uncertainties: ['Needs review by hospital governance.'],
+      requires_competent_human_review: true,
+    },
+    next_question: 'Which hospital source systems provide the follow-up text?',
+    completion_reason: '',
+  };
+  const doneDataTurn = {
+    agent_status: 'done',
+    diagnosis: ['Data sources and governance are clear for review.'],
+    updated_data_ai_privacy: {
+      personal_or_health_data: 'The pilot may use hospital follow-up notes.',
+      data_sources: 'Data comes from hospital follow-up forms.',
+      ai_system_role: 'The AI drafts an administrative summary for staff review.',
+      validation_evidence: 'The team compares summaries with staff references.',
+      privacy_governance: 'Privacy owners review before use.',
+      cybersecurity_controls: 'Access is limited to pilot staff.',
+      regulatory_context: 'Sensitive handling remains contextual and unclear.',
+      human_review_plan: 'Privacy and governance owners review before use.',
+      assumptions: ['Outputs stay internal.'],
+      uncertainties: ['It is unclear whether any clinical workflow boundary is affected.'],
+      requires_competent_human_review: true,
+    },
+    next_question: '',
+    completion_reason: 'data AI privacy gaps sufficiently clarified for human review',
+  };
+  const startAgentTurn = {
+    agent_status: 'continue',
+    diagnosis: ['Falta identificar con precision quien responde hoy por el problema'],
+    updated_problem_definition: {
+      problem_owner: '',
+      problem_statement: structuredBrief.problem_statement,
+      evidence_of_problem: structuredBrief.evidence_of_problem,
+      scope: structuredBrief.scope,
+      current_alternatives: structuredBrief.current_alternatives,
+      assumptions: structuredBrief.assumptions,
+      ambiguities_remaining: structuredBrief.ambiguities,
+    },
+    next_question: 'Que equipo o responsable responde hoy por este problema?',
+    completion_reason: '',
+  };
+  const continueMedicalTurn = {
+    agent_status: 'continue',
+    diagnosis: ['Clinical-context uncertainty is present and intended-use boundaries need review.'],
+    updated_medical_device_triage: {
+      triage_status: 'uncertain',
+      activation_signals: [],
+      uncertainties: ['It is unclear whether any clinical workflow boundary is affected.'],
+      intended_use_claims: [],
+      clinical_decision_role: '',
+      evidence_needed: [],
+      human_review_plan: 'requires competent human review',
+      needs_human_review: true,
+      requires_competent_human_review: true,
+    },
+    next_question: 'What intended-use boundary should a competent reviewer examine before the pilot?',
+    completion_reason: '',
+  };
+
+  return new QueueLanguageModelClient([
+    JSON.stringify(structuredBrief),
+    JSON.stringify(startAgentTurn),
+    JSON.stringify(doneProblemTurn),
+    JSON.stringify(continueSolutionTurn),
+    JSON.stringify(doneSolutionTurn),
+    JSON.stringify(continueDataTurn),
+    JSON.stringify(doneDataTurn),
+    JSON.stringify(continueMedicalTurn),
+  ]);
+}
+
+async function createDataAiPrivacyPrerequisiteMissingModel() {
+  const structuredBrief = await readFixture<Record<string, unknown>>('expected', 'structured-brief.strong.json');
+  const doneProblemTurn = await readFixture('expected', 'problem-definition.done.json');
+  const continueSolutionTurn = await readFixture('expected', 'solution-definition.continue.json');
+  const doneSolutionTurn = await readFixture('expected', 'solution-definition.done.json');
+  const startAgentTurn = {
+    agent_status: 'continue',
+    diagnosis: ['Falta identificar con precision quien responde hoy por el problema'],
+    updated_problem_definition: {
+      problem_owner: '',
+      problem_statement: structuredBrief.problem_statement,
+      evidence_of_problem: structuredBrief.evidence_of_problem,
+      scope: structuredBrief.scope,
+      current_alternatives: structuredBrief.current_alternatives,
+      assumptions: structuredBrief.assumptions,
+      ambiguities_remaining: structuredBrief.ambiguities,
+    },
+    next_question: 'Que equipo o responsable responde hoy por este problema en urgencias?',
+    completion_reason: '',
+  };
+
+  return new QueueLanguageModelClient([
+    JSON.stringify(structuredBrief),
+    JSON.stringify(startAgentTurn),
+    JSON.stringify(doneProblemTurn),
+    JSON.stringify(continueSolutionTurn),
+    JSON.stringify(doneSolutionTurn),
   ]);
 }
 

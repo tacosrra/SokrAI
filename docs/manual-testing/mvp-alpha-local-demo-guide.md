@@ -324,7 +324,7 @@ Use:
 - username: `N8N_BASIC_AUTH_USER`
 - password: `N8N_BASIC_AUTH_PASSWORD`
 
-The current workflow exports are all inactive in JSON, so importing is not enough. Import and publish all nine workflows.
+The current workflow exports are all inactive in JSON, so importing is not enough. Import and publish all twelve workflows.
 
 ### Workflow files involved
 
@@ -337,13 +337,16 @@ The current workflow exports are all inactive in JSON, so importing is not enoug
 - `infra/n8n/workflows/data_ai_privacy_start_v1.json`
 - `infra/n8n/workflows/data_ai_privacy_reply_v1.json`
 - `infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json`
+- `infra/n8n/workflows/medical_device_triage_start_v1.json`
+- `infra/n8n/workflows/medical_device_triage_reply_v1.json`
+- `infra/n8n/workflows/agent_medical_device_triage_v1.json`
 
 ### CLI import and publish
 
 Run this after `n8n` is up:
 
 ```bash
-for workflow in proposal_start_v1.json proposal_reply_v1.json agent_problem_definition_v1.json solution_start_v1.json solution_reply_v1.json agent_solution_definition_v1.json data_ai_privacy_start_v1.json data_ai_privacy_reply_v1.json agent_data_ai_privacy_gap_v1.json; do
+for workflow in proposal_start_v1.json proposal_reply_v1.json agent_problem_definition_v1.json solution_start_v1.json solution_reply_v1.json agent_solution_definition_v1.json data_ai_privacy_start_v1.json data_ai_privacy_reply_v1.json agent_data_ai_privacy_gap_v1.json medical_device_triage_start_v1.json medical_device_triage_reply_v1.json agent_medical_device_triage_v1.json; do
   docker compose exec -T -u node n8n n8n import:workflow --input="/workflows/${workflow}"
 done
 ```
@@ -351,7 +354,7 @@ done
 Publish the imported workflows by their committed workflow IDs:
 
 ```bash
-for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json infra/n8n/workflows/data_ai_privacy_start_v1.json infra/n8n/workflows/data_ai_privacy_reply_v1.json infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json; do
+for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json infra/n8n/workflows/data_ai_privacy_start_v1.json infra/n8n/workflows/data_ai_privacy_reply_v1.json infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json infra/n8n/workflows/medical_device_triage_start_v1.json infra/n8n/workflows/medical_device_triage_reply_v1.json infra/n8n/workflows/agent_medical_device_triage_v1.json; do
   workflow_id="$(awk -F'"' '/^[[:space:]]*"id":[[:space:]]*"/ { print $4; exit }' "$workflow_path")"
   docker compose exec -T -u node n8n n8n publish:workflow --id="$workflow_id"
 done
@@ -721,7 +724,7 @@ Expected behavior:
 
 ### Step 9: Run PR9 Data/AI/Privacy in the Browser
 
-Keep using fake or anonymized information only. The PR9 browser path requires the same nine workflows imported and published in section 9, especially:
+Keep using fake or anonymized information only. The PR9 browser path requires the same twelve workflows imported and published in section 9, especially:
 
 - `data_ai_privacy_start_v1`
 - `data_ai_privacy_reply_v1`
@@ -935,8 +938,8 @@ Symptoms:
 
 Fix:
 
-1. Import all nine workflow files.
-2. Publish all nine workflows.
+1. Import all twelve workflow files.
+2. Publish all twelve workflows.
 3. Restart n8n.
 4. Run the live smoke script.
 
@@ -950,7 +953,7 @@ INTERNAL_SHARED_SECRET="$(awk -F= '$1=="INTERNAL_SHARED_SECRET"{print substr($0,
 The committed workflow JSON files have `"active": false`. After import, publish them with:
 
 ```bash
-for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json infra/n8n/workflows/data_ai_privacy_start_v1.json infra/n8n/workflows/data_ai_privacy_reply_v1.json infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json; do
+for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json infra/n8n/workflows/data_ai_privacy_start_v1.json infra/n8n/workflows/data_ai_privacy_reply_v1.json infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json infra/n8n/workflows/medical_device_triage_start_v1.json infra/n8n/workflows/medical_device_triage_reply_v1.json infra/n8n/workflows/agent_medical_device_triage_v1.json; do
   workflow_id="$(awk -F'"' '/^[[:space:]]*"id":[[:space:]]*"/ { print $4; exit }' "$workflow_path")"
   docker compose exec -T -u node n8n n8n publish:workflow --id="$workflow_id"
 done
@@ -1095,7 +1098,7 @@ Clear browser state if the web UI keeps showing old recent sessions:
 - No enterprise auth.
 - No OCR for scanned PDFs.
 - No remote or VPS AI provider.
-- No Clinic Pilot modules beyond the PR9 data/AI/privacy gap flow.
+- No Clinic Pilot modules beyond the PR9 data/AI/privacy gap flow and PR10 conditional medical-device triage.
 - Basic Alpha Report composition currently requires the internal compose API call after both generated sections exist; the app displays the report after it has been composed.
 
 ## 20. Final Checklist
@@ -1111,13 +1114,13 @@ pnpm run migrate
 ```
 
 ```bash
-for workflow in proposal_start_v1.json proposal_reply_v1.json agent_problem_definition_v1.json solution_start_v1.json solution_reply_v1.json agent_solution_definition_v1.json data_ai_privacy_start_v1.json data_ai_privacy_reply_v1.json agent_data_ai_privacy_gap_v1.json; do
+for workflow in proposal_start_v1.json proposal_reply_v1.json agent_problem_definition_v1.json solution_start_v1.json solution_reply_v1.json agent_solution_definition_v1.json data_ai_privacy_start_v1.json data_ai_privacy_reply_v1.json agent_data_ai_privacy_gap_v1.json medical_device_triage_start_v1.json medical_device_triage_reply_v1.json agent_medical_device_triage_v1.json; do
   docker compose exec -T -u node n8n n8n import:workflow --input="/workflows/${workflow}"
 done
 ```
 
 ```bash
-for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json infra/n8n/workflows/data_ai_privacy_start_v1.json infra/n8n/workflows/data_ai_privacy_reply_v1.json infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json; do
+for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json infra/n8n/workflows/data_ai_privacy_start_v1.json infra/n8n/workflows/data_ai_privacy_reply_v1.json infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json infra/n8n/workflows/medical_device_triage_start_v1.json infra/n8n/workflows/medical_device_triage_reply_v1.json infra/n8n/workflows/agent_medical_device_triage_v1.json; do
   workflow_id="$(awk -F'"' '/^[[:space:]]*"id":[[:space:]]*"/ { print $4; exit }' "$workflow_path")"
   docker compose exec -T -u node n8n n8n publish:workflow --id="$workflow_id"
 done
@@ -1155,6 +1158,7 @@ INTERNAL_SHARED_SECRET="$(awk -F= '$1=="INTERNAL_SHARED_SECRET"{print substr($0,
 - Problem replies persist and eventually generate a problem section.
 - Solution replies persist and eventually generate a solution section.
 - The PR9 data/AI/privacy browser flow persists a module chat and generated data/AI/privacy section after solution completion.
+- The PR10 medical-device triage browser flow records `applicable`, `uncertain`, or `not_applicable` without definitive classification.
 - The internal compose endpoint creates a Basic Alpha Report.
 - Reloading or reopening by `Session ID` restores persisted state.
 - The app shows `Basic Alpha Report`.

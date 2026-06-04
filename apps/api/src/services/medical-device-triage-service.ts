@@ -172,65 +172,68 @@ export class MedicalDeviceTriageService {
       return existingResponse;
     }
 
-    const profile = getRegulatoryProfile(profileId as never);
-    const session = await this.sessionStore.getSession(command.sessionId);
-    const problemSection = await this.requireGeneratedSection(session.id, 'problem');
-    const solutionSection = await this.requireGeneratedSection(session.id, 'solution');
-    const dataAiPrivacySection = await this.requireGeneratedSection(session.id, 'data_ai_privacy');
-    const sources = await this.alphaStore.listSources(session.id);
-    const activation = evaluateMedicalDeviceActivation({
-      structuredBrief: session.latest_structured_brief_json,
-      problemSection,
-      solutionSection,
-      dataAiPrivacySection,
-      sources,
-    });
-    const chat = await this.ensureMedicalDeviceTriageChat(session);
-    const activeTurn = this.getActiveTurn(chat.turns, chat.active_turn_id);
+    let session: SessionRecord | null = null;
+    let activeTurn: ChatTurn | null = null;
 
-    this.assertStartDoesNotReopenCompletedChat(command, chat.chat_status);
-
-    if (command.trigger === 'start' && activeTurn) {
-      throw new AppError(
-        409,
-        'medical_device_triage_start_already_initialized',
-        'The medical-device triage chat already has an open clarification turn',
-        false,
-        command.sessionId,
-      );
-    }
-
-    if (command.trigger === 'reply' && (!activeTurn || activeTurn.turn_status !== 'processing')) {
-      throw new AppError(
-        409,
-        'medical_device_triage_reply_not_ready_for_agent',
-        'The medical-device triage chat does not have a processing turn ready for the agent',
-        false,
-        command.sessionId,
-      );
-    }
-
-    if (activation.triageStatus === 'not_applicable' && command.trigger === 'start') {
-      return this.persistNotApplicableStart({
-        command,
-        session,
+    try {
+      const profile = getRegulatoryProfile(profileId as never);
+      session = await this.sessionStore.getSession(command.sessionId);
+      const problemSection = await this.requireGeneratedSection(session.id, 'problem');
+      const solutionSection = await this.requireGeneratedSection(session.id, 'solution');
+      const dataAiPrivacySection = await this.requireGeneratedSection(session.id, 'data_ai_privacy');
+      const sources = await this.alphaStore.listSources(session.id);
+      const activation = evaluateMedicalDeviceActivation({
+        structuredBrief: session.latest_structured_brief_json,
         problemSection,
         solutionSection,
         dataAiPrivacySection,
-        activationState: medicalDeviceStateFromActivation(activation),
+        sources,
       });
-    }
+      const chat = await this.ensureMedicalDeviceTriageChat(session);
+      activeTurn = this.getActiveTurn(chat.turns, chat.active_turn_id);
 
-    const recentTurns = chat.turns
-      .filter((turn) => turn.turn_status === 'resolved')
-      .slice(-5)
-      .map((turn) => ({
-        question_text: turn.question_text,
-        answer_text: turn.answer_text ?? null,
-        diagnosis: turn.diagnosis,
-      }));
+      this.assertStartDoesNotReopenCompletedChat(command, chat.chat_status);
 
-    try {
+      if (command.trigger === 'start' && activeTurn) {
+        throw new AppError(
+          409,
+          'medical_device_triage_start_already_initialized',
+          'The medical-device triage chat already has an open clarification turn',
+          false,
+          command.sessionId,
+        );
+      }
+
+      if (command.trigger === 'reply' && (!activeTurn || activeTurn.turn_status !== 'processing')) {
+        throw new AppError(
+          409,
+          'medical_device_triage_reply_not_ready_for_agent',
+          'The medical-device triage chat does not have a processing turn ready for the agent',
+          false,
+          command.sessionId,
+        );
+      }
+
+      if (activation.triageStatus === 'not_applicable' && command.trigger === 'start') {
+        return this.persistNotApplicableStart({
+          command,
+          session,
+          problemSection,
+          solutionSection,
+          dataAiPrivacySection,
+          activationState: medicalDeviceStateFromActivation(activation),
+        });
+      }
+
+      const recentTurns = chat.turns
+        .filter((turn) => turn.turn_status === 'resolved')
+        .slice(-5)
+        .map((turn) => ({
+          question_text: turn.question_text,
+          answer_text: turn.answer_text ?? null,
+          diagnosis: turn.diagnosis,
+        }));
+
       const modelTurn = await this.llmOrchestrator.runMedicalDeviceTriage({
         structuredBrief: session.latest_structured_brief_json,
         problemSection,
@@ -402,12 +405,24 @@ export class MedicalDeviceTriageService {
         return recoveredAfterConflict;
       }
 
-      if (error instanceof ModelOutputError || error instanceof AppError) {
+      if (session && this.shouldPersistFailure(error)) {
         await this.persistFailure(command, session, activeTurn, error);
       }
 
       throw error;
     }
+  }
+
+  private shouldPersistFailure(error: unknown): error is AppError {
+    if (!(error instanceof AppError)) {
+      return false;
+    }
+
+    return ![
+      'medical_device_triage_start_already_initialized',
+      'medical_device_triage_reply_not_ready_for_agent',
+      'medical_device_triage_start_already_completed',
+    ].includes(error.errorCode);
   }
 
   private async persistNotApplicableStart(params: {

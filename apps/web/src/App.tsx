@@ -117,6 +117,14 @@ function toApiErrorFromRecoveredRequest(status: {
   );
 }
 
+function hasCompletedMedicalDeviceTriageRequest(audit: SessionAuditView, requestId: string): boolean {
+  return audit.runs.some((run) =>
+    run.request_id === requestId &&
+    run.run_purpose === 'medical_device_triage' &&
+    run.status === 'completed',
+  );
+}
+
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
@@ -956,11 +964,18 @@ export function App() {
           return;
         } catch (recoveryError) {
           try {
-            await loadSession(activeAudit.session.id, {
-              successMessage: 'Se recupero el estado de la sesion directamente desde la API tras expirar el turno medical-device triage.',
+            const recoveredAudit = await loadSession(activeAudit.session.id, {
               skipBannerOnStart: true,
+              suppressSuccessBanner: true,
             });
-            return;
+
+            if (recoveredAudit && hasCompletedMedicalDeviceTriageRequest(recoveredAudit, requestId)) {
+              setBanner({
+                tone: 'success',
+                text: 'Se recupero el estado de medical-device triage directamente desde la API tras expirar el turno.',
+              });
+              return;
+            }
           } catch {
             // Preserve the original recovery error when the direct session refresh also fails.
           }
