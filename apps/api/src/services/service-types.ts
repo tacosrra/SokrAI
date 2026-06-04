@@ -1,5 +1,10 @@
 import type {
   BasicAlphaReport,
+  DataAiPrivacyReplyRequest,
+  DataAiPrivacyReplyResponse,
+  DataAiPrivacyStartRequest,
+  DataAiPrivacyStartResponse,
+  DataAiPrivacyState,
   ProblemDefinitionState,
   ProposalReplyRequest,
   ProposalReplyResponse,
@@ -52,6 +57,16 @@ export interface SolutionReplyContextCommand {
   payload: SolutionReplyRequest;
 }
 
+export interface DataAiPrivacyStartContextCommand {
+  context: WorkflowContext;
+  payload: DataAiPrivacyStartRequest;
+}
+
+export interface DataAiPrivacyReplyContextCommand {
+  context: WorkflowContext;
+  payload: DataAiPrivacyReplyRequest;
+}
+
 export interface RunProblemDefinitionCommand {
   context: WorkflowContext;
   sessionId: string;
@@ -59,6 +74,12 @@ export interface RunProblemDefinitionCommand {
 }
 
 export interface RunSolutionDefinitionCommand {
+  context: WorkflowContext;
+  sessionId: string;
+  trigger: 'start' | 'reply';
+}
+
+export interface RunDataAiPrivacyCommand {
   context: WorkflowContext;
   sessionId: string;
   trigger: 'start' | 'reply';
@@ -87,3 +108,15 @@ export interface SolutionAgentResponseState {
   detectedGaps: string[];
   response: SolutionReplyResponse;
 }
+
+export interface DataAiPrivacyRunResponse extends DataAiPrivacyReplyResponse {
+  run_id: string;
+}
+
+export interface DataAiPrivacyAgentResponseState {
+  updatedDataAiPrivacy: DataAiPrivacyState;
+  detectedGaps: string[];
+  response: DataAiPrivacyReplyResponse;
+}
+
+export type DataAiPrivacyStartServiceResponse = DataAiPrivacyStartResponse;

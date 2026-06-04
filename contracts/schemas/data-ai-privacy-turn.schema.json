@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sokrai.local/contracts/schemas/data-ai-privacy-turn.schema.json",
+  "title": "DataAiPrivacyTurn",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "agent_status": {
+      "type": "string",
+      "enum": [
+        "continue",
+        "done",
+        "blocked"
+      ]
+    },
+    "diagnosis": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "string"
+      }
+    },
+    "updated_data_ai_privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "personal_or_health_data": {
+          "type": "string"
+        },
+        "data_sources": {
+          "type": "string"
+        },
+        "ai_system_role": {
+          "type": "string"
+        },
+        "validation_evidence": {
+          "type": "string"
+        },
+        "privacy_governance": {
+          "type": "string"
+        },
+        "cybersecurity_controls": {
+          "type": "string"
+        },
+        "regulatory_context": {
+          "type": "string"
+        },
+        "human_review_plan": {
+          "type": "string"
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "uncertainties": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "requires_competent_human_review": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "personal_or_health_data",
+        "data_sources",
+        "ai_system_role",
+        "validation_evidence",
+        "privacy_governance",
+        "cybersecurity_controls",
+        "regulatory_context",
+        "human_review_plan",
+        "assumptions",
+        "uncertainties",
+        "requires_competent_human_review"
+      ]
+    },
+    "next_question": {
+      "type": "string"
+    },
+    "completion_reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "agent_status",
+    "diagnosis",
+    "updated_data_ai_privacy",
+    "next_question",
+    "completion_reason"
+  ]
+}

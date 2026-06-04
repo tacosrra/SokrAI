@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { fetchBasicAlphaReport, recoverRequestExecution, replySolution, startSession, startSolution } from './api';
+import {
+  fetchBasicAlphaReport,
+  recoverRequestExecution,
+  replyDataAiPrivacy,
+  replySolution,
+  startDataAiPrivacy,
+  startSession,
+  startSolution,
+} from './api';
 
 const REQUEST_STATUS_RESPONSE = {
   request_id: 'web-start-1',
@@ -71,6 +79,40 @@ const SOLUTION_REPLY_RESPONSE = {
   next_question: '',
   completion_reason: 'solution sufficiently defined',
   warnings: [],
+};
+
+const DATA_AI_PRIVACY_STATE = {
+  personal_or_health_data: 'The pilot uses administrative intake text and staff notes.',
+  data_sources: 'Data comes from fictitious intake forms and staff summaries.',
+  ai_system_role: 'The AI drafts a structured summary for competent human review.',
+  validation_evidence: 'The team will compare draft summaries with staff-written references.',
+  privacy_governance: 'Privacy and governance owners review the data use before pilot operation.',
+  cybersecurity_controls: 'Access is limited to pilot staff and activity is traceable.',
+  regulatory_context: 'Regulatory implications remain open questions for competent human review.',
+  human_review_plan: 'Privacy, clinical governance, and regulatory owners review before use.',
+  assumptions: ['Every generated output is reviewed by a competent person.'],
+  uncertainties: ['The final governance sign-off path remains open.'],
+  requires_competent_human_review: true,
+};
+
+const DATA_AI_PRIVACY_START_RESPONSE = {
+  session_id: 'session-1',
+  stage: 'data_ai_privacy',
+  profile_id: 'hospital_clinic_v1',
+  agent_status: 'continue',
+  updated_data_ai_privacy: DATA_AI_PRIVACY_STATE,
+  diagnosis: ['Falta concretar fuentes de datos.'],
+  next_question: 'Que datos personales o de salud trataria la propuesta?',
+  completion_reason: '',
+  warnings: ['requires competent human review'],
+};
+
+const DATA_AI_PRIVACY_REPLY_RESPONSE = {
+  ...DATA_AI_PRIVACY_START_RESPONSE,
+  agent_status: 'done',
+  diagnosis: ['Los gaps quedan suficientemente claros para revision humana.'],
+  next_question: '',
+  completion_reason: 'data AI privacy gaps sufficiently clarified for human review',
 };
 
 const BASIC_ALPHA_REPORT_RESPONSE = {
@@ -284,6 +326,101 @@ describe('requestJson transport options', () => {
         request_id: 'web-solution-reply-2',
         session_id: 'session-1',
         answer: 'The solution changes intake by preparing a structured handoff.',
+      }),
+    ).rejects.toMatchObject({
+      errorCode: 'invalid_response_contract',
+      statusCode: 502,
+    });
+  });
+
+  it('posts data AI privacy start payloads to the PR9 webhook with request id', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(DATA_AI_PRIVACY_START_RESPONSE), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }),
+    );
+    stubGlobal('fetch', fetchMock);
+
+    const result = await startDataAiPrivacy({
+      request_id: 'web-data-start-1',
+      session_id: 'session-1',
+      profile_id: 'hospital_clinic_v1',
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toBe('/webhook/data-ai-privacy-start-v1');
+    expect(init.method).toBe('POST');
+    expect(init.headers).toEqual({
+      'Content-Type': 'application/json',
+      'x-request-id': 'web-data-start-1',
+    });
+    expect(JSON.parse(String(init.body))).toEqual({
+      request_id: 'web-data-start-1',
+      session_id: 'session-1',
+      profile_id: 'hospital_clinic_v1',
+    });
+    expect(result).toEqual(DATA_AI_PRIVACY_START_RESPONSE);
+  });
+
+  it('posts data AI privacy reply payloads to the PR9 webhook with request id', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(DATA_AI_PRIVACY_REPLY_RESPONSE), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }),
+    );
+    stubGlobal('fetch', fetchMock);
+
+    const result = await replyDataAiPrivacy({
+      request_id: 'web-data-reply-1',
+      session_id: 'session-1',
+      answer: 'Privacy and governance owners review the pilot before operation.',
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toBe('/webhook/data-ai-privacy-reply-v1');
+    expect(init.method).toBe('POST');
+    expect(init.headers).toEqual({
+      'Content-Type': 'application/json',
+      'x-request-id': 'web-data-reply-1',
+    });
+    expect(JSON.parse(String(init.body))).toEqual({
+      request_id: 'web-data-reply-1',
+      session_id: 'session-1',
+      answer: 'Privacy and governance owners review the pilot before operation.',
+    });
+    expect(result).toEqual(DATA_AI_PRIVACY_REPLY_RESPONSE);
+  });
+
+  it('rejects data AI privacy responses that do not match the response parser', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          ...DATA_AI_PRIVACY_START_RESPONSE,
+          profile_id: 'unsupported_profile',
+        }),
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      ),
+    );
+    stubGlobal('fetch', fetchMock);
+
+    await expect(
+      startDataAiPrivacy({
+        request_id: 'web-data-start-invalid',
+        session_id: 'session-1',
+        profile_id: 'hospital_clinic_v1',
       }),
     ).rejects.toMatchObject({
       errorCode: 'invalid_response_contract',

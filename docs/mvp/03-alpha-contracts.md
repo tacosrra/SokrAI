@@ -8,15 +8,19 @@ PR 2A defines schema-backed contracts and TypeScript domain types for the MVP Al
 | --- | --- | --- |
 | `ProposalSource` | `contracts/schemas/proposal-source.schema.json` | Stable provenance reference for user-provided or internally generated Alpha material. |
 | `ProposalDocument` | `contracts/schemas/proposal-document.schema.json` | Pasted or uploaded source material payload shape. |
-| `AlphaGap` | `contracts/schemas/alpha-gap.schema.json` | Descriptive information gap for problem or solution work. |
+| `AlphaGap` | `contracts/schemas/alpha-gap.schema.json` | Descriptive information gap for problem, solution, or data/AI/privacy work. |
 | `ChatTurn` | `contracts/schemas/chat-turn.schema.json` | One question/answer turn with bounded diagnosis. |
-| `ModuleChat` | `contracts/schemas/module-chat.schema.json` | Problem or solution chat lifecycle and turns. |
-| `GeneratedSection` | `contracts/schemas/generated-section.schema.json` | Versioned generated problem or solution section. |
+| `ModuleChat` | `contracts/schemas/module-chat.schema.json` | Problem, solution, or data/AI/privacy chat lifecycle and turns. |
+| `GeneratedSection` | `contracts/schemas/generated-section.schema.json` | Versioned generated problem, solution, or data/AI/privacy section. |
 | `AlphaProposal` | `contracts/schemas/alpha-proposal.schema.json` | Aggregate contract that composes brief, documents, sources, gaps, chats, sections, and audit references. |
 | `BasicAlphaReport` | `contracts/schemas/basic-alpha-report.schema.json` | Implemented in-app structured Alpha report, without PDF/export fields or raw model output. |
 | `SolutionDefinitionTurn` | `contracts/schemas/solution-definition-turn.schema.json` | Bounded model output for the solution-definition lane. |
 | `SolutionStartRequest` / `SolutionStartResponse` | `contracts/schemas/solution-start.*.schema.json` | Starts the solution lane after the problem section exists. |
 | `SolutionReplyRequest` / `SolutionReplyResponse` | `contracts/schemas/solution-reply.*.schema.json` | Persists a solution answer and returns the next solution state. |
+| `RegulatoryProfile` | `contracts/schemas/regulatory-profile.schema.json` | Static `hospital_clinic_v1` profile contract for the Clinic Pilot sensitive lane. |
+| `DataAiPrivacyTurn` | `contracts/schemas/data-ai-privacy-turn.schema.json` | Bounded model output for sensitive data/AI/privacy gap clarification. |
+| `DataAiPrivacyStartRequest` / `DataAiPrivacyStartResponse` | `contracts/schemas/data-ai-privacy-start.*.schema.json` | Starts the sensitive lane after the solution section exists. |
+| `DataAiPrivacyReplyRequest` / `DataAiPrivacyReplyResponse` | `contracts/schemas/data-ai-privacy-reply.*.schema.json` | Persists a sensitive-lane answer and returns the next bounded state. |
 
 `structured-brief.schema.json` remains canonical and is referenced by aggregate/report contracts rather than duplicated.
 
@@ -30,10 +34,10 @@ PR 2A defines schema-backed contracts and TypeScript domain types for the MVP Al
 | Gap | `gap_kind` | `missing_information`, `ambiguous_information`, `unsupported_claim`, `needs_user_confirmation` | Descriptive gap kind, not scoring or approval. |
 | Gap | `gap_status` | `open`, `in_progress`, `resolved`, `deferred`, `not_applicable` | Gap resolution state for later chats. |
 | Gap | `origin` | `structured_brief_field`, `structured_brief_missing_information`, `structured_brief_ambiguity`, `proposal_source`, `system_rule` | Deterministic provenance for why the gap exists. |
-| Module chat | `module` | `problem`, `solution` | Alpha modules only. |
+| Module chat | `module` | `problem`, `solution`, `data_ai_privacy` | Implemented Alpha/Clinic module values. |
 | Module chat | `chat_status` | `not_started`, `active`, `waiting_for_user`, `ready_to_generate`, `completed`, `blocked`, `failed` | Chat lifecycle for problem and solution modules. |
 | Chat turn | `turn_status` | `awaiting_user`, `processing`, `resolved`, `failed`, `skipped` | Turn lifecycle for modular chats. |
-| Generated section | `section_kind` | `problem`, `solution` | Alpha generated section kind. |
+| Generated section | `section_kind` | `problem`, `solution`, `data_ai_privacy` | Generated section kind. |
 | Generated section | `section_status` | `draft`, `generated`, `accepted`, `needs_revision`, `superseded` | Versioned section lifecycle. |
 | Basic report | `report_status` | `draft`, `ready`, `needs_revision` | In-app report readiness state. |
 | Audit reference | `audit_refs[].kind` | `agent_run`, `audit_event`, `snapshot`, `chat_turn` | Reference-only audit linkage. |
@@ -93,6 +97,29 @@ not copied into the report payload or UI.
 Still excluded: PDF/export fields, Clinic Pilot modules, legal/regulatory or
 medical-device decisions, RAG citations, scoring, ranking, approval and
 rejection.
+
+## Data/AI/privacy Clinic lane
+
+PR 9 adds the fixed `hospital_clinic_v1` profile and a
+`data_ai_privacy` module. The lane reuses the same Alpha primitives:
+
+- `module_chats.module = 'data_ai_privacy'`
+- `chat_turns.module = 'data_ai_privacy'`
+- `alpha_gaps.module = 'data_ai_privacy'`
+- `agent_runs.run_purpose = 'data_ai_privacy_gap'`
+- `generated_sections.section_kind = 'data_ai_privacy'`
+
+The lane starts only after a current generated solution section exists. It asks
+one primary question per turn, caps diagnosis at three items, persists gaps and
+uncertainty, and renders a deterministic section from persisted state and
+internal sources.
+
+Allowed outputs are gaps, questions, uncertainty, and the exact marker
+`requires competent human review`. The module must not produce legal,
+regulatory, clinical, privacy, or medical-device decisions; definitive
+compliance/non-compliance; approval/rejection; ranking/scoring; or definitive
+medical-device classification. Basic Alpha report remains Alpha-only and does
+not include the sensitive section.
 
 ## GeneratedSection versioning
 

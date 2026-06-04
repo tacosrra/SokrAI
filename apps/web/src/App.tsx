@@ -7,8 +7,10 @@ import {
   fetchRequestExecution,
   recoverRequestExecution,
   fetchSessionAudit,
+  replyDataAiPrivacy,
   replySolution,
   replySession,
+  startDataAiPrivacy,
   startSolution,
   startSession,
 } from './lib/api';
@@ -39,7 +41,13 @@ const REQUEST_RECOVERY_POLL_INTERVAL_MS = 4000;
 const ACTIVE_RECOVERY_AFTER_MS = readTimeout('VITE_ACTIVE_RECOVERY_AFTER_MS', 60000);
 const MAX_CONSECUTIVE_RECOVERY_TRANSPORT_ERRORS = 5;
 
-type RecoverableRequestKind = 'proposal_start' | 'proposal_reply' | 'solution_start' | 'solution_reply';
+type RecoverableRequestKind =
+  | 'proposal_start'
+  | 'proposal_reply'
+  | 'solution_start'
+  | 'solution_reply'
+  | 'data_ai_privacy_start'
+  | 'data_ai_privacy_reply';
 
 interface ModeCardProps {
   activeMode: ModeView;
@@ -63,7 +71,15 @@ function writeSessionToUrl(sessionId: string) {
   window.history.replaceState({}, '', url);
 }
 
-function createClientRequestId(prefix: 'start' | 'reply' | 'solution-start' | 'solution-reply'): string {
+function createClientRequestId(
+  prefix:
+    | 'start'
+    | 'reply'
+    | 'solution-start'
+    | 'solution-reply'
+    | 'data-ai-privacy-start'
+    | 'data-ai-privacy-reply',
+): string {
   return `web-${prefix}-${crypto.randomUUID()}`;
 }
 
@@ -115,6 +131,16 @@ function formatSessionDate(value: string) {
     dateStyle: 'short',
     timeStyle: 'short',
   });
+}
+
+function hasDataAiPrivacyRecoveryArtifacts(audit: SessionAuditView): boolean {
+  const presentation = deriveSessionPresentation(audit);
+
+  return Boolean(
+    presentation.dataAiPrivacyModuleChat ||
+      presentation.currentDataAiPrivacyQuestion ||
+      presentation.latestDataAiPrivacySection,
+  );
 }
 
 function ModeCard({
@@ -234,8 +260,8 @@ export function App() {
 
   async function loadSession(
     sessionId: string,
-    options?: { successMessage?: string; skipBannerOnStart?: boolean },
-  ) {
+    options?: { successMessage?: string; skipBannerOnStart?: boolean; suppressSuccessBanner?: boolean },
+  ): Promise<SessionAuditView | null> {
     if (!options?.skipBannerOnStart) {
       setBanner({
         tone: 'info',
@@ -259,18 +285,24 @@ export function App() {
         setActiveReport(null);
       }
 
-      setBanner({
-        tone: 'success',
-        text:
-          options?.successMessage ??
-          `Sesión ${audit.session.id} cargada con ${audit.turns.length} turnos persistidos.`,
-      });
+      if (!options?.suppressSuccessBanner) {
+        setBanner({
+          tone: 'success',
+          text:
+            options?.successMessage ??
+            `Sesión ${audit.session.id} cargada con ${audit.turns.length} turnos persistidos.`,
+        });
+      }
+
+      return audit;
     } catch (error) {
       setActiveReport(null);
       setBanner({
         tone: 'error',
         text: mapApiError(error),
       });
+
+      return null;
     } finally {
       setIsLoadingSession(false);
     }
@@ -648,6 +680,149 @@ export function App() {
     }
   }
 
+  async function handleStartDataAiPrivacy() {
+    if (!activeAudit) {
+      return;
+    }
+
+    const requestId = createClientRequestId('data-ai-privacy-start');
+    setIsReplying(true);
+    setBanner({
+      tone: 'info',
+      text: 'Iniciando el modulo de datos/IA/privacidad y generando la primera pregunta…',
+    });
+
+    try {
+      const result = await startDataAiPrivacy({
+        request_id: requestId,
+        session_id: activeAudit.session.id,
+        profile_id: 'hospital_clinic_v1',
+      });
+
+      await loadSession(result.session_id, {
+        successMessage: `Modulo datos/IA/privacidad iniciado. Agent status: ${result.agent_status}.`,
+        skipBannerOnStart: true,
+      });
+    } catch (error) {
+      if (isRecoverableWorkflowDeliveryError(error)) {
+        setBanner({
+          tone: 'info',
+          text:
+            error.errorCode === 'request_timeout'
+              ? `La llamada para iniciar datos/IA/privacidad vencio en el navegador. Recuperando el resultado del workflow para request_id ${requestId}…`
+              : `La respuesta de inicio de datos/IA/privacidad llego con un formato inesperado. Intentando recuperar el estado real con request_id ${requestId}…`,
+        });
+
+        try {
+          const sessionId = await recoverTimedOutRequest(requestId, 'data_ai_privacy_start');
+          await loadSession(sessionId, {
+            successMessage: 'Modulo datos/IA/privacidad recuperado tras completar el workflow fuera del tiempo de espera inicial.',
+            skipBannerOnStart: true,
+          });
+          return;
+        } catch (recoveryError) {
+          try {
+            const recoveredAudit = await loadSession(activeAudit.session.id, {
+              skipBannerOnStart: true,
+              suppressSuccessBanner: true,
+            });
+
+            if (recoveredAudit && hasDataAiPrivacyRecoveryArtifacts(recoveredAudit)) {
+              setBanner({
+                tone: 'success',
+                text: 'Se recupero el estado de datos/IA/privacidad directamente desde la API tras expirar el inicio.',
+              });
+              return;
+            }
+          } catch {
+            // Preserve the original recovery error when the direct session refresh also fails.
+          }
+
+          setBanner({
+            tone: 'error',
+            text: mapApiError(recoveryError),
+          });
+          return;
+        }
+      }
+
+      setBanner({
+        tone: 'error',
+        text: mapApiError(error),
+      });
+    } finally {
+      setIsReplying(false);
+    }
+  }
+
+  async function handleDataAiPrivacyReply(answer: string) {
+    if (!activeAudit) {
+      return;
+    }
+
+    const requestId = createClientRequestId('data-ai-privacy-reply');
+    setIsReplying(true);
+    setBanner({
+      tone: 'info',
+      text: 'Respuesta de datos/IA/privacidad enviada. Actualizando gaps, incertidumbre y revision humana…',
+    });
+
+    try {
+      const result = await replyDataAiPrivacy({
+        request_id: requestId,
+        session_id: activeAudit.session.id,
+        answer,
+      });
+
+      await loadSession(result.session_id, {
+        successMessage: `Turno datos/IA/privacidad procesado. Agent status: ${result.agent_status}.`,
+        skipBannerOnStart: true,
+      });
+    } catch (error) {
+      if (isRecoverableWorkflowDeliveryError(error)) {
+        setBanner({
+          tone: 'info',
+          text:
+            error.errorCode === 'request_timeout'
+              ? `La llamada del turno datos/IA/privacidad vencio en el navegador. Recuperando el resultado del workflow para request_id ${requestId}…`
+              : `La respuesta del turno datos/IA/privacidad llego con un formato inesperado. Intentando recuperar el estado real con request_id ${requestId}…`,
+        });
+
+        try {
+          const sessionId = await recoverTimedOutRequest(requestId, 'data_ai_privacy_reply');
+          await loadSession(sessionId, {
+            successMessage: 'Turno datos/IA/privacidad recuperado tras completar el workflow fuera del tiempo de espera inicial.',
+            skipBannerOnStart: true,
+          });
+          return;
+        } catch (recoveryError) {
+          try {
+            await loadSession(activeAudit.session.id, {
+              successMessage: 'Se recupero el estado de la sesion directamente desde la API tras expirar el turno datos/IA/privacidad.',
+              skipBannerOnStart: true,
+            });
+            return;
+          } catch {
+            // Preserve the original recovery error when the direct session refresh also fails.
+          }
+
+          setBanner({
+            tone: 'error',
+            text: mapApiError(recoveryError),
+          });
+          return;
+        }
+      }
+
+      setBanner({
+        tone: 'error',
+        text: mapApiError(error),
+      });
+    } finally {
+      setIsReplying(false);
+    }
+  }
+
   function handleStartFreshSession() {
     setActiveAudit(null);
     setActiveReport(null);
@@ -785,7 +960,9 @@ export function App() {
               isReplying={isReplying}
               onReply={handleReply}
               onSolutionReply={handleSolutionReply}
+              onDataAiPrivacyReply={handleDataAiPrivacyReply}
               onStartSolution={handleStartSolution}
+              onStartDataAiPrivacy={handleStartDataAiPrivacy}
               presentation={presentation}
             />
           </section>
@@ -875,7 +1052,9 @@ export function App() {
               defaultSessionId={defaultSessionId}
               isLoading={isLoadingSession}
               recentSessions={recentSessions}
-              onLoad={loadSession}
+              onLoad={async (sessionId) => {
+                await loadSession(sessionId);
+              }}
             />
           )}
         </section>

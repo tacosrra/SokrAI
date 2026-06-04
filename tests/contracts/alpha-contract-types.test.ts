@@ -5,6 +5,11 @@ import type {
   AlphaProposal as ApiAlphaProposal,
   BasicAlphaReport as ApiBasicAlphaReport,
   ChatTurn as ApiChatTurn,
+  DataAiPrivacyReplyRequest as ApiDataAiPrivacyReplyRequest,
+  DataAiPrivacyReplyResponse as ApiDataAiPrivacyReplyResponse,
+  DataAiPrivacyStartRequest as ApiDataAiPrivacyStartRequest,
+  DataAiPrivacyStartResponse as ApiDataAiPrivacyStartResponse,
+  DataAiPrivacyState as ApiDataAiPrivacyState,
   GeneratedSection as ApiGeneratedSection,
   ModuleChat as ApiModuleChat,
   ProposalDocument as ApiProposalDocument,
@@ -20,6 +25,11 @@ import type {
   AlphaProposal as WebAlphaProposal,
   BasicAlphaReport as WebBasicAlphaReport,
   ChatTurn as WebChatTurn,
+  DataAiPrivacyReplyRequest as WebDataAiPrivacyReplyRequest,
+  DataAiPrivacyReplyResponse as WebDataAiPrivacyReplyResponse,
+  DataAiPrivacyStartRequest as WebDataAiPrivacyStartRequest,
+  DataAiPrivacyStartResponse as WebDataAiPrivacyStartResponse,
+  DataAiPrivacyState as WebDataAiPrivacyState,
   GeneratedSection as WebGeneratedSection,
   ModuleChat as WebModuleChat,
   ProposalDocument as WebProposalDocument,
@@ -46,5 +56,10 @@ describe('Alpha contract type mirrors', () => {
     expectTypeOf<ApiSolutionStartResponse>().toEqualTypeOf<WebSolutionStartResponse>();
     expectTypeOf<ApiSolutionReplyRequest>().toEqualTypeOf<WebSolutionReplyRequest>();
     expectTypeOf<ApiSolutionReplyResponse>().toEqualTypeOf<WebSolutionReplyResponse>();
+    expectTypeOf<ApiDataAiPrivacyState>().toEqualTypeOf<WebDataAiPrivacyState>();
+    expectTypeOf<ApiDataAiPrivacyStartRequest>().toEqualTypeOf<WebDataAiPrivacyStartRequest>();
+    expectTypeOf<ApiDataAiPrivacyStartResponse>().toEqualTypeOf<WebDataAiPrivacyStartResponse>();
+    expectTypeOf<ApiDataAiPrivacyReplyRequest>().toEqualTypeOf<WebDataAiPrivacyReplyRequest>();
+    expectTypeOf<ApiDataAiPrivacyReplyResponse>().toEqualTypeOf<WebDataAiPrivacyReplyResponse>();
   });
 });

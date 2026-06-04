@@ -4,7 +4,7 @@
 
 This guide lets a developer run and manually test the current SokrAI MVP Alpha end to end from the local repository. It is based on the current `package.json` scripts, Docker Compose files, `.env.example`, n8n workflow exports, Ollama adapter, API routes, frontend behavior, and test suite.
 
-Use it when you need to prove the PR8 / Basic Structured Alpha Report path manually:
+Use it when you need to prove the PR8 / Basic Structured Alpha Report path manually, then exercise the PR9 browser extension for data/AI/privacy gaps:
 
 1. Create a proposal.
 2. Add or paste documentation.
@@ -15,11 +15,12 @@ Use it when you need to prove the PR8 / Basic Structured Alpha Report path manua
 7. Complete the solution chat.
 8. Generate the solution section.
 9. Compose and view the Basic Alpha Report in the app.
-10. Reload or resume the session and verify state persists.
+10. Start and complete the PR9 data/AI/privacy browser flow after the solution section exists.
+11. Reload or resume the session and verify state persists.
 
 ## 2. Current Scope
 
-This guide covers MVP Alpha only:
+This guide covers MVP Alpha plus the PR9 Clinic Pilot extension:
 
 - local proposal intake
 - pasted text and optional text-extractable PDF intake
@@ -31,6 +32,7 @@ This guide covers MVP Alpha only:
 - generated `problem` and `solution` sections
 - persisted audit and resume behavior
 - Basic Alpha Report composition and app display
+- PR9 `hospital_clinic_v1` data/AI/privacy gap flow after solution completion
 
 The canonical contracts live in `contracts/schemas`. The relevant public app surfaces are:
 
@@ -42,10 +44,9 @@ The canonical contracts live in `contracts/schemas`. The relevant public app sur
 
 ## 3. Intentionally Out of Scope
 
-Do not test or present these as implemented MVP Alpha capabilities:
+Do not test or present these as implemented MVP Alpha or PR9 capabilities:
 
-- Clinic Pilot modules
-- regulatory/data/AI/privacy module
+- Clinic Pilot modules beyond `data_ai_privacy_gap_agent`
 - medical device determination
 - resources/pilot/viability modules
 - PDF export
@@ -310,7 +311,7 @@ Use:
 - username: `N8N_BASIC_AUTH_USER`
 - password: `N8N_BASIC_AUTH_PASSWORD`
 
-The current workflow exports are all inactive in JSON, so importing is not enough. Import and publish all six workflows.
+The current workflow exports are all inactive in JSON, so importing is not enough. Import and publish all nine workflows.
 
 ### Workflow files involved
 
@@ -320,13 +321,16 @@ The current workflow exports are all inactive in JSON, so importing is not enoug
 - `infra/n8n/workflows/solution_start_v1.json`
 - `infra/n8n/workflows/solution_reply_v1.json`
 - `infra/n8n/workflows/agent_solution_definition_v1.json`
+- `infra/n8n/workflows/data_ai_privacy_start_v1.json`
+- `infra/n8n/workflows/data_ai_privacy_reply_v1.json`
+- `infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json`
 
 ### CLI import and publish
 
 Run this after `n8n` is up:
 
 ```bash
-for workflow in proposal_start_v1.json proposal_reply_v1.json agent_problem_definition_v1.json solution_start_v1.json solution_reply_v1.json agent_solution_definition_v1.json; do
+for workflow in proposal_start_v1.json proposal_reply_v1.json agent_problem_definition_v1.json solution_start_v1.json solution_reply_v1.json agent_solution_definition_v1.json data_ai_privacy_start_v1.json data_ai_privacy_reply_v1.json agent_data_ai_privacy_gap_v1.json; do
   docker compose exec -T -u node n8n n8n import:workflow --input="/workflows/${workflow}"
 done
 ```
@@ -334,7 +338,7 @@ done
 Publish the imported workflows by their committed workflow IDs:
 
 ```bash
-for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json; do
+for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json infra/n8n/workflows/data_ai_privacy_start_v1.json infra/n8n/workflows/data_ai_privacy_reply_v1.json infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json; do
   workflow_id="$(awk -F'"' '/^[[:space:]]*"id":[[:space:]]*"/ { print $4; exit }' "$workflow_path")"
   docker compose exec -T -u node n8n n8n publish:workflow --id="$workflow_id"
 done
@@ -354,11 +358,14 @@ Public entry webhooks:
 - `POST http://localhost:5678/webhook/proposal-reply-v1`
 - `POST http://localhost:5678/webhook/solution-start-v1`
 - `POST http://localhost:5678/webhook/solution-reply-v1`
+- `POST http://localhost:5678/webhook/data-ai-privacy-start-v1`
+- `POST http://localhost:5678/webhook/data-ai-privacy-reply-v1`
 
 Internal workflow webhooks also exist, but the current public workflows call the API internal agent routes directly:
 
 - `POST http://localhost:5678/webhook/agent-problem-definition-v1`
 - `POST http://localhost:5678/webhook/agent-solution-definition-v1`
+- `POST http://localhost:5678/webhook/agent-data-ai-privacy-gap-v1`
 
 The practical webhook verification is the stack smoke script after API, n8n, Postgres, and Ollama are running:
 
@@ -699,6 +706,36 @@ Expected behavior:
 - The report shows brief fields, open gaps, problem section, solution section, gap states, internal sources, and warnings.
 - The report does not show raw model output, prompts, model parameters, or validated raw run payloads.
 
+### Step 9: Run PR9 Data/AI/Privacy in the Browser
+
+Keep using fake or anonymized information only. The PR9 browser path requires the same nine workflows imported and published in section 9, especially:
+
+- `data_ai_privacy_start_v1`
+- `data_ai_privacy_reply_v1`
+- `agent_data_ai_privacy_gap_v1`
+
+After the solution section exists, the workspace shows the `Carril datos/IA/privacidad` callout with the `Iniciar datos/IA/privacidad` button. Click it and answer the open data/AI/privacy question with bounded, fictitious project context, for example:
+
+```text
+Los datos serian solicitudes administrativas ficticias, notas internas simuladas y campos de admision sin datos reales de pacientes. La IA solo prepararia un resumen estructurado para que personal competente lo revise. Privacidad, gobierno clinico y regulatorio revisarian base de datos, trazabilidad, controles de acceso y limites antes de cualquier piloto.
+```
+
+Expected UI behavior:
+
+- The open question label changes to `Pregunta abierta de datos/IA/privacidad`.
+- The module can ask follow-up questions until `agent_status` is `done` or `blocked`.
+- The workspace shows `requires competent human review` warnings.
+- After completion, the workspace shows the generated `Data, AI and privacy gaps` section.
+- The Basic Alpha Report remains Alpha-only and does not include the data/AI/privacy section.
+
+Expected persisted artifacts from `GET /api/v1/sessions/:sessionId`:
+
+- `module_chats` contains `module = "data_ai_privacy"`.
+- `chat_turns` for the module contain the PR9 questions, answers, warnings and `agent_run` audit refs.
+- `alpha_gaps` can contain `module = "data_ai_privacy"` gap rows.
+- `generated_sections` contains `section_kind = "data_ai_privacy"` after completion.
+- `audit_events` include data/AI/privacy lifecycle events, and guardrail intervention events when code normalizes unsafe model output.
+
 ## 14. Example Fake Proposal
 
 Paste this into `Contexto de la propuesta`:
@@ -885,8 +922,8 @@ Symptoms:
 
 Fix:
 
-1. Import all six workflow files.
-2. Publish all six workflows.
+1. Import all nine workflow files.
+2. Publish all nine workflows.
 3. Restart n8n.
 4. Run the live smoke script.
 
@@ -900,7 +937,7 @@ INTERNAL_SHARED_SECRET="$(awk -F= '$1=="INTERNAL_SHARED_SECRET"{print substr($0,
 The committed workflow JSON files have `"active": false`. After import, publish them with:
 
 ```bash
-for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json; do
+for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json infra/n8n/workflows/data_ai_privacy_start_v1.json infra/n8n/workflows/data_ai_privacy_reply_v1.json infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json; do
   workflow_id="$(awk -F'"' '/^[[:space:]]*"id":[[:space:]]*"/ { print $4; exit }' "$workflow_path")"
   docker compose exec -T -u node n8n n8n publish:workflow --id="$workflow_id"
 done
@@ -1045,7 +1082,7 @@ Clear browser state if the web UI keeps showing old recent sessions:
 - No enterprise auth.
 - No OCR for scanned PDFs.
 - No remote or VPS AI provider.
-- No Clinic Pilot modules.
+- No Clinic Pilot modules beyond the PR9 data/AI/privacy gap flow.
 - Basic Alpha Report composition currently requires the internal compose API call after both generated sections exist; the app displays the report after it has been composed.
 
 ## 20. Final Checklist
@@ -1061,13 +1098,13 @@ pnpm run migrate
 ```
 
 ```bash
-for workflow in proposal_start_v1.json proposal_reply_v1.json agent_problem_definition_v1.json solution_start_v1.json solution_reply_v1.json agent_solution_definition_v1.json; do
+for workflow in proposal_start_v1.json proposal_reply_v1.json agent_problem_definition_v1.json solution_start_v1.json solution_reply_v1.json agent_solution_definition_v1.json data_ai_privacy_start_v1.json data_ai_privacy_reply_v1.json agent_data_ai_privacy_gap_v1.json; do
   docker compose exec -T -u node n8n n8n import:workflow --input="/workflows/${workflow}"
 done
 ```
 
 ```bash
-for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json; do
+for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json infra/n8n/workflows/data_ai_privacy_start_v1.json infra/n8n/workflows/data_ai_privacy_reply_v1.json infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json; do
   workflow_id="$(awk -F'"' '/^[[:space:]]*"id":[[:space:]]*"/ { print $4; exit }' "$workflow_path")"
   docker compose exec -T -u node n8n n8n publish:workflow --id="$workflow_id"
 done
@@ -1104,6 +1141,7 @@ INTERNAL_SHARED_SECRET="$(awk -F= '$1=="INTERNAL_SHARED_SECRET"{print substr($0,
 - The app shows a structured brief, gaps, sources, and one open problem question.
 - Problem replies persist and eventually generate a problem section.
 - Solution replies persist and eventually generate a solution section.
+- The PR9 data/AI/privacy browser flow persists a module chat and generated data/AI/privacy section after solution completion.
 - The internal compose endpoint creates a Basic Alpha Report.
 - Reloading or reopening by `Session ID` restores persisted state.
 - The app shows `Basic Alpha Report`.

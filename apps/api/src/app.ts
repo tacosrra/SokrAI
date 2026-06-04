@@ -6,6 +6,8 @@ import { loadConfig, type AppConfig } from './config/env';
 import {
   assertBasicAlphaReport,
   assertBasicReportComposeRequest,
+  assertDataAiPrivacyReplyResponse,
+  assertDataAiPrivacyStartResponse,
   assertErrorResponse,
   assertProposalReplyResponse,
   assertProposalStartResponse,
@@ -20,6 +22,7 @@ import { SessionStore } from './repositories/session-store';
 import type { AiProviderPort } from './services/ai-provider';
 import { createAiProvider } from './services/ai-provider-factory';
 import { BasicReportService } from './services/basic-report-service';
+import { DataAiPrivacyService } from './services/data-ai-privacy-service';
 import { GapAnalysisService } from './services/gap-analysis-service';
 import { LlmOrchestrator } from './services/llm-orchestrator';
 import { ProblemDefinitionService } from './services/problem-definition-service';
@@ -71,6 +74,13 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     alphaStore,
     llmOrchestrator,
   );
+  const dataAiPrivacyService = new DataAiPrivacyService(
+    config,
+    logger,
+    sessionStore,
+    alphaStore,
+    llmOrchestrator,
+  );
 
   const app = Fastify({
     logger: false,
@@ -91,6 +101,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     problemDefinitionService,
     solutionReplyService,
     solutionDefinitionService,
+    dataAiPrivacyService,
   });
 
   app.addHook('onClose', async () => {
@@ -174,6 +185,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       requestId: params.requestId,
       problemDefinitionService,
       solutionDefinitionService,
+      dataAiPrivacyService,
       sessionStore,
     });
 
@@ -370,6 +382,118 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     return reply.send(response);
   });
 
+  app.post('/internal/sessions/data-ai-privacy-start', async (request, reply) => {
+    assertInternalSecret(request);
+
+    const body = request.body as {
+      request_id?: string;
+      workflow_version?: string;
+      workflow_execution_id?: string;
+      payload: unknown;
+    };
+
+    const result = await dataAiPrivacyService.start({
+      context: {
+        requestId: body.request_id ?? getRequestId(request),
+        workflowVersion: body.workflow_version ?? 'data_ai_privacy_start_v1',
+        workflowExecutionId: body.workflow_execution_id,
+      },
+      payload: body.payload as never,
+    });
+
+    return reply.send(assertDataAiPrivacyStartResponse({
+      session_id: result.session_id,
+      stage: 'data_ai_privacy',
+      profile_id: result.profile_id,
+      agent_status: result.agent_status,
+      updated_data_ai_privacy: result.updated_data_ai_privacy,
+      diagnosis: result.diagnosis,
+      next_question: result.next_question,
+      completion_reason: result.completion_reason,
+      warnings: result.warnings,
+    }));
+  });
+
+  app.post('/internal/sessions/data-ai-privacy-reply', async (request, reply) => {
+    assertInternalSecret(request);
+
+    const body = request.body as {
+      request_id?: string;
+      workflow_version?: string;
+      workflow_execution_id?: string;
+      payload: unknown;
+    };
+
+    const result = await dataAiPrivacyService.reply({
+      context: {
+        requestId: body.request_id ?? getRequestId(request),
+        workflowVersion: body.workflow_version ?? 'data_ai_privacy_reply_v1',
+        workflowExecutionId: body.workflow_execution_id,
+      },
+      payload: body.payload as never,
+    });
+
+    return reply.send(assertDataAiPrivacyReplyResponse({
+      session_id: result.session_id,
+      stage: 'data_ai_privacy',
+      profile_id: result.profile_id,
+      agent_status: result.agent_status,
+      updated_data_ai_privacy: result.updated_data_ai_privacy,
+      diagnosis: result.diagnosis,
+      next_question: result.next_question,
+      completion_reason: result.completion_reason,
+      warnings: result.warnings,
+    }));
+  });
+
+  app.post('/internal/agents/data-ai-privacy/run', async (request, reply) => {
+    assertInternalSecret(request);
+
+    const body = request.body as {
+      request_id?: string;
+      workflow_version?: string;
+      workflow_execution_id?: string;
+      session_id: string;
+      trigger: 'start' | 'reply';
+    };
+
+    const result = await dataAiPrivacyService.execute({
+      context: {
+        requestId: body.request_id ?? getRequestId(request),
+        workflowVersion: body.workflow_version ?? 'agent_data_ai_privacy_gap_v1',
+        workflowExecutionId: body.workflow_execution_id,
+      },
+      sessionId: body.session_id,
+      trigger: body.trigger,
+    });
+
+    const response = body.trigger === 'start'
+      ? assertDataAiPrivacyStartResponse({
+          session_id: result.session_id,
+          stage: 'data_ai_privacy',
+          profile_id: result.profile_id,
+          agent_status: result.agent_status,
+          updated_data_ai_privacy: result.updated_data_ai_privacy,
+          diagnosis: result.diagnosis,
+          next_question: result.next_question,
+          completion_reason: result.completion_reason,
+          warnings: result.warnings,
+        })
+      : assertDataAiPrivacyReplyResponse({
+          session_id: result.session_id,
+          stage: 'data_ai_privacy',
+          profile_id: result.profile_id,
+          agent_status: result.agent_status,
+          updated_data_ai_privacy: result.updated_data_ai_privacy,
+          diagnosis: result.diagnosis,
+          next_question: result.next_question,
+          completion_reason: result.completion_reason,
+          warnings: result.warnings,
+        });
+
+    return reply.send(response);
+  });
+
   app.post('/internal/reports/basic-alpha/compose', async (request, reply) => {
     assertInternalSecret(request);
 
@@ -439,6 +563,7 @@ async function recoverRequestExecution(params: {
   sessionStore: SessionStore;
   problemDefinitionService: ProblemDefinitionService;
   solutionDefinitionService: SolutionDefinitionService;
+  dataAiPrivacyService: DataAiPrivacyService;
 }) {
   const currentStatus = await params.sessionStore.getRequestExecutionStatus(params.requestId);
 
@@ -532,6 +657,72 @@ async function recoverRequestExecution(params: {
         (
           error.errorCode === 'solution_reply_not_ready_for_agent' ||
           error.errorCode === 'solution_start_already_completed'
+        )
+      ) {
+        return refreshedStatus;
+      }
+
+      throw error;
+    }
+
+    return params.sessionStore.getRequestExecutionStatus(params.requestId);
+  }
+
+  if (currentStatus.request_kind === 'data_ai_privacy_reply' && currentStatus.session_id) {
+    try {
+      await params.dataAiPrivacyService.execute({
+        context: {
+          requestId: params.requestId,
+          workflowVersion: 'request_recovery_v1',
+        },
+        sessionId: currentStatus.session_id,
+        trigger: 'reply',
+      });
+    } catch (error) {
+      const refreshedStatus = await params.sessionStore.getRequestExecutionStatus(params.requestId);
+
+      if (refreshedStatus.status !== 'pending') {
+        return refreshedStatus;
+      }
+
+      if (
+        error instanceof AppError &&
+        (
+          error.errorCode === 'data_ai_privacy_reply_not_ready_for_agent' ||
+          error.errorCode === 'data_ai_privacy_start_already_completed'
+        )
+      ) {
+        return refreshedStatus;
+      }
+
+      throw error;
+    }
+
+    return params.sessionStore.getRequestExecutionStatus(params.requestId);
+  }
+
+  if (currentStatus.request_kind === 'data_ai_privacy_start' && currentStatus.session_id) {
+    try {
+      await params.dataAiPrivacyService.execute({
+        context: {
+          requestId: params.requestId,
+          workflowVersion: 'request_recovery_v1',
+        },
+        sessionId: currentStatus.session_id,
+        trigger: 'start',
+      });
+    } catch (error) {
+      const refreshedStatus = await params.sessionStore.getRequestExecutionStatus(params.requestId);
+
+      if (refreshedStatus.status !== 'pending') {
+        return refreshedStatus;
+      }
+
+      if (
+        error instanceof AppError &&
+        (
+          error.errorCode === 'data_ai_privacy_start_already_initialized' ||
+          error.errorCode === 'data_ai_privacy_start_already_completed'
         )
       ) {
         return refreshedStatus;

@@ -1,5 +1,9 @@
 import type {
   BasicAlphaReport,
+  DataAiPrivacyReplyRequest,
+  DataAiPrivacyReplyResponse,
+  DataAiPrivacyStartRequest,
+  DataAiPrivacyStartResponse,
   ErrorResponse,
   ProposalReplyRequest,
   ProposalReplyResponse,
@@ -15,6 +19,8 @@ import type {
 import {
   parseErrorResponse,
   parseBasicAlphaReport,
+  parseDataAiPrivacyReplyResponse,
+  parseDataAiPrivacyStartResponse,
   parseProposalReplyResponse,
   parseProposalStartResponse,
   parseRequestExecutionResponse,
@@ -258,6 +264,40 @@ export async function replySolution(
       : undefined,
     timeoutMs: REPLY_SESSION_TIMEOUT_MS,
     parse: parseSolutionReplyResponse,
+  });
+}
+
+export async function startDataAiPrivacy(
+  payload: DataAiPrivacyStartRequest,
+): Promise<DataAiPrivacyStartResponse> {
+  return requestJson({
+    url: joinUrl(WEBHOOK_BASE_URL, '/webhook/data-ai-privacy-start-v1'),
+    method: 'POST',
+    payload,
+    headers: payload.request_id
+      ? {
+          'x-request-id': payload.request_id,
+        }
+      : undefined,
+    timeoutMs: REPLY_SESSION_TIMEOUT_MS,
+    parse: parseDataAiPrivacyStartResponse,
+  });
+}
+
+export async function replyDataAiPrivacy(
+  payload: DataAiPrivacyReplyRequest,
+): Promise<DataAiPrivacyReplyResponse> {
+  return requestJson({
+    url: joinUrl(WEBHOOK_BASE_URL, '/webhook/data-ai-privacy-reply-v1'),
+    method: 'POST',
+    payload,
+    headers: payload.request_id
+      ? {
+          'x-request-id': payload.request_id,
+        }
+      : undefined,
+    timeoutMs: REPLY_SESSION_TIMEOUT_MS,
+    parse: parseDataAiPrivacyReplyResponse,
   });
 }
 

@@ -13,7 +13,7 @@ export interface StructuredBrief {
   missing_information: string[];
 }
 
-export type AlphaModule = 'problem' | 'solution';
+export type AlphaModule = 'problem' | 'solution' | 'data_ai_privacy';
 
 export type ProposalStatus = 'draft' | 'active' | 'completed' | 'blocked' | 'failed' | 'archived';
 
@@ -54,7 +54,7 @@ export type ChatStatus =
 
 export type ChatTurnStatus = 'awaiting_user' | 'processing' | 'resolved' | 'failed' | 'skipped';
 
-export type SectionKind = 'problem' | 'solution';
+export type SectionKind = 'problem' | 'solution' | 'data_ai_privacy';
 
 export type SectionStatus = 'draft' | 'generated' | 'accepted' | 'needs_revision' | 'superseded';
 
@@ -252,6 +252,48 @@ export interface SolutionDefinitionTurn {
   completion_reason: string;
 }
 
+export type RegulatoryProfileId = 'hospital_clinic_v1';
+
+export type RegulatoryFamilyId = 'gdpr' | 'cybersecurity_act' | 'ehds' | 'mdr' | 'eu_ai_act' | 'htar';
+
+export interface RegulatoryFamily {
+  family_id: RegulatoryFamilyId;
+  label: string;
+  scope_note: string;
+}
+
+export interface RegulatoryProfile {
+  profile_id: RegulatoryProfileId;
+  profile_version: string;
+  display_name: string;
+  families: RegulatoryFamily[];
+  allowed_outputs: Array<'gaps' | 'questions' | 'uncertainty' | 'requires competent human review'>;
+  forbidden_outputs: string[];
+  review_statement: 'requires competent human review';
+}
+
+export interface DataAiPrivacyState {
+  personal_or_health_data: string;
+  data_sources: string;
+  ai_system_role: string;
+  validation_evidence: string;
+  privacy_governance: string;
+  cybersecurity_controls: string;
+  regulatory_context: string;
+  human_review_plan: string;
+  assumptions: string[];
+  uncertainties: string[];
+  requires_competent_human_review: boolean;
+}
+
+export interface DataAiPrivacyTurn {
+  agent_status: 'continue' | 'done' | 'blocked';
+  diagnosis: string[];
+  updated_data_ai_privacy: DataAiPrivacyState;
+  next_question: string;
+  completion_reason: string;
+}
+
 export interface ProposalStartFile {
   file_name: string;
   mime_type: 'application/pdf';
@@ -329,6 +371,42 @@ export interface SolutionReplyResponse {
   warnings: string[];
 }
 
+export interface DataAiPrivacyStartRequest {
+  request_id?: string;
+  session_id: string;
+  profile_id?: RegulatoryProfileId;
+}
+
+export interface DataAiPrivacyStartResponse {
+  session_id: string;
+  stage: 'data_ai_privacy';
+  profile_id: RegulatoryProfileId;
+  agent_status: 'continue' | 'done' | 'blocked';
+  updated_data_ai_privacy: DataAiPrivacyState;
+  diagnosis: string[];
+  next_question: string;
+  completion_reason: string;
+  warnings: string[];
+}
+
+export interface DataAiPrivacyReplyRequest {
+  request_id?: string;
+  session_id: string;
+  answer: string;
+}
+
+export interface DataAiPrivacyReplyResponse {
+  session_id: string;
+  stage: 'data_ai_privacy';
+  profile_id: RegulatoryProfileId;
+  agent_status: 'continue' | 'done' | 'blocked';
+  updated_data_ai_privacy: DataAiPrivacyState;
+  diagnosis: string[];
+  next_question: string;
+  completion_reason: string;
+  warnings: string[];
+}
+
 export interface ErrorResponse {
   error_code: string;
   safe_message: string;
@@ -339,7 +417,14 @@ export interface ErrorResponse {
 
 export interface RequestExecutionResponse {
   request_id: string;
-  request_kind: 'proposal_start' | 'proposal_reply' | 'solution_start' | 'solution_reply' | 'unknown';
+  request_kind:
+    | 'proposal_start'
+    | 'proposal_reply'
+    | 'solution_start'
+    | 'solution_reply'
+    | 'data_ai_privacy_start'
+    | 'data_ai_privacy_reply'
+    | 'unknown';
   status: 'pending' | 'completed' | 'failed' | 'not_found';
   session_id?: string;
   error_code?: string;

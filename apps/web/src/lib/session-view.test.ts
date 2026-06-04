@@ -303,4 +303,138 @@ describe('deriveSessionPresentation', () => {
     ]);
     expect(presentation.detectedGaps).not.toContain('problem_owner');
   });
+
+  it('prioritizes active data AI privacy questions and maps PR9 presentation state', () => {
+    const auditWithClinicPilot: SessionAuditView = {
+      ...auditFixture,
+      module_chats: [
+        {
+          chat_id: 'chat-solution',
+          proposal_id: 'session-1',
+          module: 'solution',
+          chat_status: 'waiting_for_user',
+          active_turn_id: 'solution-turn-1',
+          turns: [
+            {
+              turn_id: 'solution-turn-1',
+              chat_id: 'chat-solution',
+              proposal_id: 'session-1',
+              module: 'solution',
+              turn_seq: 1,
+              question_text: 'What does the solution do?',
+              turn_status: 'awaiting_user',
+              agent_status: 'continue',
+              diagnosis: ['Falta definir la solucion.'],
+              source_refs: [],
+              gap_refs: [],
+              audit_refs: [],
+              warnings: [],
+              created_at: '2026-05-24T14:31:00.000Z',
+            },
+          ],
+          started_at: '2026-05-24T14:31:00.000Z',
+          warnings: [],
+        },
+        {
+          chat_id: 'chat-data',
+          proposal_id: 'session-1',
+          module: 'data_ai_privacy',
+          chat_status: 'waiting_for_user',
+          active_turn_id: 'data-turn-1',
+          turns: [
+            {
+              turn_id: 'data-turn-1',
+              chat_id: 'chat-data',
+              proposal_id: 'session-1',
+              module: 'data_ai_privacy',
+              turn_seq: 1,
+              question_text: 'Que datos personales o de salud trataria la propuesta?',
+              turn_status: 'awaiting_user',
+              agent_status: 'continue',
+              diagnosis: ['Falta concretar datos y fuentes.'],
+              source_refs: [],
+              gap_refs: ['gap-data'],
+              audit_refs: [{ kind: 'agent_run', id: 'run-data' }],
+              warnings: ['requires competent human review'],
+              created_at: '2026-05-24T14:40:00.000Z',
+            },
+          ],
+          started_at: '2026-05-24T14:40:00.000Z',
+          warnings: ['requires competent human review'],
+        },
+      ],
+      generated_sections: [
+        {
+          section_id: 'section-solution',
+          proposal_id: 'session-1',
+          section_kind: 'solution',
+          section_status: 'generated',
+          section_version: 1,
+          title: 'Solution definition',
+          content_markdown: '## Solution\nThe solution is defined.',
+          source_refs: [],
+          gap_refs: [],
+          warnings: [],
+          created_at: '2026-05-24T14:35:00.000Z',
+        },
+        {
+          section_id: 'section-data',
+          proposal_id: 'session-1',
+          section_kind: 'data_ai_privacy',
+          section_status: 'generated',
+          section_version: 1,
+          title: 'Data, AI and privacy gaps',
+          content_markdown: '## Review requirement\nrequires competent human review',
+          source_refs: [],
+          gap_refs: ['gap-data'],
+          generated_by_run_id: 'run-data',
+          warnings: ['requires competent human review'],
+          created_at: '2026-05-24T14:45:00.000Z',
+        },
+      ],
+    };
+
+    const presentation = deriveSessionPresentation(auditWithClinicPilot);
+
+    expect(presentation.currentDataAiPrivacyQuestion).toBe(
+      'Que datos personales o de salud trataria la propuesta?',
+    );
+    expect(presentation.currentSolutionQuestion).toBe('What does the solution do?');
+    expect(presentation.currentQuestion).toBe('Que datos personales o de salud trataria la propuesta?');
+    expect(presentation.dataAiPrivacyModuleChat?.chat_status).toBe('waiting_for_user');
+    expect(presentation.latestSolutionSection?.section_id).toBe('section-solution');
+    expect(presentation.latestDataAiPrivacySection).toMatchObject({
+      section_id: 'section-data',
+      title: 'Data, AI and privacy gaps',
+    });
+  });
+
+  it('maps the PR9 start-ready state after solution completion', () => {
+    const auditReadyForClinicPilot: SessionAuditView = {
+      ...auditFixture,
+      module_chats: [],
+      generated_sections: [
+        {
+          section_id: 'section-solution',
+          proposal_id: 'session-1',
+          section_kind: 'solution',
+          section_status: 'generated',
+          section_version: 1,
+          title: 'Solution definition',
+          content_markdown: '## Solution\nThe solution is defined.',
+          source_refs: [],
+          gap_refs: [],
+          warnings: [],
+          created_at: '2026-05-24T14:35:00.000Z',
+        },
+      ],
+    };
+
+    const presentation = deriveSessionPresentation(auditReadyForClinicPilot);
+
+    expect(presentation.latestSolutionSection?.section_id).toBe('section-solution');
+    expect(presentation.dataAiPrivacyModuleChat).toBeNull();
+    expect(presentation.currentDataAiPrivacyQuestion).toBe('');
+    expect(presentation.latestDataAiPrivacySection).toBeNull();
+  });
 });

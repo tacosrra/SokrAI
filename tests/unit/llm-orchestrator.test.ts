@@ -370,4 +370,97 @@ describe('LlmOrchestrator', () => {
       repairAttempted: true,
     });
   });
+
+  it('uses the data AI privacy schema and includes profile and prior sections in the prompt', async () => {
+    const client = new QueueLanguageModelClient([
+      JSON.stringify({
+        agent_status: 'continue',
+        diagnosis: ['data sources and governance need detail'],
+        updated_data_ai_privacy: {
+          personal_or_health_data: 'The pilot may process intake data and symptom descriptions.',
+          data_sources: '',
+          ai_system_role: 'The AI prepares a draft handoff for staff review.',
+          validation_evidence: '',
+          privacy_governance: '',
+          cybersecurity_controls: '',
+          regulatory_context: 'Regulatory relevance requires competent human review.',
+          human_review_plan: '',
+          assumptions: ['Staff review every generated output before use.'],
+          uncertainties: ['Exact data minimization path is unresolved.'],
+          requires_competent_human_review: true,
+        },
+        next_question: 'Which source systems provide the intake data for the pilot?',
+        completion_reason: '',
+      }),
+    ]);
+    const orchestrator = new LlmOrchestrator(createConfig(), client);
+
+    await orchestrator.runDataAiPrivacyGap({
+      structuredBrief: {
+        project_title: 'Proyecto',
+        goal: 'Aclarar datos e IA',
+        target_user: 'Urgencias',
+        problem_owner: 'Direccion medica',
+        problem_statement: 'El triaje se retrasa',
+        evidence_of_problem: 'Esperas frecuentes',
+        current_alternatives: 'Proceso manual',
+        scope: 'Urgencias hospitalarias',
+        constraints_known: [],
+        assumptions: [],
+        ambiguities: [],
+        missing_information: [],
+      },
+      problemSection: {
+        title: 'Problem definition',
+        content_markdown: 'El triaje se retrasa en horas punta.',
+        source_refs: [
+          {
+            source_id: 'source-problem',
+            source_kind: 'generated_section',
+            label: 'Problem section',
+            created_at: '2026-06-04T10:00:00.000Z',
+          },
+        ],
+      },
+      solutionSection: {
+        title: 'Solution definition',
+        content_markdown: 'Un asistente prepara resumenes de triaje.',
+        source_refs: [
+          {
+            source_id: 'source-solution',
+            source_kind: 'generated_section',
+            label: 'Solution section',
+            created_at: '2026-06-04T10:00:00.000Z',
+          },
+        ],
+      },
+      regulatoryProfile: {
+        profile_id: 'hospital_clinic_v1',
+        profile_version: 'v1',
+        display_name: 'Hospital clinic v1',
+        families: [
+          {
+            family_id: 'gdpr_lopdgdd',
+            label: 'GDPR/LOPDGDD',
+            scope_note: 'Privacy review scope',
+          },
+        ],
+        allowed_outputs: ['gaps', 'questions', 'uncertainty', 'requires competent human review'],
+        forbidden_outputs: ['approval', 'rejection'],
+        review_statement: 'requires competent human review',
+      },
+      recentTurns: [],
+    });
+
+    expect(client.calls).toHaveLength(1);
+    expect(client.calls[0].responseSchema).toMatchObject({
+      $id: schemaDocuments.dataAiPrivacyTurn.$id,
+      title: schemaDocuments.dataAiPrivacyTurn.title,
+    });
+    expect(client.calls[0].userPrompt).toContain('"profile_id": "hospital_clinic_v1"');
+    expect(client.calls[0].userPrompt).toContain('"problem_section"');
+    expect(client.calls[0].userPrompt).toContain('"solution_section"');
+    expect(client.calls[0].userPrompt).toContain('source-problem');
+    expect(client.calls[0].userPrompt).toContain('source-solution');
+  });
 });

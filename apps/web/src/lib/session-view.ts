@@ -57,12 +57,15 @@ export interface SessionPresentation {
   gaps: AlphaGap[];
   problemModuleChat: ModuleChat | null;
   solutionModuleChat: ModuleChat | null;
+  dataAiPrivacyModuleChat: ModuleChat | null;
   latestProblemSection: GeneratedSection | null;
   latestSolutionSection: GeneratedSection | null;
+  latestDataAiPrivacySection: GeneratedSection | null;
   detectedGaps: string[];
   latestDiagnosis: string[];
   currentQuestion: string;
   currentSolutionQuestion: string;
+  currentDataAiPrivacyQuestion: string;
   completionReason: string;
   warnings: string[];
   turns: ConversationTurn[];
@@ -261,8 +264,12 @@ export function deriveSessionPresentation(audit: SessionAuditView): SessionPrese
   const gaps = audit.gaps;
   const problemModuleChat = audit.module_chats.find((chat) => chat.module === 'problem') ?? null;
   const solutionModuleChat = audit.module_chats.find((chat) => chat.module === 'solution') ?? null;
+  const dataAiPrivacyModuleChat = audit.module_chats.find((chat) => chat.module === 'data_ai_privacy') ?? null;
   const activeSolutionTurn = solutionModuleChat?.turns.find((turn) =>
     turn.turn_id === solutionModuleChat.active_turn_id,
+  ) ?? null;
+  const activeDataAiPrivacyTurn = dataAiPrivacyModuleChat?.turns.find((turn) =>
+    turn.turn_id === dataAiPrivacyModuleChat.active_turn_id,
   ) ?? null;
   const latestProblemSection = [...audit.generated_sections]
     .reverse()
@@ -276,8 +283,15 @@ export function deriveSessionPresentation(audit: SessionAuditView): SessionPrese
       section.section_kind === 'solution' &&
       ['draft', 'generated', 'accepted', 'needs_revision'].includes(section.section_status),
     ) ?? null;
+  const latestDataAiPrivacySection = [...audit.generated_sections]
+    .reverse()
+    .find((section) =>
+      section.section_kind === 'data_ai_privacy' &&
+      ['draft', 'generated', 'accepted', 'needs_revision'].includes(section.section_status),
+    ) ?? null;
   const currentProblemQuestion = openTurn?.question_text ?? latestSnapshot?.next_question_text ?? '';
   const currentSolutionQuestion = activeSolutionTurn?.question_text ?? '';
+  const currentDataAiPrivacyQuestion = activeDataAiPrivacyTurn?.question_text ?? '';
 
   return {
     sessionId: audit.session.id,
@@ -291,14 +305,17 @@ export function deriveSessionPresentation(audit: SessionAuditView): SessionPrese
     gaps,
     problemModuleChat,
     solutionModuleChat,
+    dataAiPrivacyModuleChat,
     latestProblemSection,
     latestSolutionSection,
+    latestDataAiPrivacySection,
     detectedGaps: gaps.length > 0
       ? gaps.map((gap) => `${gap.field}: ${gap.description}`)
       : latestSnapshot?.detected_gaps_json ?? [],
     latestDiagnosis: latestResolvedTurn?.diagnosis_json ?? [],
-    currentQuestion: currentSolutionQuestion || currentProblemQuestion,
+    currentQuestion: currentDataAiPrivacyQuestion || currentSolutionQuestion || currentProblemQuestion,
     currentSolutionQuestion,
+    currentDataAiPrivacyQuestion,
     completionReason:
       latestResolvedTurn?.completion_reason ??
       latestSnapshot?.completion_reason ??

@@ -8,6 +8,11 @@ import {
   assertBasicAlphaReport,
   assertBasicReportComposeRequest,
   assertChatTurn,
+  assertDataAiPrivacyReplyRequest,
+  assertDataAiPrivacyReplyResponse,
+  assertDataAiPrivacyStartRequest,
+  assertDataAiPrivacyStartResponse,
+  assertDataAiPrivacyTurn,
   assertGeneratedSection,
   assertModuleChat,
   assertProblemDefinitionTurn,
@@ -18,6 +23,7 @@ import {
   assertProposalStartRequest,
   assertProposalStartResponse,
   assertRequestExecutionResponse,
+  assertRegulatoryProfile,
   assertSchema,
   assertSolutionDefinitionTurn,
   assertSolutionReplyRequest,
@@ -64,6 +70,67 @@ describe('contract schemas', () => {
   it('accepts solution-definition turn fixtures', async () => {
     expect(assertSolutionDefinitionTurn(await readFixture('expected', 'solution-definition.done.json'))).toBeTruthy();
     expect(assertSolutionDefinitionTurn(await readFixture('expected', 'solution-definition.continue.json'))).toBeTruthy();
+  });
+
+  it('accepts data AI privacy profile, turn, request, and response contracts', async () => {
+    const turn = await readFixture('expected', 'data-ai-privacy.done.json');
+
+    expect(assertRegulatoryProfile({
+      profile_id: 'hospital_clinic_v1',
+      profile_version: 'v1',
+      display_name: 'Hospital Clinic v1',
+      families: [
+        { family_id: 'gdpr', label: 'RGPD / GDPR', scope_note: 'Data protection context.' },
+        { family_id: 'cybersecurity_act', label: 'Cybersecurity Act', scope_note: 'Cybersecurity context.' },
+        { family_id: 'ehds', label: 'EEDS / EHDS', scope_note: 'Health data context.' },
+        { family_id: 'mdr', label: 'MDR', scope_note: 'Medical device uncertainty context.' },
+        { family_id: 'eu_ai_act', label: 'EU AI Act', scope_note: 'AI governance context.' },
+        { family_id: 'htar', label: 'HTAR', scope_note: 'Health technology assessment context.' },
+      ],
+      allowed_outputs: ['gaps', 'questions', 'uncertainty', 'requires competent human review'],
+      forbidden_outputs: [
+        'legal/regulatory/clinical/privacy/medical-device dictamen',
+        'definitive compliance or non-compliance',
+        'approval or rejection',
+        'ranking, scoring, or prioritization',
+        'definitive medical device classification',
+        'replacement for competent human review',
+      ],
+      review_statement: 'requires competent human review',
+    })).toBeTruthy();
+    expect(assertDataAiPrivacyTurn(turn)).toBeTruthy();
+    expect(assertDataAiPrivacyStartRequest({
+      request_id: 'data-start-1',
+      session_id: 'session-1',
+      profile_id: 'hospital_clinic_v1',
+    })).toBeTruthy();
+    expect(assertDataAiPrivacyReplyRequest({
+      request_id: 'data-reply-1',
+      session_id: 'session-1',
+      answer: 'Data comes from patient intake forms.',
+    })).toBeTruthy();
+    expect(assertDataAiPrivacyStartResponse({
+      session_id: 'session-1',
+      stage: 'data_ai_privacy',
+      profile_id: 'hospital_clinic_v1',
+      agent_status: 'continue',
+      updated_data_ai_privacy: turn.updated_data_ai_privacy,
+      diagnosis: turn.diagnosis,
+      next_question: 'What data sources are in scope?',
+      completion_reason: '',
+      warnings: ['requires competent human review'],
+    })).toBeTruthy();
+    expect(assertDataAiPrivacyReplyResponse({
+      session_id: 'session-1',
+      stage: 'data_ai_privacy',
+      profile_id: 'hospital_clinic_v1',
+      agent_status: 'done',
+      updated_data_ai_privacy: turn.updated_data_ai_privacy,
+      diagnosis: turn.diagnosis,
+      next_question: '',
+      completion_reason: turn.completion_reason,
+      warnings: ['requires competent human review'],
+    })).toBeTruthy();
   });
 
   it('accepts canonical response envelopes', async () => {
@@ -136,6 +203,43 @@ describe('contract schemas', () => {
 
     expect(recovered.status).toBe('completed');
     expect(recovered.request_kind).toBe('solution_reply');
+    expect(assertRequestExecutionResponse({
+      request_id: 'web-data-reply-1',
+      request_kind: 'data_ai_privacy_reply',
+      status: 'pending',
+      session_id: 'session-1',
+    })).toBeTruthy();
+  });
+
+  it('accepts data AI privacy as a widened Alpha module and section kind', async () => {
+    const gap = await readFixture('alpha-model', 'alpha-gap.valid.json');
+    const chat = await readFixture('alpha-model', 'module-chat.valid.json');
+    const turn = await readFixture('alpha-model', 'chat-turn.valid.json');
+    const section = await readFixture('alpha-model', 'generated-section.valid.json');
+
+    expect(assertAlphaGap({
+      ...gap,
+      module: 'data_ai_privacy',
+      field: 'privacy_governance',
+      warnings: ['requires competent human review'],
+    })).toBeTruthy();
+    expect(assertModuleChat({
+      ...chat,
+      module: 'data_ai_privacy',
+      turns: [],
+      warnings: ['requires competent human review'],
+    })).toBeTruthy();
+    expect(assertChatTurn({
+      ...turn,
+      module: 'data_ai_privacy',
+      warnings: ['requires competent human review'],
+    })).toBeTruthy();
+    expect(assertGeneratedSection({
+      ...section,
+      section_kind: 'data_ai_privacy',
+      title: 'Data, AI and privacy gaps',
+      warnings: ['requires competent human review'],
+    })).toBeTruthy();
   });
 
   it('accepts a valid proposal reply request fixture', async () => {
@@ -294,6 +398,9 @@ describe('contract schemas', () => {
       ['solution_start_v1.json', 'Webhook_SolutionStart'],
       ['solution_reply_v1.json', 'Webhook_SolutionReply'],
       ['agent_solution_definition_v1.json', 'Webhook_AgentSolutionDefinition'],
+      ['data_ai_privacy_start_v1.json', 'Webhook_DataAiPrivacyStart'],
+      ['data_ai_privacy_reply_v1.json', 'Webhook_DataAiPrivacyReply'],
+      ['agent_data_ai_privacy_gap_v1.json', 'Webhook_AgentDataAiPrivacyGap'],
     ];
 
     for (const [file, webhookNodeName] of workflowExpectations) {

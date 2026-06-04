@@ -4,6 +4,7 @@ import type { AlphaStore } from '../repositories/alpha-store';
 import type { SessionStore } from '../repositories/session-store';
 import type { AiProviderPort } from '../services/ai-provider';
 import type { BasicReportService } from '../services/basic-report-service';
+import type { DataAiPrivacyService } from '../services/data-ai-privacy-service';
 import type { GapAnalysisService } from '../services/gap-analysis-service';
 import type { LlmOrchestrator } from '../services/llm-orchestrator';
 import type { ProblemDefinitionService } from '../services/problem-definition-service';
@@ -30,6 +31,7 @@ declare module 'fastify' {
       problemDefinitionService: ProblemDefinitionService;
       solutionReplyService: SolutionReplyService;
       solutionDefinitionService: SolutionDefinitionService;
+      dataAiPrivacyService: DataAiPrivacyService;
     };
   }
 }

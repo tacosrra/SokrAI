@@ -1,0 +1,144 @@
+{
+  "id": "f6a063f1-5bbb-4206-b0f6-fd87149fdb1f",
+  "name": "data_ai_privacy_reply_v1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "data-ai-privacy-reply-v1",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "38b3860d-0acf-4aa4-a096-2c0b5cdb2f10",
+      "name": "Webhook_DataAiPrivacyReply",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        260,
+        300
+      ],
+      "webhookId": "data-ai-privacy-reply-v1"
+    },
+    {
+      "parameters": {
+        "keepOnlySet": false,
+        "values": {
+          "string": [
+            {
+              "name": "request_id",
+              "value": "={{ $node[\"Webhook_DataAiPrivacyReply\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_DataAiPrivacyReply\"].json.body?.request_id || $execution.id }}"
+            },
+            {
+              "name": "workflow_version",
+              "value": "data_ai_privacy_reply_v1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8473b624-12d2-4bb9-88ec-ee34560baaa1",
+      "name": "Set_ReplyPayload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:3001/internal/sessions/data-ai-privacy-reply",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-shared-secret",
+              "value": "={{ $env.INTERNAL_SHARED_SECRET }}"
+            },
+            {
+              "name": "x-request-id",
+              "value": "={{ $node[\"Webhook_DataAiPrivacyReply\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_DataAiPrivacyReply\"].json.body?.request_id || $execution.id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { request_id: ($node[\"Webhook_DataAiPrivacyReply\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_DataAiPrivacyReply\"].json.body?.request_id || $execution.id), workflow_version: $json.workflow_version, workflow_execution_id: $execution.id, payload: $node[\"Webhook_DataAiPrivacyReply\"].json.body } }}",
+        "options": {
+          "timeout": 450000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "77cb3692-1086-4383-9bbf-f2b66d8caec2",
+      "name": "HTTP_ReplyDataAiPrivacy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.body ?? $json }}",
+        "options": {
+          "responseCode": "={{ Number($json.statusCode ?? 200) }}"
+        }
+      },
+      "id": "a5980580-a3d9-4e85-9b23-0444a8c0f578",
+      "name": "Respond_Reply",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1080,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook_DataAiPrivacyReply": {
+      "main": [
+        [
+          {
+            "node": "Set_ReplyPayload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set_ReplyPayload": {
+      "main": [
+        [
+          {
+            "node": "HTTP_ReplyDataAiPrivacy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP_ReplyDataAiPrivacy": {
+      "main": [
+        [
+          {
+            "node": "Respond_Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "data_ai_privacy_reply_v1"
+}

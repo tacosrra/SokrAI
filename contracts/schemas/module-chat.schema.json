@@ -17,7 +17,8 @@
       "type": "string",
       "enum": [
         "problem",
-        "solution"
+        "solution",
+        "data_ai_privacy"
       ]
     },
     "chat_status": {

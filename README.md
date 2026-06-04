@@ -16,6 +16,7 @@ Guia detallada de arranque y prueba:
 - Persistencia en `PostgreSQL`
 - Interfaz operativa en `apps/web` para demo local y uso humano
 - Carriles operativos Alpha: `problem_definition_agent` y `solution_definition_agent`
+- Modulo Clinic Pilot: `data_ai_privacy_gap_agent` con perfil fijo `hospital_clinic_v1`
 - Una pregunta principal por turno
 - Persistencia de sesiones, turnos, snapshots, agent runs y eventos
 - Reanudacion por `session_id`
@@ -29,6 +30,7 @@ Guia detallada de arranque y prueba:
 - RAG complejo
 - OCR para PDFs escaneados
 - BI/dashboard amplio o superficies multi-lane fuera de los carriles Alpha de problema y solucion
+- Dictamen legal/regulatorio/clinico/privacidad/medical-device, cumplimiento definitivo, aprobacion/rechazo, scoring o clasificacion definitiva medical device
 
 ## Estructura
 
@@ -124,6 +126,7 @@ Durante `proposal_start_v1`, la API genera gaps iniciales de forma determinista 
 Cada `AlphaGap` persistido incluye:
 
 - `module`, limitado a `problem` o `solution`
+- PR9 amplia `module` con `data_ai_privacy` solo para gaps sensibles tras la seccion de solucion
 - `gap_kind` y `gap_status`
 - `origin`, para distinguir campo estructurado, `missing_information`, ambiguedad, fuente interna o regla del sistema
 - `absence`, con campos revisados y razon cuando falta informacion
@@ -133,6 +136,25 @@ Cada `AlphaGap` persistido incluye:
 Los gaps de ausencia no son conclusiones negativas ni scoring. Esta v1 no introduce ranking, aprobacion, dictamen legal, regulacion Clinic, medical device, costes, recursos, RAG avanzado ni PDF.
 
 `GET /api/v1/sessions/:sessionId` devuelve `gaps` junto con documentos, fuentes, turns, runs, snapshots y eventos para replay y auditoria. `detected_gaps` se mantiene como resumen de compatibilidad en snapshots y respuestas internas.
+
+## Modulo datos/IA/privacidad
+
+El Clinic Pilot incluye el perfil fijo `hospital_clinic_v1` con estas familias:
+
+- RGPD / GDPR
+- Cybersecurity Act
+- EEDS / EHDS
+- MDR
+- EU AI Act
+- HTAR
+
+El modulo `data_ai_privacy` solo puede iniciarse cuando ya existe una seccion
+de solucion. Sus salidas permitidas son gaps, preguntas, incertidumbre y
+`requires competent human review`. La API aplica guardrails de codigo y schema
+para evitar decisiones definitivas, aprobacion/rechazo, scoring o clasificacion
+medical-device. La seccion generada se guarda en `generated_sections` con
+`section_kind = "data_ai_privacy"` y se muestra en el workspace; el Basic Alpha
+Report sigue siendo Alpha-only.
 
 ## Arranque local
 
@@ -203,10 +225,10 @@ pnpm install --store-dir ./.pnpm-store
 docker compose up -d postgres ollama api n8n
 docker compose exec ollama ollama pull qwen2.5:3b-instruct
 docker compose exec api pnpm migrate
-for workflow in proposal_start_v1.json proposal_reply_v1.json agent_problem_definition_v1.json solution_start_v1.json solution_reply_v1.json agent_solution_definition_v1.json; do
+for workflow in proposal_start_v1.json proposal_reply_v1.json agent_problem_definition_v1.json solution_start_v1.json solution_reply_v1.json agent_solution_definition_v1.json data_ai_privacy_start_v1.json data_ai_privacy_reply_v1.json agent_data_ai_privacy_gap_v1.json; do
   docker compose exec -T -u node n8n n8n import:workflow --input="/workflows/${workflow}"
 done
-for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json; do
+for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json infra/n8n/workflows/data_ai_privacy_start_v1.json infra/n8n/workflows/data_ai_privacy_reply_v1.json infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json; do
   workflow_id="$(awk -F'"' '/^[[:space:]]*"id":[[:space:]]*"/ { print $4; exit }' "$workflow_path")"
   docker compose exec -T -u node n8n n8n publish:workflow --id="$workflow_id"
 done
@@ -310,8 +332,11 @@ Archivos:
 - `infra/n8n/workflows/solution_start_v1.json`
 - `infra/n8n/workflows/solution_reply_v1.json`
 - `infra/n8n/workflows/agent_solution_definition_v1.json`
+- `infra/n8n/workflows/data_ai_privacy_start_v1.json`
+- `infra/n8n/workflows/data_ai_privacy_reply_v1.json`
+- `infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json`
 
-Abre `http://localhost:5678`, importa y publica los seis workflows, y asegúrate de que `INTERNAL_SHARED_SECRET` coincide entre `.env`, la API y `n8n`.
+Abre `http://localhost:5678`, importa y publica los nueve workflows, y asegúrate de que `INTERNAL_SHARED_SECRET` coincide entre `.env`, la API y `n8n`.
 
 Los exports de workflow de esta version eliminan reintentos sincronos en nodos `HTTP Request` y propagan `statusCode + body` de la API al webhook para que un `ollama_timeout` o cualquier error controlado llegue a la UI como JSON consistente. Si reimportas los workflows, publica la nueva version exportada del repo.
 
@@ -327,11 +352,14 @@ No cambies `N8N_ENCRYPTION_KEY` una vez que `n8n` haya inicializado su volumen p
 - `POST /webhook/proposal-reply-v1`
 - `POST /webhook/solution-start-v1`
 - `POST /webhook/solution-reply-v1`
+- `POST /webhook/data-ai-privacy-start-v1`
+- `POST /webhook/data-ai-privacy-reply-v1`
 
 ### Endpoint interno reutilizable
 
 - `POST /webhook/agent-problem-definition-v1`
 - `POST /webhook/agent-solution-definition-v1`
+- `POST /webhook/agent-data-ai-privacy-gap-v1`
 
 ### API interna para n8n
 
@@ -341,6 +369,9 @@ No cambies `N8N_ENCRYPTION_KEY` una vez que `n8n` haya inicializado su volumen p
 - `POST /internal/sessions/solution-start`
 - `POST /internal/sessions/solution-reply`
 - `POST /internal/agents/solution-definition/run`
+- `POST /internal/sessions/data-ai-privacy-start`
+- `POST /internal/sessions/data-ai-privacy-reply`
+- `POST /internal/agents/data-ai-privacy/run`
 - `POST /internal/reports/basic-alpha/compose`
 
 ### API de inspeccion
@@ -370,8 +401,10 @@ Payloads listos para prueba:
 - `examples/proposal-reply.payload.json`
 - `POST /webhook/solution-start-v1`
 - `POST /webhook/solution-reply-v1`
+- `POST /webhook/data-ai-privacy-start-v1`
+- `POST /webhook/data-ai-privacy-reply-v1`
 
-El flujo normal es:
+El flujo normal Alpha es:
 
 1. `proposal_start_v1`
 2. guardar `session_id`
@@ -381,6 +414,14 @@ El flujo normal es:
 6. responder con `solution_reply_v1` hasta `agent_status = "done"`
 7. componer el informe con `POST /internal/reports/basic-alpha/compose`
 8. leerlo con `GET /api/v1/sessions/:sessionId/report`
+
+La extension Clinic Pilot de PR9, despues de cerrar la solucion, es:
+
+1. iniciar `data_ai_privacy_start_v1` con `profile_id = "hospital_clinic_v1"`
+2. responder con `data_ai_privacy_reply_v1` hasta `agent_status = "done"` o `blocked`
+3. revisar la seccion `generated_sections.section_kind = "data_ai_privacy"` en `GET /api/v1/sessions/:sessionId`
+
+Esta extension genera gaps y preguntas de datos/IA/privacidad para revision humana competente. No forma parte del `BasicAlphaReport` y no emite dictamen legal, regulatorio, clinico, de privacidad, cumplimiento definitivo, aprobacion/rechazo, scoring ni clasificacion medical-device.
 
 Al cerrar el carril de problema, la API conserva la compatibilidad de resume con
 `conversation_turns`, `session_snapshots` y `agent_runs`, y tambien escribe el
@@ -395,6 +436,12 @@ Tras cerrar el problema, el carril de solucion usa `module = "solution"` y gener
 una fila `generated_sections` con `section_kind = "solution"`. La seccion de
 solucion tambien se renderiza de forma determinista desde respuestas persistidas
 y fuentes internas.
+
+Tras cerrar la solucion, el Clinic Pilot PR9 puede abrir `module = "data_ai_privacy"`
+con el perfil fijo `hospital_clinic_v1`. Este modulo genera una seccion
+`section_kind = "data_ai_privacy"` y audita guardrails, gaps, turnos y fuentes
+del modulo; sigue siendo un marco de preguntas/gaps para revision humana
+competente, no un motor de cumplimiento.
 
 El reporte basico Alpha se compone de forma deterministica desde el brief,
 gaps actuales, seccion de problema, seccion de solucion, fuentes internas,

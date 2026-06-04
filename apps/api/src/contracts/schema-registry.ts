@@ -7,6 +7,11 @@ import alphaProposalSchema from '../../../../contracts/schemas/alpha-proposal.sc
 import basicAlphaReportSchema from '../../../../contracts/schemas/basic-alpha-report.schema.json';
 import basicReportComposeRequestSchema from '../../../../contracts/schemas/basic-report-compose.request.schema.json';
 import chatTurnSchema from '../../../../contracts/schemas/chat-turn.schema.json';
+import dataAiPrivacyReplyRequestSchema from '../../../../contracts/schemas/data-ai-privacy-reply.request.schema.json';
+import dataAiPrivacyReplyResponseSchema from '../../../../contracts/schemas/data-ai-privacy-reply.response.schema.json';
+import dataAiPrivacyStartRequestSchema from '../../../../contracts/schemas/data-ai-privacy-start.request.schema.json';
+import dataAiPrivacyStartResponseSchema from '../../../../contracts/schemas/data-ai-privacy-start.response.schema.json';
+import dataAiPrivacyTurnSchema from '../../../../contracts/schemas/data-ai-privacy-turn.schema.json';
 import errorResponseSchema from '../../../../contracts/schemas/error-response.schema.json';
 import generatedSectionSchema from '../../../../contracts/schemas/generated-section.schema.json';
 import moduleChatSchema from '../../../../contracts/schemas/module-chat.schema.json';
@@ -17,6 +22,7 @@ import proposalReplyResponseSchema from '../../../../contracts/schemas/proposal-
 import proposalSourceSchema from '../../../../contracts/schemas/proposal-source.schema.json';
 import proposalStartRequestSchema from '../../../../contracts/schemas/proposal-start.request.schema.json';
 import proposalStartResponseSchema from '../../../../contracts/schemas/proposal-start.response.schema.json';
+import regulatoryProfileSchema from '../../../../contracts/schemas/regulatory-profile.schema.json';
 import requestExecutionResponseSchema from '../../../../contracts/schemas/request-execution.response.schema.json';
 import solutionDefinitionTurnSchema from '../../../../contracts/schemas/solution-definition-turn.schema.json';
 import solutionReplyRequestSchema from '../../../../contracts/schemas/solution-reply.request.schema.json';
@@ -30,6 +36,11 @@ import type {
   BasicAlphaReport,
   BasicReportComposeRequest,
   ChatTurn,
+  DataAiPrivacyReplyRequest,
+  DataAiPrivacyReplyResponse,
+  DataAiPrivacyStartRequest,
+  DataAiPrivacyStartResponse,
+  DataAiPrivacyTurn,
   ErrorResponse,
   GeneratedSection,
   ModuleChat,
@@ -40,6 +51,7 @@ import type {
   ProposalSource,
   ProposalStartRequest,
   ProposalStartResponse,
+  RegulatoryProfile,
   RequestExecutionResponse,
   SolutionDefinitionTurn,
   SolutionReplyRequest,
@@ -68,8 +80,10 @@ ajv.addSchema(generatedSectionSchema, generatedSectionSchema.$id);
 ajv.addSchema(alphaProposalSchema, alphaProposalSchema.$id);
 ajv.addSchema(basicAlphaReportSchema, basicAlphaReportSchema.$id);
 ajv.addSchema(basicReportComposeRequestSchema, basicReportComposeRequestSchema.$id);
+ajv.addSchema(regulatoryProfileSchema, regulatoryProfileSchema.$id);
 ajv.addSchema(problemDefinitionTurnSchema, problemDefinitionTurnSchema.$id);
 ajv.addSchema(solutionDefinitionTurnSchema, solutionDefinitionTurnSchema.$id);
+ajv.addSchema(dataAiPrivacyTurnSchema, dataAiPrivacyTurnSchema.$id);
 ajv.addSchema(proposalStartRequestSchema, proposalStartRequestSchema.$id);
 ajv.addSchema(proposalStartResponseSchema, proposalStartResponseSchema.$id);
 ajv.addSchema(proposalReplyRequestSchema, proposalReplyRequestSchema.$id);
@@ -78,6 +92,10 @@ ajv.addSchema(solutionStartRequestSchema, solutionStartRequestSchema.$id);
 ajv.addSchema(solutionStartResponseSchema, solutionStartResponseSchema.$id);
 ajv.addSchema(solutionReplyRequestSchema, solutionReplyRequestSchema.$id);
 ajv.addSchema(solutionReplyResponseSchema, solutionReplyResponseSchema.$id);
+ajv.addSchema(dataAiPrivacyStartRequestSchema, dataAiPrivacyStartRequestSchema.$id);
+ajv.addSchema(dataAiPrivacyStartResponseSchema, dataAiPrivacyStartResponseSchema.$id);
+ajv.addSchema(dataAiPrivacyReplyRequestSchema, dataAiPrivacyReplyRequestSchema.$id);
+ajv.addSchema(dataAiPrivacyReplyResponseSchema, dataAiPrivacyReplyResponseSchema.$id);
 ajv.addSchema(requestExecutionResponseSchema, requestExecutionResponseSchema.$id);
 ajv.addSchema(errorResponseSchema, errorResponseSchema.$id);
 
@@ -115,6 +133,11 @@ export const schemaIds = {
   basicAlphaReport: basicAlphaReportSchema.$id,
   basicReportComposeRequest: basicReportComposeRequestSchema.$id,
   chatTurn: chatTurnSchema.$id,
+  dataAiPrivacyReplyRequest: dataAiPrivacyReplyRequestSchema.$id,
+  dataAiPrivacyReplyResponse: dataAiPrivacyReplyResponseSchema.$id,
+  dataAiPrivacyStartRequest: dataAiPrivacyStartRequestSchema.$id,
+  dataAiPrivacyStartResponse: dataAiPrivacyStartResponseSchema.$id,
+  dataAiPrivacyTurn: dataAiPrivacyTurnSchema.$id,
   errorResponse: errorResponseSchema.$id,
   generatedSection: generatedSectionSchema.$id,
   moduleChat: moduleChatSchema.$id,
@@ -125,6 +148,7 @@ export const schemaIds = {
   proposalSource: proposalSourceSchema.$id,
   proposalStartRequest: proposalStartRequestSchema.$id,
   proposalStartResponse: proposalStartResponseSchema.$id,
+  regulatoryProfile: regulatoryProfileSchema.$id,
   requestExecutionResponse: requestExecutionResponseSchema.$id,
   solutionDefinitionTurn: solutionDefinitionTurnSchema.$id,
   solutionReplyRequest: solutionReplyRequestSchema.$id,
@@ -141,6 +165,11 @@ export const schemaDocuments = {
   basicAlphaReport: basicAlphaReportSchema,
   basicReportComposeRequest: basicReportComposeRequestSchema,
   chatTurn: chatTurnSchema,
+  dataAiPrivacyReplyRequest: dataAiPrivacyReplyRequestSchema,
+  dataAiPrivacyReplyResponse: dataAiPrivacyReplyResponseSchema,
+  dataAiPrivacyStartRequest: dataAiPrivacyStartRequestSchema,
+  dataAiPrivacyStartResponse: dataAiPrivacyStartResponseSchema,
+  dataAiPrivacyTurn: dataAiPrivacyTurnSchema,
   errorResponse: errorResponseSchema,
   generatedSection: generatedSectionSchema,
   moduleChat: moduleChatSchema,
@@ -151,6 +180,7 @@ export const schemaDocuments = {
   proposalSource: proposalSourceSchema,
   proposalStartRequest: proposalStartRequestSchema,
   proposalStartResponse: proposalStartResponseSchema,
+  regulatoryProfile: regulatoryProfileSchema,
   requestExecutionResponse: requestExecutionResponseSchema,
   solutionDefinitionTurn: solutionDefinitionTurnSchema,
   solutionReplyRequest: solutionReplyRequestSchema,
@@ -190,6 +220,38 @@ export function assertSolutionReplyRequest(payload: unknown): SolutionReplyReque
 
 export function assertSolutionReplyResponse(payload: unknown): SolutionReplyResponse {
   return assertSchema<SolutionReplyResponse>(schemaIds.solutionReplyResponse, payload, 'invalid_solution_reply_response');
+}
+
+export function assertDataAiPrivacyStartRequest(payload: unknown): DataAiPrivacyStartRequest {
+  return assertSchema<DataAiPrivacyStartRequest>(
+    schemaIds.dataAiPrivacyStartRequest,
+    payload,
+    'invalid_data_ai_privacy_start_request',
+  );
+}
+
+export function assertDataAiPrivacyStartResponse(payload: unknown): DataAiPrivacyStartResponse {
+  return assertSchema<DataAiPrivacyStartResponse>(
+    schemaIds.dataAiPrivacyStartResponse,
+    payload,
+    'invalid_data_ai_privacy_start_response',
+  );
+}
+
+export function assertDataAiPrivacyReplyRequest(payload: unknown): DataAiPrivacyReplyRequest {
+  return assertSchema<DataAiPrivacyReplyRequest>(
+    schemaIds.dataAiPrivacyReplyRequest,
+    payload,
+    'invalid_data_ai_privacy_reply_request',
+  );
+}
+
+export function assertDataAiPrivacyReplyResponse(payload: unknown): DataAiPrivacyReplyResponse {
+  return assertSchema<DataAiPrivacyReplyResponse>(
+    schemaIds.dataAiPrivacyReplyResponse,
+    payload,
+    'invalid_data_ai_privacy_reply_response',
+  );
 }
 
 export function assertStructuredBrief(payload: unknown): StructuredBrief {
@@ -245,6 +307,22 @@ export function assertSolutionDefinitionTurn(payload: unknown): SolutionDefiniti
     schemaIds.solutionDefinitionTurn,
     payload,
     'invalid_solution_definition_turn',
+  );
+}
+
+export function assertDataAiPrivacyTurn(payload: unknown): DataAiPrivacyTurn {
+  return assertSchema<DataAiPrivacyTurn>(
+    schemaIds.dataAiPrivacyTurn,
+    payload,
+    'invalid_data_ai_privacy_turn',
+  );
+}
+
+export function assertRegulatoryProfile(payload: unknown): RegulatoryProfile {
+  return assertSchema<RegulatoryProfile>(
+    schemaIds.regulatoryProfile,
+    payload,
+    'invalid_regulatory_profile',
   );
 }
 

@@ -7,6 +7,9 @@ import type {
   ChatTurn,
   ChatTurnStatus,
   ConversationTurn,
+  DataAiPrivacyReplyResponse,
+  DataAiPrivacyStartResponse,
+  DataAiPrivacyState,
   DocumentStatus,
   ErrorResponse,
   GeneratedSection,
@@ -39,6 +42,8 @@ type JsonRecord = Record<string, unknown>;
 const WRAPPER_KEYS = ['body', 'data', 'payload', 'result', 'response', 'output', 'json'] as const;
 
 const AGENT_STATUSES: AgentStatus[] = ['continue', 'done', 'blocked'];
+const ALPHA_MODULES = ['problem', 'solution', 'data_ai_privacy'] as const;
+const SECTION_KINDS = ['problem', 'solution', 'data_ai_privacy'] as const;
 const PROPOSAL_SOURCE_KINDS: ProposalSourceKind[] = [
   'pasted_text',
   'uploaded_file',
@@ -387,6 +392,47 @@ function parseSolutionDefinitionState(
   };
 }
 
+function hasDataAiPrivacyShape(record: JsonRecord): boolean {
+  return [
+    'personal_or_health_data',
+    'data_sources',
+    'ai_system_role',
+    'validation_evidence',
+    'privacy_governance',
+    'cybersecurity_controls',
+    'regulatory_context',
+    'human_review_plan',
+    'assumptions',
+    'uncertainties',
+    'requires_competent_human_review',
+  ].every((key) => Object.prototype.hasOwnProperty.call(record, key));
+}
+
+function parseDataAiPrivacyState(value: unknown, label: string): DataAiPrivacyState {
+  const record = expectRecord(value, label);
+
+  if (!hasDataAiPrivacyShape(record)) {
+    throw new Error(`Expected ${label} to match data AI privacy state`);
+  }
+
+  return {
+    personal_or_health_data: expectString(record.personal_or_health_data, `${label}.personal_or_health_data`),
+    data_sources: expectString(record.data_sources, `${label}.data_sources`),
+    ai_system_role: expectString(record.ai_system_role, `${label}.ai_system_role`),
+    validation_evidence: expectString(record.validation_evidence, `${label}.validation_evidence`),
+    privacy_governance: expectString(record.privacy_governance, `${label}.privacy_governance`),
+    cybersecurity_controls: expectString(record.cybersecurity_controls, `${label}.cybersecurity_controls`),
+    regulatory_context: expectString(record.regulatory_context, `${label}.regulatory_context`),
+    human_review_plan: expectString(record.human_review_plan, `${label}.human_review_plan`),
+    assumptions: expectStringArray(record.assumptions, `${label}.assumptions`),
+    uncertainties: expectStringArray(record.uncertainties, `${label}.uncertainties`),
+    requires_competent_human_review: expectBoolean(
+      record.requires_competent_human_review,
+      `${label}.requires_competent_human_review`,
+    ),
+  };
+}
+
 function parseSessionRecord(value: unknown): SessionRecord {
   const record = expectRecord(value, 'session');
 
@@ -520,7 +566,7 @@ function parseAlphaGap(value: unknown, label: string): AlphaGap {
   return {
     gap_id: expectString(record.gap_id, `${label}.gap_id`),
     proposal_id: expectString(record.proposal_id, `${label}.proposal_id`),
-    module: expectEnum(record.module, `${label}.module`, ['problem', 'solution']),
+    module: expectEnum(record.module, `${label}.module`, ALPHA_MODULES),
     gap_kind: expectEnum(record.gap_kind, `${label}.gap_kind`, GAP_KINDS),
     gap_status: expectEnum(record.gap_status, `${label}.gap_status`, GAP_STATUSES),
     origin: expectEnum(record.origin, `${label}.origin`, GAP_ORIGINS),
@@ -558,7 +604,7 @@ function parseChatTurn(value: unknown, label: string): ChatTurn {
     turn_id: expectString(record.turn_id, `${label}.turn_id`),
     chat_id: expectString(record.chat_id, `${label}.chat_id`),
     proposal_id: expectString(record.proposal_id, `${label}.proposal_id`),
-    module: expectEnum(record.module, `${label}.module`, ['problem', 'solution']),
+    module: expectEnum(record.module, `${label}.module`, ALPHA_MODULES),
     turn_seq: expectNumber(record.turn_seq, `${label}.turn_seq`),
     question_text: expectString(record.question_text, `${label}.question_text`),
     answer_text:
@@ -593,7 +639,7 @@ function parseModuleChat(value: unknown, label: string): ModuleChat {
   return {
     chat_id: expectString(record.chat_id, `${label}.chat_id`),
     proposal_id: expectString(record.proposal_id, `${label}.proposal_id`),
-    module: expectEnum(record.module, `${label}.module`, ['problem', 'solution']),
+    module: expectEnum(record.module, `${label}.module`, ALPHA_MODULES),
     chat_status: expectEnum(record.chat_status, `${label}.chat_status`, CHAT_STATUSES),
     turns: expectOptionalArray(record.turns, [], `${label}.turns`).map((item, index) =>
       parseChatTurn(item, `${label}.turns[${index}]`),
@@ -617,7 +663,7 @@ function parseGeneratedSection(value: unknown, label: string): GeneratedSection 
   return {
     section_id: expectString(record.section_id, `${label}.section_id`),
     proposal_id: expectString(record.proposal_id, `${label}.proposal_id`),
-    section_kind: expectEnum(record.section_kind, `${label}.section_kind`, ['problem', 'solution']),
+    section_kind: expectEnum(record.section_kind, `${label}.section_kind`, SECTION_KINDS),
     section_status: expectEnum(record.section_status, `${label}.section_status`, [
       'draft',
       'generated',
@@ -691,6 +737,7 @@ function parseAgentRun(value: unknown, label: string): AgentRun {
       'brief_extraction',
       'problem_definition',
       'solution_definition',
+      'data_ai_privacy_gap',
       'json_repair',
     ]),
     agent_name: expectString(record.agent_name, `${label}.agent_name`),
@@ -890,6 +937,66 @@ export function parseSolutionReplyResponse(value: unknown): SolutionReplyRespons
   };
 }
 
+export function parseDataAiPrivacyStartResponse(value: unknown): DataAiPrivacyStartResponse {
+  const record = expectRecord(
+    unwrapContractValue(value),
+    'data AI privacy start response',
+  );
+
+  return {
+    session_id: expectString(record.session_id, 'data AI privacy start response.session_id'),
+    stage: expectEnum(record.stage, 'data AI privacy start response.stage', ['data_ai_privacy']),
+    profile_id: expectEnum(record.profile_id, 'data AI privacy start response.profile_id', ['hospital_clinic_v1']),
+    agent_status: expectEnum(
+      record.agent_status,
+      'data AI privacy start response.agent_status',
+      AGENT_STATUSES,
+    ),
+    updated_data_ai_privacy: parseDataAiPrivacyState(
+      record.updated_data_ai_privacy,
+      'data AI privacy start response.updated_data_ai_privacy',
+    ),
+    diagnosis: expectStringArray(record.diagnosis, 'data AI privacy start response.diagnosis'),
+    next_question: expectString(record.next_question, 'data AI privacy start response.next_question'),
+    completion_reason: expectOptionalString(
+      record.completion_reason,
+      '',
+      'data AI privacy start response.completion_reason',
+    ),
+    warnings: expectOptionalStringArray(record.warnings, [], 'data AI privacy start response.warnings'),
+  };
+}
+
+export function parseDataAiPrivacyReplyResponse(value: unknown): DataAiPrivacyReplyResponse {
+  const record = expectRecord(
+    unwrapContractValue(value),
+    'data AI privacy reply response',
+  );
+
+  return {
+    session_id: expectString(record.session_id, 'data AI privacy reply response.session_id'),
+    stage: expectEnum(record.stage, 'data AI privacy reply response.stage', ['data_ai_privacy']),
+    profile_id: expectEnum(record.profile_id, 'data AI privacy reply response.profile_id', ['hospital_clinic_v1']),
+    agent_status: expectEnum(
+      record.agent_status,
+      'data AI privacy reply response.agent_status',
+      AGENT_STATUSES,
+    ),
+    updated_data_ai_privacy: parseDataAiPrivacyState(
+      record.updated_data_ai_privacy,
+      'data AI privacy reply response.updated_data_ai_privacy',
+    ),
+    diagnosis: expectStringArray(record.diagnosis, 'data AI privacy reply response.diagnosis'),
+    next_question: expectString(record.next_question, 'data AI privacy reply response.next_question'),
+    completion_reason: expectOptionalString(
+      record.completion_reason,
+      '',
+      'data AI privacy reply response.completion_reason',
+    ),
+    warnings: expectOptionalStringArray(record.warnings, [], 'data AI privacy reply response.warnings'),
+  };
+}
+
 export function parseErrorResponse(value: unknown): ErrorResponse {
   const record = expectRecord(unwrapContractValue(value), 'error response');
 
@@ -916,7 +1023,15 @@ export function parseRequestExecutionResponse(value: unknown): RequestExecutionR
     request_kind: expectEnum(
       record.request_kind,
       'request execution response.request_kind',
-      ['proposal_start', 'proposal_reply', 'solution_start', 'solution_reply', 'unknown'],
+      [
+        'proposal_start',
+        'proposal_reply',
+        'solution_start',
+        'solution_reply',
+        'data_ai_privacy_start',
+        'data_ai_privacy_reply',
+        'unknown',
+      ],
     ),
     status: expectEnum(
       record.status,

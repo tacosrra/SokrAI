@@ -1,0 +1,26 @@
+{
+  "agent_status": "continue",
+  "diagnosis": [
+    "Data sources are not clear enough for the pilot.",
+    "Human review ownership needs confirmation."
+  ],
+  "updated_data_ai_privacy": {
+    "personal_or_health_data": "The proposal may use administrative intake data and patient-provided symptoms.",
+    "data_sources": "",
+    "ai_system_role": "The AI prepares a structured handoff draft for staff review.",
+    "validation_evidence": "",
+    "privacy_governance": "",
+    "cybersecurity_controls": "",
+    "regulatory_context": "MDR and AI Act relevance remains uncertain and needs competent human review.",
+    "human_review_plan": "",
+    "assumptions": [
+      "No automated clinical decision is made without staff review."
+    ],
+    "uncertainties": [
+      "Exact health data categories are not confirmed."
+    ],
+    "requires_competent_human_review": true
+  },
+  "next_question": "De que fuentes vendrian los datos y que datos quedarian fuera del alcance inicial?",
+  "completion_reason": ""
+}
