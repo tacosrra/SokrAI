@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sokrai.local/contracts/schemas/regulatory-profile.schema.json",
+  "title": "RegulatoryProfile",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "profile_id": {
+      "type": "string",
+      "enum": [
+        "hospital_clinic_v1"
+      ]
+    },
+    "profile_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "display_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "families": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "family_id": {
+            "type": "string",
+            "enum": [
+              "gdpr",
+              "cybersecurity_act",
+              "ehds",
+              "mdr",
+              "eu_ai_act",
+              "htar"
+            ]
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "scope_note": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "family_id",
+          "label",
+          "scope_note"
+        ]
+      }
+    },
+    "allowed_outputs": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "type": "string",
+        "enum": [
+          "gaps",
+          "questions",
+          "uncertainty",
+          "requires competent human review"
+        ]
+      }
+    },
+    "forbidden_outputs": {
+      "type": "array",
+      "minItems": 6,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "review_statement": {
+      "type": "string",
+      "const": "requires competent human review"
+    }
+  },
+  "required": [
+    "profile_id",
+    "profile_version",
+    "display_name",
+    "families",
+    "allowed_outputs",
+    "forbidden_outputs",
+    "review_statement"
+  ]
+}

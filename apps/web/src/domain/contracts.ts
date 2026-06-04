@@ -1,4 +1,4 @@
-export type Stage = 'problem_definition' | 'solution_definition';
+export type Stage = 'problem_definition' | 'solution_definition' | 'data_ai_privacy';
 
 export type AgentStatus = 'continue' | 'done' | 'blocked';
 
@@ -9,7 +9,7 @@ export type SessionStatus =
   | 'blocked'
   | 'failed';
 
-export type AlphaModule = 'problem' | 'solution';
+export type AlphaModule = 'problem' | 'solution' | 'data_ai_privacy';
 
 export type ProposalStatus = 'draft' | 'active' | 'completed' | 'blocked' | 'failed' | 'archived';
 
@@ -50,7 +50,7 @@ export type ChatStatus =
 
 export type ChatTurnStatus = 'awaiting_user' | 'processing' | 'resolved' | 'failed' | 'skipped';
 
-export type SectionKind = 'problem' | 'solution';
+export type SectionKind = 'problem' | 'solution' | 'data_ai_privacy';
 
 export type SectionStatus = 'draft' | 'generated' | 'accepted' | 'needs_revision' | 'superseded';
 
@@ -240,6 +240,22 @@ export interface SolutionDefinitionState {
   ambiguities_remaining: string[];
 }
 
+export type RegulatoryProfileId = 'hospital_clinic_v1';
+
+export interface DataAiPrivacyState {
+  personal_or_health_data: string;
+  data_sources: string;
+  ai_system_role: string;
+  validation_evidence: string;
+  privacy_governance: string;
+  cybersecurity_controls: string;
+  regulatory_context: string;
+  human_review_plan: string;
+  assumptions: string[];
+  uncertainties: string[];
+  requires_competent_human_review: boolean;
+}
+
 export interface ProposalStartFile {
   file_name: string;
   mime_type: 'application/pdf';
@@ -317,6 +333,42 @@ export interface SolutionReplyResponse {
   warnings: string[];
 }
 
+export interface DataAiPrivacyStartRequest {
+  request_id?: string;
+  session_id: string;
+  profile_id?: RegulatoryProfileId;
+}
+
+export interface DataAiPrivacyStartResponse {
+  session_id: string;
+  stage: 'data_ai_privacy';
+  profile_id: RegulatoryProfileId;
+  agent_status: AgentStatus;
+  updated_data_ai_privacy: DataAiPrivacyState;
+  diagnosis: string[];
+  next_question: string;
+  completion_reason: string;
+  warnings: string[];
+}
+
+export interface DataAiPrivacyReplyRequest {
+  request_id?: string;
+  session_id: string;
+  answer: string;
+}
+
+export interface DataAiPrivacyReplyResponse {
+  session_id: string;
+  stage: 'data_ai_privacy';
+  profile_id: RegulatoryProfileId;
+  agent_status: AgentStatus;
+  updated_data_ai_privacy: DataAiPrivacyState;
+  diagnosis: string[];
+  next_question: string;
+  completion_reason: string;
+  warnings: string[];
+}
+
 export interface ErrorResponse {
   error_code: string;
   safe_message: string;
@@ -327,7 +379,14 @@ export interface ErrorResponse {
 
 export interface RequestExecutionResponse {
   request_id: string;
-  request_kind: 'proposal_start' | 'proposal_reply' | 'solution_start' | 'solution_reply' | 'unknown';
+  request_kind:
+    | 'proposal_start'
+    | 'proposal_reply'
+    | 'solution_start'
+    | 'solution_reply'
+    | 'data_ai_privacy_start'
+    | 'data_ai_privacy_reply'
+    | 'unknown';
   status: 'pending' | 'completed' | 'failed' | 'not_found';
   session_id?: string;
   error_code?: string;
@@ -369,7 +428,12 @@ export interface AgentRun {
   session_id: string;
   turn_seq: number | null;
   request_id: string | null;
-  run_purpose: 'brief_extraction' | 'problem_definition' | 'solution_definition' | 'json_repair';
+  run_purpose:
+    | 'brief_extraction'
+    | 'problem_definition'
+    | 'solution_definition'
+    | 'data_ai_privacy_gap'
+    | 'json_repair';
   agent_name: string;
   prompt_name: string;
   prompt_version: string;

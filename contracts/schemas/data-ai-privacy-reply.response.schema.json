@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sokrai.local/contracts/schemas/data-ai-privacy-reply.response.schema.json",
+  "title": "DataAiPrivacyReplyResponse",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "data_ai_privacy"
+      ]
+    },
+    "profile_id": {
+      "type": "string",
+      "enum": [
+        "hospital_clinic_v1"
+      ]
+    },
+    "agent_status": {
+      "type": "string",
+      "enum": [
+        "continue",
+        "done",
+        "blocked"
+      ]
+    },
+    "updated_data_ai_privacy": {
+      "$ref": "https://sokrai.local/contracts/schemas/data-ai-privacy-turn.schema.json#/properties/updated_data_ai_privacy"
+    },
+    "diagnosis": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "string"
+      }
+    },
+    "next_question": {
+      "type": "string"
+    },
+    "completion_reason": {
+      "type": "string"
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "session_id",
+    "stage",
+    "profile_id",
+    "agent_status",
+    "updated_data_ai_privacy",
+    "diagnosis",
+    "next_question",
+    "completion_reason",
+    "warnings"
+  ]
+}

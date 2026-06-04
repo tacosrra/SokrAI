@@ -68,7 +68,12 @@ export interface AgentRunRecord {
   session_id: string;
   turn_seq: number | null;
   request_id: string | null;
-  run_purpose: 'brief_extraction' | 'problem_definition' | 'solution_definition' | 'json_repair';
+  run_purpose:
+    | 'brief_extraction'
+    | 'problem_definition'
+    | 'solution_definition'
+    | 'data_ai_privacy_gap'
+    | 'json_repair';
   agent_name: string;
   prompt_name: string;
   prompt_version: string;
@@ -136,7 +141,14 @@ export interface ProposalSourceRecord {
 
 export interface RequestExecutionLookup {
   request_id: string;
-  request_kind: 'proposal_start' | 'proposal_reply' | 'solution_start' | 'solution_reply' | 'unknown';
+  request_kind:
+    | 'proposal_start'
+    | 'proposal_reply'
+    | 'solution_start'
+    | 'solution_reply'
+    | 'data_ai_privacy_start'
+    | 'data_ai_privacy_reply'
+    | 'unknown';
   status: 'pending' | 'completed' | 'failed' | 'not_found';
   session_id?: string;
   error_code?: string;
@@ -927,6 +939,50 @@ export class SessionStore {
       };
     }
 
+    const dataAiPrivacyReplyTurn = await this.findAlphaTurnByAnswerRequestId(requestId, 'data_ai_privacy');
+
+    if (dataAiPrivacyReplyTurn) {
+      const dataAiPrivacyRun = await this.findLatestAgentRunStatus(requestId, 'data_ai_privacy_gap');
+
+      if (dataAiPrivacyRun) {
+        return toRequestExecutionFromRun(requestId, 'data_ai_privacy_reply', dataAiPrivacyRun);
+      }
+
+      if (dataAiPrivacyReplyTurn.turn_status === 'resolved') {
+        return {
+          request_id: requestId,
+          request_kind: 'data_ai_privacy_reply',
+          status: 'completed',
+          session_id: dataAiPrivacyReplyTurn.proposal_id,
+        };
+      }
+
+      if (dataAiPrivacyReplyTurn.turn_status === 'failed') {
+        return {
+          request_id: requestId,
+          request_kind: 'data_ai_privacy_reply',
+          status: 'failed',
+          session_id: dataAiPrivacyReplyTurn.proposal_id,
+          error_code: 'data_ai_privacy_reply_processing_failed',
+          safe_message: 'The data AI privacy reply was persisted but the turn failed before completing',
+          retryable: true,
+        };
+      }
+
+      return {
+        request_id: requestId,
+        request_kind: 'data_ai_privacy_reply',
+        status: 'pending',
+        session_id: dataAiPrivacyReplyTurn.proposal_id,
+      };
+    }
+
+    const dataAiPrivacyRun = await this.findLatestAgentRunStatus(requestId, 'data_ai_privacy_gap');
+
+    if (dataAiPrivacyRun) {
+      return toRequestExecutionFromRun(requestId, 'data_ai_privacy_start', dataAiPrivacyRun);
+    }
+
     const solutionDefinitionRun = await this.findLatestAgentRunStatus(requestId, 'solution_definition');
 
     if (solutionDefinitionRun) {
@@ -960,7 +1016,7 @@ export class SessionStore {
 
   private async findAlphaTurnByAnswerRequestId(
     requestId: string,
-    module: 'problem' | 'solution',
+    module: 'problem' | 'solution' | 'data_ai_privacy',
   ): Promise<AlphaChatTurnStatusLookup | null> {
     const result = await this.database.query<AlphaChatTurnStatusLookup>(
       [

@@ -1,0 +1,26 @@
+{
+  "agent_status": "done",
+  "diagnosis": [
+    "Sensitive gaps are sufficiently clarified for review."
+  ],
+  "updated_data_ai_privacy": {
+    "personal_or_health_data": "The pilot uses administrative intake data and patient-provided symptom descriptions.",
+    "data_sources": "Data comes from patient intake forms and staff-entered triage notes; imaging and lab data are out of scope.",
+    "ai_system_role": "The AI drafts a structured intake summary that staff review before any workflow action.",
+    "validation_evidence": "The team has sample intake cases and will compare draft summaries against staff-written summaries.",
+    "privacy_governance": "The hospital data protection and clinical governance teams review data use before pilot activation.",
+    "cybersecurity_controls": "Access is limited to pilot staff, with traceable user sessions and no external data sharing.",
+    "regulatory_context": "GDPR, EHDS, EU AI Act, MDR, Cybersecurity Act and HTAR relevance remains contextual and review-bound.",
+    "human_review_plan": "Data protection, clinical governance, cybersecurity and regulatory owners review the pilot before use.",
+    "assumptions": [
+      "The pilot stays on internal systems.",
+      "Staff review every AI-generated handoff before action."
+    ],
+    "uncertainties": [
+      "Exact governance sign-off path remains to be confirmed."
+    ],
+    "requires_competent_human_review": true
+  },
+  "next_question": "",
+  "completion_reason": "data AI privacy gaps sufficiently clarified for human review"
+}

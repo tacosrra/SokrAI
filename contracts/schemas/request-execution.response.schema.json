@@ -16,6 +16,8 @@
         "proposal_reply",
         "solution_start",
         "solution_reply",
+        "data_ai_privacy_start",
+        "data_ai_privacy_reply",
         "unknown"
       ]
     },

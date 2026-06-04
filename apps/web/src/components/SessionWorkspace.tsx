@@ -11,7 +11,9 @@ interface SessionWorkspaceProps {
   isReplying: boolean;
   onReply: (answer: string) => Promise<void>;
   onSolutionReply: (answer: string) => Promise<void>;
+  onDataAiPrivacyReply: (answer: string) => Promise<void>;
   onStartSolution: () => Promise<void>;
+  onStartDataAiPrivacy: () => Promise<void>;
   presentation: SessionPresentation;
 }
 
@@ -21,7 +23,9 @@ export function SessionWorkspace({
   isReplying,
   onReply,
   onSolutionReply,
+  onDataAiPrivacyReply,
   onStartSolution,
+  onStartDataAiPrivacy,
   presentation,
 }: SessionWorkspaceProps) {
   const [reply, setReply] = useState('');
@@ -52,6 +56,11 @@ export function SessionWorkspace({
       return;
     }
 
+    if (presentation.currentDataAiPrivacyQuestion) {
+      await onDataAiPrivacyReply(reply.trim());
+      return;
+    }
+
     if (presentation.currentSolutionQuestion) {
       await onSolutionReply(reply.trim());
       return;
@@ -67,12 +76,22 @@ export function SessionWorkspace({
     turn.turn_id === presentation.solutionModuleChat?.active_turn_id &&
     turn.turn_status === 'awaiting_user',
   ) ?? false;
-  const canReply = canSolutionReply || canProblemReply;
+  const canDataAiPrivacyReply = presentation.dataAiPrivacyModuleChat?.turns.some((turn) =>
+    turn.turn_id === presentation.dataAiPrivacyModuleChat?.active_turn_id &&
+    turn.turn_status === 'awaiting_user',
+  ) ?? false;
+  const canReply = canDataAiPrivacyReply || canSolutionReply || canProblemReply;
   const canStartSolution = Boolean(
     presentation.latestProblemSection &&
       !canSolutionReply &&
       presentation.solutionModuleChat?.chat_status !== 'completed' &&
       presentation.solutionModuleChat?.chat_status !== 'waiting_for_user',
+  );
+  const canStartDataAiPrivacy = Boolean(
+    presentation.latestSolutionSection &&
+      !canDataAiPrivacyReply &&
+      presentation.dataAiPrivacyModuleChat?.chat_status !== 'completed' &&
+      presentation.dataAiPrivacyModuleChat?.chat_status !== 'waiting_for_user',
   );
   const resolvedTurns = audit.turns.filter((turn) => Boolean(turn.answer_text?.trim())).length;
 
@@ -136,7 +155,11 @@ export function SessionWorkspace({
 
       <section className="question-callout">
         <span className="question-callout__label">
-          {presentation.currentSolutionQuestion ? 'Pregunta abierta de solución' : 'Pregunta abierta'}
+          {presentation.currentDataAiPrivacyQuestion
+            ? 'Pregunta abierta de datos/IA/privacidad'
+            : presentation.currentSolutionQuestion
+              ? 'Pregunta abierta de solución'
+              : 'Pregunta abierta'}
         </span>
         <p>{presentation.currentQuestion || 'La sesión no tiene una pregunta abierta en este momento.'}</p>
       </section>
@@ -162,6 +185,37 @@ export function SessionWorkspace({
               {isReplying ? 'Procesando…' : 'Iniciar solución'}
             </button>
           ) : null}
+        </section>
+      ) : null}
+
+      {presentation.latestSolutionSection ? (
+        <section className="question-callout">
+          <span className="question-callout__label">Carril datos/IA/privacidad</span>
+          <p>
+            {presentation.latestDataAiPrivacySection
+              ? `Se generó ${presentation.latestDataAiPrivacySection.title} v${presentation.latestDataAiPrivacySection.section_version}.`
+              : presentation.dataAiPrivacyModuleChat
+                ? `Estado: ${presentation.dataAiPrivacyModuleChat.chat_status.replaceAll('_', ' ')}.`
+                : 'La solución ya tiene sección generada y el módulo de gaps sensibles puede iniciarse.'}
+          </p>
+
+          {canStartDataAiPrivacy ? (
+            <button
+              className="button button--secondary"
+              type="button"
+              onClick={() => void onStartDataAiPrivacy()}
+              disabled={isReplying}
+            >
+              {isReplying ? 'Procesando…' : 'Iniciar datos/IA/privacidad'}
+            </button>
+          ) : null}
+        </section>
+      ) : null}
+
+      {presentation.latestDataAiPrivacySection ? (
+        <section className="question-callout question-callout--muted">
+          <span className="question-callout__label">{presentation.latestDataAiPrivacySection.title}</span>
+          <p>{presentation.latestDataAiPrivacySection.content_markdown}</p>
         </section>
       ) : null}
 
@@ -261,7 +315,9 @@ export function SessionWorkspace({
               value={reply}
               onChange={(event) => setReply(event.target.value)}
               placeholder={
-                presentation.currentSolutionQuestion
+                presentation.currentDataAiPrivacyQuestion
+                  ? 'Describe datos tratados, fuentes, rol de IA, controles, validacion y revision humana competente.'
+                  : presentation.currentSolutionQuestion
                   ? 'Describe que hace la solucion, quien la usa, como funciona y que limites tiene.'
                   : 'Describe quién vive el problema, la evidencia concreta, el alcance y las alternativas actuales.'
               }
@@ -272,7 +328,9 @@ export function SessionWorkspace({
 
             <div className="composer-card__actions">
               <p>
-                {presentation.currentSolutionQuestion
+                {presentation.currentDataAiPrivacyQuestion
+                  ? 'Responde con gaps, incertidumbre y revision humana competente; no emitas decisiones definitivas.'
+                  : presentation.currentSolutionQuestion
                   ? 'Responde con informacion operativa sobre la solucion, sin entrar en costes o regulacion.'
                   : 'Responde en un tono operativo: concreto, verificable y centrado en el problema.'}
               </p>
