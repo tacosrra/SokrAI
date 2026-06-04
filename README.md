@@ -157,6 +157,18 @@ medical-device. La seccion generada se guarda en `generated_sections` con
 `section_kind = "data_ai_privacy"` y se muestra en el workspace; el Basic Alpha
 Report sigue siendo Alpha-only.
 
+## Modulo medical-device triage
+
+PR10 anade el modulo condicional `medical_device_triage_agent` despues de
+datos/IA/privacidad. Solo puede iniciarse cuando ya existen las secciones
+`problem`, `solution` y `data_ai_privacy`; registra `applicable`, `uncertain` o
+`not_applicable` como estado de triage no definitivo y limita su salida a gaps,
+preguntas, incertidumbre y `requires competent human review`.
+
+Este modulo no emite clasificacion MDR, decision de producto sanitario,
+dictamen legal/regulatorio/clinico, cumplimiento definitivo, aprobacion,
+rechazo ni scoring.
+
 ## Arranque local
 
 ### Ruta rapida para beta testers

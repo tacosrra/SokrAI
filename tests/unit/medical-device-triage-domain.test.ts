@@ -6,10 +6,12 @@ import {
   buildMedicalDeviceFallbackQuestion,
   buildMedicalDeviceSectionSourceRefs,
   classifyMedicalDeviceGapStatuses,
+  computeMedicalDeviceMissingInformation,
   containsForbiddenMedicalDeviceOutput,
   emptyMedicalDeviceTriageState,
   enforceMedicalDeviceTriageTurnGuardrails,
   evaluateMedicalDeviceActivation,
+  evaluateMedicalDeviceCompletion,
   renderMedicalDeviceTriageSection,
   selectMedicalDeviceGapRefs,
 } from '../../apps/api/src/domain/medical-device-triage.ts';
@@ -130,6 +132,64 @@ describe('medical-device triage domain rules', () => {
       /is a medical device|MDR class|class IIb|clasificado como producto sanitario|clase IIb|compliant|approved|no es producto sanitario/i,
     );
     expect(serialized).toContain(MEDICAL_DEVICE_TRIAGE_REVIEW_WARNING);
+  });
+
+  it('flags common Spanish and English definitive product-status variants', () => {
+    const forbiddenVariants = [
+      'Es un producto sanitario.',
+      'Seria un producto sanitario.',
+      'Sería un producto sanitario.',
+      'Podria ser un producto sanitario.',
+      'This is likely a medical device.',
+      'It would be a medical device.',
+    ];
+    const allowedReviewBoundPhrases = [
+      'podria requerir revision competente',
+      'requires competent human review',
+      'signals should be reviewed',
+    ];
+
+    expect(forbiddenVariants.every((phrase) => containsForbiddenMedicalDeviceOutput(phrase))).toBe(true);
+    expect(allowedReviewBoundPhrases.some((phrase) => containsForbiddenMedicalDeviceOutput(phrase))).toBe(false);
+  });
+
+  it('keeps uncertain triage incomplete until uncertainty information is recorded', () => {
+    const missingUncertaintyState = {
+      ...completeState,
+      triage_status: 'uncertain' as const,
+      uncertainties: [],
+    };
+    const completeUncertainState = {
+      ...completeState,
+      triage_status: 'uncertain' as const,
+      uncertainties: ['The intended-use boundary remains uncertain and needs competent review.'],
+    };
+
+    expect(computeMedicalDeviceMissingInformation(missingUncertaintyState)).toContain('uncertainties');
+    expect(evaluateMedicalDeviceCompletion(missingUncertaintyState)).toBe(false);
+    expect(computeMedicalDeviceMissingInformation(completeUncertainState)).toEqual([]);
+    expect(evaluateMedicalDeviceCompletion(completeUncertainState)).toBe(true);
+  });
+
+  it('does not trust model done status when missing-info policy is incomplete', () => {
+    const turn: MedicalDeviceTriageTurn = {
+      agent_status: 'done',
+      diagnosis: ['Human review remains required.'],
+      updated_medical_device_triage: {
+        ...completeState,
+        triage_status: 'uncertain',
+        uncertainties: [],
+      },
+      next_question: '',
+      completion_reason: 'done',
+    };
+
+    const guarded = enforceMedicalDeviceTriageTurnGuardrails(turn);
+
+    expect(guarded.turn.agent_status).toBe('continue');
+    expect(guarded.turn.next_question).toMatch(/\?$/);
+    expect(guarded.detectedGaps).toContain('uncertainties');
+    expect(guarded.warnings).toContain('Model marked medical-device triage as done before completion criteria were met');
   });
 
   it('forces vague answers back to continue', () => {

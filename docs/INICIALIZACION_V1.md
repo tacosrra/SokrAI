@@ -840,7 +840,62 @@ Repite hasta `agent_status = "done"`. Al completar, `GET
 - ningun dictamen, aprobacion/rechazo, cumplimiento definitivo ni
   clasificacion definitiva de producto sanitario en la seccion generada
 
-### 13.8 Componer y leer el reporte basico Alpha
+### 13.8 Iniciar el triage medical-device PR10
+
+Cuando exista la seccion `data_ai_privacy`, inicia el modulo condicional
+medical-device triage con el mismo perfil fijo `hospital_clinic_v1`:
+
+```bash
+curl -sS \
+  -X POST \
+  http://localhost:5678/webhook/medical-device-triage-start-v1 \
+  -H 'Content-Type: application/json' \
+  --data '{"session_id":"replace-with-session-id","profile_id":"hospital_clinic_v1"}'
+```
+
+Respuesta esperada:
+
+```json
+{
+  "session_id": "uuid",
+  "stage": "medical_device_triage",
+  "profile_id": "hospital_clinic_v1",
+  "activation_result": "applicable|uncertain|not_applicable",
+  "agent_status": "continue|done|blocked",
+  "updated_medical_device_triage": {
+    "...": "..."
+  },
+  "diagnosis": [
+    "..."
+  ],
+  "next_question": "¿...?",
+  "completion_reason": "",
+  "warnings": [
+    "requires competent human review"
+  ]
+}
+```
+
+Si `agent_status = "continue"`, responde con informacion ficticia y acotada:
+
+```bash
+curl -sS \
+  -X POST \
+  http://localhost:5678/webhook/medical-device-triage-reply-v1 \
+  -H 'Content-Type: application/json' \
+  --data '{"session_id":"replace-with-session-id","answer":"La herramienta solo prepararia senales para revision humana competente; falta aclarar uso previsto, papel en decisiones clinicas y evidencia antes de cualquier piloto."}'
+```
+
+Repite hasta `agent_status = "done"` o `blocked`. Al completar, `GET
+/api/v1/sessions/:sessionId` debe incluir:
+
+- una fila en `generated_sections` con `section_kind = "medical_device_triage"`
+- `activation_result` registrado como `applicable`, `uncertain` o `not_applicable`
+- warnings con `requires competent human review` cuando aplique revision humana
+- ningun dictamen, decision de producto sanitario, clasificacion MDR,
+  aprobacion/rechazo, cumplimiento definitivo ni scoring
+
+### 13.9 Componer y leer el reporte basico Alpha
 
 Cuando existan las secciones `problem` y `solution`, compón el reporte con la
 API interna:

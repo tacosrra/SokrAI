@@ -304,9 +304,34 @@ describe('medical-device triage flow integration', () => {
       'SELECT status, error_code FROM agent_runs WHERE request_id = $1 AND run_purpose = $2',
       ['req-med-prereq-start', 'medical_device_triage'],
     );
+    const sideEffects = await database!.query<{
+      request_runs: string;
+      medical_chats: string;
+      medical_turns: string;
+      medical_gaps: string;
+      medical_sections: string;
+    }>(
+      [
+        'SELECT',
+        '  (SELECT COUNT(*) FROM agent_runs WHERE request_id = $2 AND run_purpose = \'medical_device_triage\') AS request_runs,',
+        '  (SELECT COUNT(*) FROM module_chats mc JOIN proposals p ON p.id = mc.proposal_id',
+        '   WHERE p.session_id = $1 AND mc.module = \'medical_device_triage\') AS medical_chats,',
+        '  (SELECT COUNT(*) FROM chat_turns ct JOIN proposals p ON p.id = ct.proposal_id',
+        '   WHERE p.session_id = $1 AND ct.module = \'medical_device_triage\') AS medical_turns,',
+        '  (SELECT COUNT(*) FROM alpha_gaps ag JOIN proposals p ON p.id = ag.proposal_id',
+        '   WHERE p.session_id = $1 AND ag.module = \'medical_device_triage\') AS medical_gaps,',
+        '  (SELECT COUNT(*) FROM generated_sections gs JOIN proposals p ON p.id = gs.proposal_id',
+        '   WHERE p.session_id = $1 AND gs.section_kind = \'medical_device_triage\') AS medical_sections',
+      ].join(' '),
+      [start.body.session_id, 'req-med-prereq-start'],
+    );
 
     expect(medicalStart.statusCode).toBe(409);
     expect(medicalStart.body.error_code).toBe('data_ai_privacy_section_required_for_medical_device_triage');
+    expect(medicalStart.body.safe_message).toBe(
+      'Generated problem, solution, and data AI privacy sections are required before medical-device triage',
+    );
+    expect(failedRun.rowCount).toBe(1);
     expect(failedRun.rows[0]).toMatchObject({
       status: 'controlled_error',
       error_code: 'data_ai_privacy_section_required_for_medical_device_triage',
@@ -320,6 +345,13 @@ describe('medical-device triage flow integration', () => {
     });
     expect(recoverStatus.statusCode).toBe(200);
     expect(recoverStatus.json().status).toBe('failed');
+    expect(sideEffects.rows[0]).toMatchObject({
+      request_runs: '1',
+      medical_chats: '0',
+      medical_turns: '0',
+      medical_gaps: '0',
+      medical_sections: '0',
+    });
   });
 });
 

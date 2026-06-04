@@ -752,6 +752,27 @@ Expected persisted artifacts from `GET /api/v1/sessions/:sessionId`:
 - `generated_sections` contains `section_kind = "data_ai_privacy"` after completion.
 - `audit_events` include data/AI/privacy lifecycle events, and guardrail intervention events when code normalizes unsafe model output.
 
+### Step 10: Run PR10 Medical-Device Triage in the Browser
+
+After the data/AI/privacy section exists, the workspace can start the PR10
+`medical_device_triage` flow. This is conditional and non-definitive: it records
+`applicable`, `uncertain`, or `not_applicable`, then limits any follow-up to
+gaps, questions, uncertainty, and competent human review.
+
+Expected UI behavior:
+
+- The medical-device triage action appears only after the PR9 section exists.
+- Applicable or uncertain cases ask one bounded question at a time.
+- No-signal cases are recorded as `not_applicable` for the current persisted material.
+- The generated section never states MDR class, product status, approval, rejection, scoring, or compliance.
+
+Expected persisted artifacts from `GET /api/v1/sessions/:sessionId`:
+
+- `module_chats` can contain `module = "medical_device_triage"`.
+- `chat_turns` for the module contain PR10 questions, answers, warnings, and audit refs when follow-up is needed.
+- `alpha_gaps` can contain `module = "medical_device_triage"` gap rows.
+- `generated_sections` contains `section_kind = "medical_device_triage"` after completion.
+
 ## 14. Example Fake Proposal
 
 Paste this into `Contexto de la propuesta`:

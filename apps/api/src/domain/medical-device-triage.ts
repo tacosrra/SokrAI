@@ -92,10 +92,12 @@ const FORBIDDEN_OUTPUT_PATTERNS = [
   /\bclasificad[oa]\s+como\s+(producto sanitario|medical device)\b/i,
   /\b(producto sanitario|medical device)\s+clase\s+(i|ii|iii|iia|iib)\b/i,
   /\bno\s+es\s+(producto sanitario|medical device)\b/i,
-  /\bes\s+(producto sanitario|medical device)\b/i,
+  /\b(es|seria|seria probablemente|parece|podria ser|puede ser)\s+(un\s+|una\s+)?producto sanitario\b/i,
   /\bclassified as a medical device\b/i,
   /\bnot a medical device\b/i,
   /\bis a medical device\b/i,
+  /\bis\s+(likely|probably|clearly|definitively)\s+a\s+medical device\b/i,
+  /\b(would|could|may)\s+be\s+a\s+medical device\b/i,
   /\bcompliant\b/i,
   /\bnon[-\s]?compliant\b/i,
   /\bcumple\b/i,
@@ -402,7 +404,7 @@ export function computeMedicalDeviceMissingInformation(state: MedicalDeviceTriag
     missing.push('intended_use_claims');
   }
 
-  if (isBlank(state.clinical_decision_role)) {
+  if (!hasEnoughText(state.clinical_decision_role)) {
     missing.push('clinical_decision_role');
   }
 
@@ -410,7 +412,7 @@ export function computeMedicalDeviceMissingInformation(state: MedicalDeviceTriag
     missing.push('evidence_needed');
   }
 
-  if (isBlank(state.human_review_plan)) {
+  if (!hasEnoughText(state.human_review_plan)) {
     missing.push('human_review_plan');
   }
 
@@ -463,15 +465,17 @@ export function evaluateMedicalDeviceCompletion(state: MedicalDeviceTriageState)
   }
 
   return (
-    state.intended_use_claims.length > 0 &&
-    hasEnoughText(state.clinical_decision_role) &&
-    state.evidence_needed.length > 0 &&
-    hasEnoughText(state.human_review_plan) &&
+    computeMedicalDeviceMissingInformation(state).length === 0 &&
     state.needs_human_review &&
     state.requires_competent_human_review
   );
 }
 
+/**
+ * Selects at most three active medical-device gaps for the next turn.
+ * This is a bounded question framework for competent human review, not
+ * a legal, regulatory, clinical, MDR, or product-status classification.
+ */
 export function selectMedicalDeviceGapRefs(gaps: AlphaGap[], state: MedicalDeviceTriageState): string[] {
   const missing = computeMedicalDeviceMissingInformation(state);
 
@@ -491,6 +495,11 @@ export function selectMedicalDeviceGapRefs(gaps: AlphaGap[], state: MedicalDevic
     .map((gap) => gap.gap_id);
 }
 
+/**
+ * Moves medical-device gaps through the minimal open -> in_progress -> resolved
+ * lifecycle when user-provided information satisfies the deterministic missing
+ * information policy. It does not infer compliance or device status.
+ */
 export function classifyMedicalDeviceGapStatuses(
   gaps: AlphaGap[],
   state: MedicalDeviceTriageState,
@@ -524,6 +533,12 @@ export function classifyMedicalDeviceGapStatuses(
   return changes;
 }
 
+/**
+ * Builds traceable source refs for a non-definitive medical-device section.
+ * Only internal proposal/user/section sources are allowed; retrieval, legal
+ * dictamen, regulatory classification, and clinical decision evidence are out
+ * of scope for this PR10 boundary.
+ */
 export function buildMedicalDeviceSectionSourceRefs(
   initialSources: ProposalSource[],
   userAnswerSources: ProposalSource[],
@@ -548,6 +563,11 @@ export function buildMedicalDeviceSectionSourceRefs(
   return Array.from(sourcesById.values());
 }
 
+/**
+ * Renders persisted gaps, questions, uncertainty, and the mandatory competent
+ * human review warning. The section must never become a medical-device, MDR,
+ * legal, regulatory, clinical, approval, rejection, or compliance decision.
+ */
 export function renderMedicalDeviceTriageSection(
   state: MedicalDeviceTriageState,
   params: { sourceCount: number; gapCount: number },
@@ -611,10 +631,21 @@ export function renderMedicalDeviceTriageSection(
   };
 }
 
+/**
+ * Public deterministic guardrail check used by tests and callers before
+ * exposing model-shaped content. The boundary is phrase normalization and
+ * replacement; prompts may guide tone, but code owns the no-dictamen rule.
+ */
 export function containsForbiddenMedicalDeviceOutput(value: unknown): boolean {
   return hasForbiddenOutput(JSON.stringify(value));
 }
 
+/**
+ * Normalizes one model turn into the PR10 medical-device gap/question contract:
+ * one bounded question, no definitive product-status wording, competent human
+ * review required, and no trust in `agent_status = done` while missing-info
+ * criteria are still incomplete.
+ */
 export function enforceMedicalDeviceTriageTurnGuardrails(
   turn: MedicalDeviceTriageTurn,
   latestAnswer?: string,
