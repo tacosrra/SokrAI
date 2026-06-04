@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   parseBasicAlphaReport,
+  parseDataAiPrivacyReplyResponse,
+  parseDataAiPrivacyStartResponse,
   parseProposalReplyResponse,
   parseProposalStartResponse,
   parseRequestExecutionResponse,
@@ -163,6 +165,20 @@ const validSolutionDefinition = {
   ambiguities_remaining: [],
 };
 
+const validDataAiPrivacyState = {
+  personal_or_health_data: 'The pilot uses fictitious administrative intake text and staff notes.',
+  data_sources: 'Data comes from fictitious forms and staff summaries.',
+  ai_system_role: 'The AI drafts a structured summary for competent human review.',
+  validation_evidence: 'The team compares draft summaries with staff-written references.',
+  privacy_governance: 'Privacy and governance owners review the data use before pilot operation.',
+  cybersecurity_controls: 'Access is limited to pilot staff and activity is traceable.',
+  regulatory_context: 'Regulatory implications remain open questions for competent human review.',
+  human_review_plan: 'Privacy, clinical governance, and regulatory owners review before use.',
+  assumptions: ['Every generated output is reviewed by a competent person.'],
+  uncertainties: ['The final governance sign-off path remains open.'],
+  requires_competent_human_review: true,
+};
+
 function createAuditView(runs: unknown[] = []) {
   return {
     session: {
@@ -262,6 +278,65 @@ describe('parseProposalStartResponse', () => {
     expect(response.session_id).toBe('session-1');
     expect(response.detected_gaps).toEqual([]);
     expect(response.warnings).toEqual([]);
+  });
+});
+
+describe('parseDataAiPrivacyStartResponse', () => {
+  it('accepts PR9 start responses and unwraps workflow proxy payloads', () => {
+    const response = parseDataAiPrivacyStartResponse({
+      body: JSON.stringify({
+        session_id: 'session-1',
+        stage: 'data_ai_privacy',
+        profile_id: 'hospital_clinic_v1',
+        agent_status: 'continue',
+        updated_data_ai_privacy: validDataAiPrivacyState,
+        diagnosis: ['Falta concretar fuentes de datos.'],
+        next_question: 'Que datos personales o de salud trataria la propuesta?',
+        completion_reason: '',
+        warnings: ['requires competent human review'],
+      }),
+    });
+
+    expect(response.stage).toBe('data_ai_privacy');
+    expect(response.profile_id).toBe('hospital_clinic_v1');
+    expect(response.updated_data_ai_privacy.requires_competent_human_review).toBe(true);
+  });
+
+  it('rejects malformed PR9 start responses', () => {
+    expect(() =>
+      parseDataAiPrivacyStartResponse({
+        session_id: 'session-1',
+        stage: 'data_ai_privacy',
+        profile_id: 'hospital_clinic_v1',
+        agent_status: 'continue',
+        updated_data_ai_privacy: {
+          ...validDataAiPrivacyState,
+          requires_competent_human_review: 'yes',
+        },
+        diagnosis: [],
+        next_question: 'Que falta?',
+        warnings: [],
+      }),
+    ).toThrow(/requires_competent_human_review/);
+  });
+});
+
+describe('parseDataAiPrivacyReplyResponse', () => {
+  it('accepts PR9 reply responses', () => {
+    const response = parseDataAiPrivacyReplyResponse({
+      session_id: 'session-1',
+      stage: 'data_ai_privacy',
+      profile_id: 'hospital_clinic_v1',
+      agent_status: 'done',
+      updated_data_ai_privacy: validDataAiPrivacyState,
+      diagnosis: ['Los gaps quedan claros para revision humana.'],
+      next_question: '',
+      completion_reason: 'data AI privacy gaps sufficiently clarified for human review',
+      warnings: ['requires competent human review'],
+    });
+
+    expect(response.agent_status).toBe('done');
+    expect(response.completion_reason).toContain('human review');
   });
 });
 

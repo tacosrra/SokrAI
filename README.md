@@ -332,8 +332,11 @@ Archivos:
 - `infra/n8n/workflows/solution_start_v1.json`
 - `infra/n8n/workflows/solution_reply_v1.json`
 - `infra/n8n/workflows/agent_solution_definition_v1.json`
+- `infra/n8n/workflows/data_ai_privacy_start_v1.json`
+- `infra/n8n/workflows/data_ai_privacy_reply_v1.json`
+- `infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json`
 
-Abre `http://localhost:5678`, importa y publica los seis workflows, y asegúrate de que `INTERNAL_SHARED_SECRET` coincide entre `.env`, la API y `n8n`.
+Abre `http://localhost:5678`, importa y publica los nueve workflows, y asegúrate de que `INTERNAL_SHARED_SECRET` coincide entre `.env`, la API y `n8n`.
 
 Los exports de workflow de esta version eliminan reintentos sincronos en nodos `HTTP Request` y propagan `statusCode + body` de la API al webhook para que un `ollama_timeout` o cualquier error controlado llegue a la UI como JSON consistente. Si reimportas los workflows, publica la nueva version exportada del repo.
 
@@ -349,11 +352,14 @@ No cambies `N8N_ENCRYPTION_KEY` una vez que `n8n` haya inicializado su volumen p
 - `POST /webhook/proposal-reply-v1`
 - `POST /webhook/solution-start-v1`
 - `POST /webhook/solution-reply-v1`
+- `POST /webhook/data-ai-privacy-start-v1`
+- `POST /webhook/data-ai-privacy-reply-v1`
 
 ### Endpoint interno reutilizable
 
 - `POST /webhook/agent-problem-definition-v1`
 - `POST /webhook/agent-solution-definition-v1`
+- `POST /webhook/agent-data-ai-privacy-gap-v1`
 
 ### API interna para n8n
 
@@ -363,6 +369,9 @@ No cambies `N8N_ENCRYPTION_KEY` una vez que `n8n` haya inicializado su volumen p
 - `POST /internal/sessions/solution-start`
 - `POST /internal/sessions/solution-reply`
 - `POST /internal/agents/solution-definition/run`
+- `POST /internal/sessions/data-ai-privacy-start`
+- `POST /internal/sessions/data-ai-privacy-reply`
+- `POST /internal/agents/data-ai-privacy/run`
 - `POST /internal/reports/basic-alpha/compose`
 
 ### API de inspeccion
@@ -392,8 +401,10 @@ Payloads listos para prueba:
 - `examples/proposal-reply.payload.json`
 - `POST /webhook/solution-start-v1`
 - `POST /webhook/solution-reply-v1`
+- `POST /webhook/data-ai-privacy-start-v1`
+- `POST /webhook/data-ai-privacy-reply-v1`
 
-El flujo normal es:
+El flujo normal Alpha es:
 
 1. `proposal_start_v1`
 2. guardar `session_id`
@@ -403,6 +414,14 @@ El flujo normal es:
 6. responder con `solution_reply_v1` hasta `agent_status = "done"`
 7. componer el informe con `POST /internal/reports/basic-alpha/compose`
 8. leerlo con `GET /api/v1/sessions/:sessionId/report`
+
+La extension Clinic Pilot de PR9, despues de cerrar la solucion, es:
+
+1. iniciar `data_ai_privacy_start_v1` con `profile_id = "hospital_clinic_v1"`
+2. responder con `data_ai_privacy_reply_v1` hasta `agent_status = "done"` o `blocked`
+3. revisar la seccion `generated_sections.section_kind = "data_ai_privacy"` en `GET /api/v1/sessions/:sessionId`
+
+Esta extension genera gaps y preguntas de datos/IA/privacidad para revision humana competente. No forma parte del `BasicAlphaReport` y no emite dictamen legal, regulatorio, clinico, de privacidad, cumplimiento definitivo, aprobacion/rechazo, scoring ni clasificacion medical-device.
 
 Al cerrar el carril de problema, la API conserva la compatibilidad de resume con
 `conversation_turns`, `session_snapshots` y `agent_runs`, y tambien escribe el
@@ -417,6 +436,12 @@ Tras cerrar el problema, el carril de solucion usa `module = "solution"` y gener
 una fila `generated_sections` con `section_kind = "solution"`. La seccion de
 solucion tambien se renderiza de forma determinista desde respuestas persistidas
 y fuentes internas.
+
+Tras cerrar la solucion, el Clinic Pilot PR9 puede abrir `module = "data_ai_privacy"`
+con el perfil fijo `hospital_clinic_v1`. Este modulo genera una seccion
+`section_kind = "data_ai_privacy"` y audita guardrails, gaps, turnos y fuentes
+del modulo; sigue siendo un marco de preguntas/gaps para revision humana
+competente, no un motor de cumplimiento.
 
 El reporte basico Alpha se compone de forma deterministica desde el brief,
 gaps actuales, seccion de problema, seccion de solucion, fuentes internas,

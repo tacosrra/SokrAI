@@ -74,6 +74,60 @@ describe('data AI privacy flow integration', () => {
     expect(JSON.stringify(auditJson.generated_sections)).not.toMatch(/compliant|non-compliant|approved|rejected|class II/i);
   });
 
+  it('persists explicit guardrail intervention metadata without exposing unsafe output in audit events', async () => {
+    ({ app, database } = await buildTestApp(await createDataAiPrivacyGuardrailModel()));
+
+    const sessionId = await completeAlphaFlow(app);
+    const dataStart = await dataAiPrivacyStartFlow(app, 'req-data-guardrail-start', sessionId);
+    const persisted = await database!.query<{
+      metrics_json: {
+        guardrail_intervention?: {
+          applied?: boolean;
+          reasons?: string[];
+          normalizedFields?: string[];
+          fallbackQuestionApplied?: boolean;
+          scope?: string;
+        };
+      };
+      event_type: string;
+      payload_json: Record<string, unknown>;
+    }>(
+      [
+        'SELECT ar.metrics_json, ae.event_type, ae.payload_json',
+        'FROM agent_runs ar',
+        'JOIN audit_events ae ON ae.run_id = ar.id',
+        'WHERE ar.session_id = $1',
+        '  AND ar.request_id = $2',
+        '  AND ar.run_purpose = \'data_ai_privacy_gap\'',
+        '  AND ae.event_type = \'data_ai_privacy_guardrail_fallback_applied\'',
+      ].join(' '),
+      [sessionId, 'req-data-guardrail-start'],
+    );
+
+    expect(dataStart.statusCode).toBe(200);
+    expect(dataStart.body.agent_status).toBe('continue');
+    expect(dataStart.body.warnings).toContain('Sensitive definitive wording was replaced before persistence');
+    expect(JSON.stringify(dataStart.body)).not.toMatch(/compliant|approved|class II/i);
+    expect(persisted.rowCount).toBe(1);
+    expect(persisted.rows[0].metrics_json.guardrail_intervention).toMatchObject({
+      applied: true,
+      reasons: ['forbidden_output_replaced'],
+      fallbackQuestionApplied: true,
+      scope: 'hospital_clinic_v1_gap_question_framework',
+    });
+    expect(persisted.rows[0].metrics_json.guardrail_intervention?.normalizedFields).toEqual(
+      expect.arrayContaining(['diagnosis', 'updated_data_ai_privacy.regulatory_context']),
+    );
+    expect(persisted.rows[0].payload_json).toMatchObject({
+      reasons: ['forbidden_output_replaced'],
+      fallback_question_applied: true,
+      forced_agent_status: 'continue',
+      competent_human_review_required: true,
+      scope: 'hospital_clinic_v1_gap_question_framework',
+    });
+    expect(JSON.stringify(persisted.rows[0].payload_json)).not.toMatch(/compliant|approved|class II/i);
+  });
+
   it('rejects start before the solution section exists', async () => {
     ({ app } = await buildTestApp(await createProblemOnlyModel()));
 
@@ -260,6 +314,49 @@ async function createDataAiPrivacyFlowModel() {
     JSON.stringify(doneSolutionTurn),
     JSON.stringify(continueDataTurn),
     JSON.stringify(doneDataTurn),
+  ]);
+}
+
+async function createDataAiPrivacyGuardrailModel() {
+  const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
+  const doneProblemTurn = await readFixture('expected', 'problem-definition.done.json');
+  const continueSolutionTurn = await readFixture('expected', 'solution-definition.continue.json');
+  const doneSolutionTurn = await readFixture('expected', 'solution-definition.done.json');
+  const doneDataTurn = await readFixture<{ updated_data_ai_privacy: Record<string, unknown> }>(
+    'expected',
+    'data-ai-privacy.done.json',
+  );
+  const unsafeDataTurn = {
+    ...doneDataTurn,
+    diagnosis: ['The proposal is compliant and approved.'],
+    updated_data_ai_privacy: {
+      ...doneDataTurn.updated_data_ai_privacy,
+      regulatory_context: 'This is compliant and MDR classified as class II.',
+    },
+  };
+  const startAgentTurn = {
+    agent_status: 'continue',
+    diagnosis: ['Falta identificar con precision quien responde hoy por el problema'],
+    updated_problem_definition: {
+      problem_owner: '',
+      problem_statement: structuredBrief.problem_statement,
+      evidence_of_problem: structuredBrief.evidence_of_problem,
+      scope: structuredBrief.scope,
+      current_alternatives: structuredBrief.current_alternatives,
+      assumptions: structuredBrief.assumptions,
+      ambiguities_remaining: structuredBrief.ambiguities,
+    },
+    next_question: 'Que equipo o responsable responde hoy por este problema en urgencias?',
+    completion_reason: '',
+  };
+
+  return new QueueLanguageModelClient([
+    JSON.stringify(structuredBrief),
+    JSON.stringify(startAgentTurn),
+    JSON.stringify(doneProblemTurn),
+    JSON.stringify(continueSolutionTurn),
+    JSON.stringify(doneSolutionTurn),
+    JSON.stringify(unsafeDataTurn),
   ]);
 }
 

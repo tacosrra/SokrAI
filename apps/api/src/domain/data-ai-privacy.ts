@@ -68,6 +68,22 @@ export interface DataAiPrivacyGapStatusChange {
   resolvedByTurnId?: string;
 }
 
+export type DataAiPrivacyGuardrailInterventionReason =
+  | 'forbidden_output_replaced'
+  | 'vague_answer_reasked'
+  | 'premature_completion_blocked'
+  | 'missing_question_fallback';
+
+export interface DataAiPrivacyGuardrailIntervention {
+  applied: boolean;
+  reasons: DataAiPrivacyGuardrailInterventionReason[];
+  normalizedFields: string[];
+  fallbackQuestionApplied: boolean;
+  forcedAgentStatus?: DataAiPrivacyTurn['agent_status'];
+  competentHumanReviewRequired: true;
+  scope: 'hospital_clinic_v1_gap_question_framework';
+}
+
 function isBlank(value: string): boolean {
   return value.trim().length === 0;
 }
@@ -117,7 +133,9 @@ function sanitizeStringArray(values: string[]): { values: string[]; changed: boo
   };
 }
 
-function sanitizeState(state: DataAiPrivacyState): { state: DataAiPrivacyState; changed: boolean } {
+function sanitizeState(
+  state: DataAiPrivacyState,
+): { state: DataAiPrivacyState; changed: boolean; changedFields: string[] } {
   const assumptions = sanitizeStringArray(state.assumptions);
   const uncertainties = sanitizeStringArray(state.uncertainties);
   const fields = {
@@ -134,9 +152,17 @@ function sanitizeState(state: DataAiPrivacyState): { state: DataAiPrivacyState; 
     assumptions.changed ||
     uncertainties.changed ||
     Object.values(fields).some((field) => field.changed);
+  const changedFields = [
+    ...Object.entries(fields)
+      .filter(([, field]) => field.changed)
+      .map(([fieldName]) => fieldName),
+    ...(assumptions.changed ? ['assumptions'] : []),
+    ...(uncertainties.changed ? ['uncertainties'] : []),
+  ];
 
   return {
     changed,
+    changedFields,
     state: {
       personal_or_health_data: fields.personal_or_health_data.value,
       data_sources: fields.data_sources.value,
@@ -298,7 +324,9 @@ export function evaluateDataAiPrivacyCompletion(state: DataAiPrivacyState): bool
 }
 
 /**
- * Selects at most three unresolved gap refs for the next persisted question.
+ * Selects at most three unresolved data/AI/privacy gap refs for the next
+ * persisted question, keeping the hospital_clinic_v1 gap lifecycle bounded and
+ * auditable.
  */
 export function selectDataAiPrivacyGapRefs(gaps: AlphaGap[], state: DataAiPrivacyState): string[] {
   const missing = computeDataAiPrivacyMissingInformation(state);
@@ -320,7 +348,8 @@ export function selectDataAiPrivacyGapRefs(gaps: AlphaGap[], state: DataAiPrivac
 }
 
 /**
- * Keeps the persistence-facing gap queue bounded to unresolved data/AI/privacy gaps.
+ * Classifies only bounded data/AI/privacy gap lifecycle transitions that can be
+ * audited from persisted turns, without inferring compliance or final status.
  */
 export function classifyDataAiPrivacyGapStatuses(
   gaps: AlphaGap[],
@@ -378,7 +407,10 @@ export function buildDataAiPrivacySectionSourceRefs(
 }
 
 /**
- * Renders only deterministic, review-bound section text after model output was scrubbed.
+ * Deterministically renders the hospital_clinic_v1 data/AI/privacy gap section
+ * after model output normalization. The section is a gap/question framework, not
+ * a legal, regulatory, clinical or privacy dictamen, never states definitive
+ * compliance/non-compliance, and always requires competent human review.
  */
 export function renderDataAiPrivacySection(
   state: DataAiPrivacyState,
@@ -444,7 +476,10 @@ export function containsForbiddenDataAiPrivacyOutput(value: unknown): boolean {
 }
 
 /**
- * Last code-owned guardrail before sensitive data/AI/privacy output is persisted.
+ * Normalizes model output before persistence for the hospital_clinic_v1
+ * data/AI/privacy gap/question framework. It prevents legal, regulatory,
+ * clinical or privacy dictamen wording, definitive compliance/non-compliance,
+ * and completion without competent-human-review framing.
  */
 export function enforceDataAiPrivacyTurnGuardrails(
   turn: DataAiPrivacyTurn,
@@ -455,11 +490,16 @@ export function enforceDataAiPrivacyTurnGuardrails(
   updatedDataAiPrivacy: DataAiPrivacyState;
   detectedGaps: string[];
   latestAnswerWasVague: boolean;
+  intervention: DataAiPrivacyGuardrailIntervention;
 } {
   const warnings: string[] = [];
+  const interventionReasons: DataAiPrivacyGuardrailInterventionReason[] = [];
+  const normalizedFields = new Set<string>();
+  let fallbackQuestionApplied = false;
   const latestAnswerIsVague = latestAnswer ? isVagueAnswer(latestAnswer) : false;
   const sanitizedState = sanitizeState(turn.updated_data_ai_privacy);
-  const sanitizedDiagnosis = sanitizeStringArray(turn.diagnosis).values.slice(0, 3);
+  const sanitizedDiagnosisResult = sanitizeStringArray(turn.diagnosis);
+  const sanitizedDiagnosis = sanitizedDiagnosisResult.values.slice(0, 3);
   const sanitizedQuestion = scrubForbiddenOutput(enforceSingleQuestion(turn.next_question));
   const normalizedTurn: DataAiPrivacyTurn = {
     ...turn,
@@ -468,32 +508,47 @@ export function enforceDataAiPrivacyTurnGuardrails(
     updated_data_ai_privacy: sanitizedState.state,
   };
 
-  if (sanitizedState.changed || sanitizedQuestion.changed || containsForbiddenDataAiPrivacyOutput(turn.diagnosis)) {
+  if (sanitizedState.changed || sanitizedQuestion.changed || sanitizedDiagnosisResult.changed) {
     warnings.push('Sensitive definitive wording was replaced before persistence');
+    interventionReasons.push('forbidden_output_replaced');
+    sanitizedState.changedFields.forEach((field) => normalizedFields.add(`updated_data_ai_privacy.${field}`));
+    if (sanitizedDiagnosisResult.changed) {
+      normalizedFields.add('diagnosis');
+    }
+    if (sanitizedQuestion.changed) {
+      normalizedFields.add('next_question');
+    }
     normalizedTurn.agent_status = 'continue';
     normalizedTurn.completion_reason = '';
     normalizedTurn.next_question = buildDataAiPrivacyFallbackQuestion(normalizedTurn.updated_data_ai_privacy);
+    fallbackQuestionApplied = true;
   }
 
   if (latestAnswerIsVague) {
     warnings.push('Latest data AI privacy answer was vague; clarification was narrowed');
+    interventionReasons.push('vague_answer_reasked');
     normalizedTurn.agent_status = 'continue';
     normalizedTurn.completion_reason = '';
     normalizedTurn.next_question = buildDataAiPrivacyFallbackQuestion(normalizedTurn.updated_data_ai_privacy);
+    fallbackQuestionApplied = true;
   }
 
   const isComplete = evaluateDataAiPrivacyCompletion(normalizedTurn.updated_data_ai_privacy);
 
   if (normalizedTurn.agent_status === 'done' && !isComplete) {
     warnings.push('Model marked data AI privacy lane as done before completion criteria were met');
+    interventionReasons.push('premature_completion_blocked');
     normalizedTurn.agent_status = 'continue';
     normalizedTurn.completion_reason = '';
     normalizedTurn.next_question = buildDataAiPrivacyFallbackQuestion(normalizedTurn.updated_data_ai_privacy);
+    fallbackQuestionApplied = true;
   }
 
   if (normalizedTurn.agent_status !== 'done' && !normalizedTurn.next_question) {
     warnings.push('Model did not produce a usable data AI privacy question; fallback question generated');
+    interventionReasons.push('missing_question_fallback');
     normalizedTurn.next_question = buildDataAiPrivacyFallbackQuestion(normalizedTurn.updated_data_ai_privacy);
+    fallbackQuestionApplied = true;
   }
 
   if (normalizedTurn.agent_status === 'done') {
@@ -508,5 +563,14 @@ export function enforceDataAiPrivacyTurnGuardrails(
     updatedDataAiPrivacy: normalizedTurn.updated_data_ai_privacy,
     detectedGaps: computeDataAiPrivacyMissingInformation(normalizedTurn.updated_data_ai_privacy),
     latestAnswerWasVague: latestAnswerIsVague,
+    intervention: {
+      applied: interventionReasons.length > 0,
+      reasons: Array.from(new Set(interventionReasons)),
+      normalizedFields: Array.from(normalizedFields).sort(),
+      fallbackQuestionApplied,
+      forcedAgentStatus: interventionReasons.length > 0 ? normalizedTurn.agent_status : undefined,
+      competentHumanReviewRequired: true,
+      scope: 'hospital_clinic_v1_gap_question_framework',
+    },
   };
 }

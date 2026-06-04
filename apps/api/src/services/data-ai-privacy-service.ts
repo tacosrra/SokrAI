@@ -301,8 +301,31 @@ export class DataAiPrivacyService {
           validatedOutputJson: guarded.turn as unknown as Record<string, unknown>,
           status: 'completed',
           repairAttempted: modelTurn.repairAttempted,
-          metricsJson: modelTurn.metrics,
+          metricsJson: {
+            ...modelTurn.metrics,
+            guardrail_intervention: guarded.intervention,
+          },
         });
+
+        if (guarded.intervention.applied) {
+          await this.alphaStore.appendAuditEvent(client, {
+            proposalId: lockedSession.id,
+            sessionId: lockedSession.id,
+            runId: run.id,
+            turnId: lockedActiveTurn?.turn_id,
+            eventType: 'data_ai_privacy_guardrail_fallback_applied',
+            actorType: 'system',
+            requestId,
+            payloadJson: {
+              reasons: guarded.intervention.reasons,
+              normalized_fields: guarded.intervention.normalizedFields,
+              fallback_question_applied: guarded.intervention.fallbackQuestionApplied,
+              forced_agent_status: guarded.intervention.forcedAgentStatus ?? null,
+              competent_human_review_required: guarded.intervention.competentHumanReviewRequired,
+              scope: guarded.intervention.scope,
+            },
+          });
+        }
 
         return this.persistSuccessfulTurn({
           client,

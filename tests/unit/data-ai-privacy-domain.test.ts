@@ -74,6 +74,17 @@ describe('data AI privacy domain rules', () => {
 
     expect(guarded.turn.agent_status).toBe('continue');
     expect(guarded.warnings).toContain('Sensitive definitive wording was replaced before persistence');
+    expect(guarded.intervention).toMatchObject({
+      applied: true,
+      reasons: ['forbidden_output_replaced'],
+      fallbackQuestionApplied: true,
+      forcedAgentStatus: 'continue',
+      competentHumanReviewRequired: true,
+      scope: 'hospital_clinic_v1_gap_question_framework',
+    });
+    expect(guarded.intervention.normalizedFields).toEqual(
+      expect.arrayContaining(['diagnosis', 'updated_data_ai_privacy.regulatory_context']),
+    );
     expect(serialized).not.toMatch(/dictamen|compliant|non-compliant|cumple|incumple|approved|rejected|medical device class|class I|class II|MDR classified/i);
     expect(serialized).toContain(DATA_AI_PRIVACY_REVIEW_WARNING);
   });
