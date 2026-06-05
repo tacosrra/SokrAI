@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { ProposalStartRequest } from '../domain/contracts';
 import { toProposalStartFile } from '../lib/file';
 import { buildProposalStartPayload } from '../lib/proposal-start-payload';
+import { LocalDemoSafetyNotice } from './LocalDemoSafetyNotice';
 
 interface NewProposalPanelProps {
   isSubmitting: boolean;
@@ -95,9 +96,7 @@ export function NewProposalPanel({
       </div>
 
       <form className="proposal-form" onSubmit={handleSubmit}>
-        <div className="feedback feedback--warning">
-          No incluyas datos reales de pacientes. Usa datos ficticios o anonimizados para MVP Alpha.
-        </div>
+        <LocalDemoSafetyNotice context="intake" />
 
         <label className="field">
           <span className="field__label">Título del proyecto</span>

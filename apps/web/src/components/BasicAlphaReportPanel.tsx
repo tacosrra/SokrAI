@@ -1,5 +1,6 @@
 import type { AlphaGap, BasicAlphaReport, ProposalSource } from '../domain/contracts';
 import { deriveReportPresentation } from '../lib/report-view';
+import { LocalDemoSafetyNotice } from './LocalDemoSafetyNotice';
 import { StatusBadge } from './StatusBadge';
 
 interface BasicAlphaReportPanelProps {
@@ -88,6 +89,8 @@ export function BasicAlphaReportPanel({
           </button>
         </div>
       </header>
+
+      <LocalDemoSafetyNotice compact context="report" />
 
       <div className="basic-report__summary">
         <FieldValue label="Usuario objetivo" value={report.structured_brief.target_user} />

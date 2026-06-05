@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import type { BasicAlphaReport, SessionAuditView } from '../domain/contracts';
 import type { SessionPresentation } from '../lib/session-view';
 import { BasicAlphaReportPanel } from './BasicAlphaReportPanel';
+import { LocalDemoSafetyNotice } from './LocalDemoSafetyNotice';
 import { StatusBadge, agentTone, sessionTone } from './StatusBadge';
 
 interface SessionWorkspaceProps {
@@ -200,6 +201,8 @@ export function SessionWorkspace({
         </div>
       </section>
 
+      <LocalDemoSafetyNotice compact context="workspace" />
+
       <section className="question-callout">
         <span className="question-callout__label">
           {presentation.currentResourcesPilotViabilityQuestion
@@ -260,6 +263,8 @@ export function SessionWorkspace({
               {isReplying ? 'Procesando…' : 'Iniciar datos/IA/privacidad'}
             </button>
           ) : null}
+
+          <LocalDemoSafetyNotice compact context="clinic-module" />
         </section>
       ) : null}
 
@@ -291,6 +296,8 @@ export function SessionWorkspace({
               {isReplying ? 'Procesando…' : 'Iniciar medical-device triage'}
             </button>
           ) : null}
+
+          <LocalDemoSafetyNotice compact context="clinic-module" />
         </section>
       ) : null}
 
@@ -322,6 +329,8 @@ export function SessionWorkspace({
               {isReplying ? 'Procesando…' : 'Iniciar recursos/piloto'}
             </button>
           ) : null}
+
+          <LocalDemoSafetyNotice compact context="clinic-module" />
         </section>
       ) : null}
 
@@ -424,6 +433,8 @@ export function SessionWorkspace({
             <p>La respuesta se envía a `proposal-reply-v1` y actualiza el estado real de la sesión.</p>
           </div>
         </div>
+
+        <LocalDemoSafetyNotice compact context="clinic-module" />
 
         {canReply ? (
           <form className="reply-form" onSubmit={handleReplySubmit}>

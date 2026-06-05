@@ -24,6 +24,7 @@ import { mapApiError } from './lib/feedback';
 import { deriveSessionPresentation } from './lib/session-view';
 import { readLastSessionId, readRecentSessions, persistRecentSession } from './lib/storage';
 import { ContinueSessionPanel } from './components/ContinueSessionPanel';
+import { LocalDemoSafetyNotice } from './components/LocalDemoSafetyNotice';
 import { NewProposalPanel } from './components/NewProposalPanel';
 import { SessionStatePanel } from './components/SessionStatePanel';
 import { SessionWorkspace } from './components/SessionWorkspace';
@@ -1246,6 +1247,8 @@ export function App() {
               <h2>{presentation.projectTitle}</h2>
               <p>{presentation.progress.description}</p>
 
+              <LocalDemoSafetyNotice compact context="workspace" />
+
               <div className="rail-kpis">
                 <article>
                   <strong>{presentation.progress.percent}%</strong>
@@ -1421,6 +1424,11 @@ export function App() {
         </section>
 
         <section className="detail-shell">
+          <LocalDemoSafetyNotice
+            compact
+            context={selectedMode === 'start' ? 'intake' : 'resume'}
+          />
+
           {isSubmittingStart ? (
             <WorkflowLoadingPanel kind="start" />
           ) : selectedMode === 'start' ? (

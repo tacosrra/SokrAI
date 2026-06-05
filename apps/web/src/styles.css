@@ -449,6 +449,8 @@ a {
 }
 
 .detail-shell {
+  display: grid;
+  gap: 14px;
   width: min(1120px, 100%);
   margin: 0 auto;
 }
@@ -620,6 +622,41 @@ a {
   background: rgba(183, 121, 31, 0.1);
   color: #825312;
   border: 1px solid rgba(183, 121, 31, 0.2);
+}
+
+.safety-notice {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid rgba(183, 121, 31, 0.24);
+  border-radius: var(--radius-sm);
+  background: rgba(183, 121, 31, 0.08);
+  color: #784b10;
+}
+
+.safety-notice strong,
+.safety-notice p {
+  margin: 0;
+}
+
+.safety-notice strong {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.safety-notice p {
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.safety-notice--compact {
+  padding: 10px 12px;
+  border-radius: 12px;
+}
+
+.safety-notice--compact p {
+  font-size: 0.82rem;
 }
 
 .form-actions {

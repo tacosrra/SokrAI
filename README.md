@@ -7,7 +7,8 @@ Middleware de maduracion de propuestas antes de comite, orientado a demostrar do
 Guia detallada de arranque y prueba:
 
 - [docs/INICIALIZACION_V1.md](docs/INICIALIZACION_V1.md)
-- [docs/manual-testing/mvp-alpha-local-demo-guide.md](docs/manual-testing/mvp-alpha-local-demo-guide.md) para la demo manual end-to-end del MVP Alpha y el Basic Alpha Report.
+- [docs/manual-testing/mvp-alpha-local-demo-guide.md](docs/manual-testing/mvp-alpha-local-demo-guide.md) para la demo manual end-to-end del MVP Alpha, Clinic Pilot y el Basic Alpha Report.
+- [docs/manual-testing/clinic-local-demo-hardening.md](docs/manual-testing/clinic-local-demo-hardening.md) para la ruta controlada de demo local Clinic, secretos, retencion, redaccion y reset.
 
 ## Alcance de esta v1
 
@@ -246,6 +247,33 @@ powershell -ExecutionPolicy Bypass -File .\scripts\stop-beta.ps1
 
 La ruta beta usa `.env.beta` y un proyecto Docker separado, asi que no pisa el flujo manual existente.
 
+### PR13 hardening de demo local Clinic
+
+Esta rama prepara una demo local controlada para Clinic con datos ficticios o anonimizados exclusivamente. No es un entorno productivo, no habilita auth enterprise y no permite datos reales de pacientes.
+
+Reglas operativas:
+
+- `.env` y `.env.beta` son locales y no deben commitearse.
+- Genera valores propios para `INTERNAL_SHARED_SECRET`, `N8N_ENCRYPTION_KEY` y `N8N_BASIC_AUTH_PASSWORD`.
+- Nunca pongas secretos en variables `VITE_*`; Vite las incluye en el bundle del navegador.
+- `session_id` funciona solo como token de demo local, no como control de acceso para usuarios reales.
+- `ALLOW_SENSITIVE_HEALTH_DATA=false` debe mantenerse para la demo Clinic.
+- `GET /api/v1/sessions/:sessionId` conserva la auditoria publica, pero devuelve `raw_model_output` y `validated_output_json` como `null` en los `agent_runs`; la base de datos sigue persistiendo esos campos para inspeccion backend controlada.
+- Los logs de API y scripts smoke redaccionan prompts, payloads, respuestas libres, secretos y raw output por defecto.
+
+`docker-compose.yml` configura n8n para no guardar payloads de ejecucion por defecto:
+
+```dotenv
+EXECUTIONS_DATA_SAVE_ON_SUCCESS=none
+EXECUTIONS_DATA_SAVE_ON_ERROR=none
+EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=false
+EXECUTIONS_DATA_SAVE_ON_PROGRESS=false
+EXECUTIONS_DATA_PRUNE=true
+EXECUTIONS_DATA_MAX_AGE=24
+```
+
+n8n sigue procesando los cuerpos de webhook en memoria durante la ejecucion. Si necesitas inspeccionar ejecuciones, hazlo temporalmente solo con datos ficticios y vuelve a estos valores antes de una demo.
+
 ### Ruta recomendada para validar workflows sin editar exports
 
 Los workflows versionados llaman a la API como `http://api:3001`, que es el nombre del servicio dentro de Docker Compose. Para probar `n8n` con los exports sin cambios, levanta la API en Docker:
@@ -265,12 +293,14 @@ for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workfl
 done
 docker compose restart n8n
 bash scripts/smoke-core.sh
+bash scripts/smoke-clinic-demo.sh
 ```
 
 En Windows nativo, el smoke equivalente es:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\smoke-core.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\smoke-clinic-demo.ps1
 ```
 
 Si prefieres ejecutar la API en host con `pnpm dev`, edita manualmente en n8n los nodos `HTTP Request` que apuntan a `http://api:3001/...` para usar una URL alcanzable desde el contenedor de `n8n`.
@@ -442,6 +472,7 @@ No cambies `N8N_ENCRYPTION_KEY` una vez que `n8n` haya inicializado su volumen p
 - Inspeccionar `brief`, `gaps`, `warnings`, timeline, documentos y fuentes internas
 
 La UI muestra un aviso operativo: no incluyas datos reales de pacientes. Para MVP Alpha usa datos ficticios o anonimizados.
+La UI tambien muestra avisos persistentes de demo local Clinic en intake, reanudacion, workspace, modulos sensibles y descarga PDF. Estos avisos no sustituyen auth ni una politica productiva.
 
 ## Ejemplos
 
@@ -559,9 +590,29 @@ Con `postgres`, `ollama`, `api` y `n8n` arriba, ejecuta:
 
 ```bash
 bash scripts/smoke-core.sh
+bash scripts/smoke-clinic-demo.sh
 ```
 
-El script usa solo payloads ficticios de `examples/`, valida `healthz`, start/reply via webhooks de `n8n`, auditoria de sesion, estado por `request_id` y recuperacion activa de una solicitud parcialmente persistida. No valida texto exacto del modelo.
+`smoke-core.sh` usa solo payloads ficticios de `examples/`, valida `healthz`, start/reply via webhooks de `n8n`, auditoria de sesion, estado por `request_id` y recuperacion activa de una solicitud parcialmente persistida. `smoke-clinic-demo.sh` recorre problema, solucion, informe/PDF, datos/IA/privacidad, medical-device triage y recursos/piloto/viabilidad con respuestas ficticias y bounded retries. Ningun script valida texto exacto del modelo; ambos imprimen ids, estados y conteos, no cuerpos completos.
+
+Para reset local, detén el stack antes de borrar datos:
+
+```bash
+docker compose down
+# Destructivo: borra estado local de demo en volumenes Compose.
+docker compose down -v
+# Si usaste bind mounts locales:
+rm -rf postgres_data ollama_data
+```
+
+Para beta:
+
+```bash
+./scripts/stop-beta.sh
+docker compose -p sokrai-beta -f docker-compose.yml -f docker-compose.beta.yml down -v
+```
+
+Despues limpia `localStorage` de `http://localhost:3000` si quieres borrar sesiones recientes del navegador.
 
 ## Decisiones importantes de v1
 

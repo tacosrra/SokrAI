@@ -4,7 +4,7 @@
 
 This guide lets a developer run and manually test the current SokrAI MVP Alpha end to end from the local repository. It is based on the current `package.json` scripts, Docker Compose files, `.env.example`, n8n workflow exports, Ollama adapter, API routes, frontend behavior, and test suite.
 
-Use it when you need to prove the PR8 / Basic Structured Alpha Report path manually, then exercise the PR9 browser extension for data/AI/privacy gaps and the PR10 conditional medical-device triage flow:
+Use it when you need to prove the PR8 / Basic Structured Alpha Report path manually, then exercise the Clinic Pilot browser extensions for data/AI/privacy gaps, conditional medical-device triage, and resources/pilot/viability:
 
 1. Create a proposal.
 2. Add or paste documentation.
@@ -18,11 +18,12 @@ Use it when you need to prove the PR8 / Basic Structured Alpha Report path manua
 10. Start and complete the PR9 data/AI/privacy browser flow after the solution section exists.
 11. Start PR10 medical-device triage after the PR9 section exists.
 12. Verify applicable/uncertain cases ask bounded questions and no-signal cases are recorded as `not_applicable`.
-13. Reload or resume the session and verify state persists.
+13. Start and complete the PR11 resources/pilot/viability flow after the solution section exists.
+14. Reload or resume the session and verify state persists.
 
 ## 2. Current Scope
 
-This guide covers MVP Alpha plus the PR9 and PR10 Clinic Pilot extensions:
+This guide covers MVP Alpha plus the PR9, PR10, and PR11 Clinic Pilot extensions:
 
 - local proposal intake
 - pasted text and optional text-extractable PDF intake
@@ -38,6 +39,8 @@ This guide covers MVP Alpha plus the PR9 and PR10 Clinic Pilot extensions:
 - PR9 `hospital_clinic_v1` data/AI/privacy gap flow after solution completion
 - PR10 conditional `medical_device_triage` flow after data/AI/privacy completion
 - PR10 generated section limited to gaps/questions/uncertainty and competent human review
+- PR11 `resources_pilot_viability` flow after solution completion
+- PR13 local demo hardening: no-real-patient-data warnings, safe secrets, n8n retention defaults, public audit redaction, and redacted smoke diagnostics
 
 The canonical contracts live in `contracts/schemas`. The relevant public app surfaces are:
 
@@ -52,12 +55,11 @@ The canonical contracts live in `contracts/schemas`. The relevant public app sur
 
 Do not test or present these as implemented MVP Alpha, PR9, or PR10 capabilities:
 
-- Clinic Pilot modules beyond `data_ai_privacy_gap_agent` and `medical_device_triage`
+- Clinic Pilot modules beyond `data_ai_privacy_gap_agent`, `medical_device_triage_agent`, and `resources_pilot_viability_agent`
 - definitive medical device determination
 - MDR class or product classification
 - legal, regulatory, clinical, privacy, or medical-device dictamen
 - compliance, non-compliance, approval, rejection, scoring, or ranking
-- resources/pilot/viability modules
 - RAG
 - remote or VPS AI provider
 - enterprise auth
@@ -192,6 +194,12 @@ ALLOW_SENSITIVE_HEALTH_DATA=false
 N8N_BASIC_AUTH_USER=admin
 N8N_BASIC_AUTH_PASSWORD=admin
 N8N_ENCRYPTION_KEY=replace-with-a-random-32-char-secret
+EXECUTIONS_DATA_SAVE_ON_SUCCESS=none
+EXECUTIONS_DATA_SAVE_ON_ERROR=none
+EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=false
+EXECUTIONS_DATA_SAVE_ON_PROGRESS=false
+EXECUTIONS_DATA_PRUNE=true
+EXECUTIONS_DATA_MAX_AGE=24
 
 API_PROXY_TARGET=http://localhost:3001
 WEBHOOK_PROXY_TARGET=http://localhost:5678
@@ -210,8 +218,11 @@ Change at least these placeholders in `.env`:
 
 - `INTERNAL_SHARED_SECRET`
 - `N8N_ENCRYPTION_KEY`
+- `N8N_BASIC_AUTH_PASSWORD`
 
-Keep `INTERNAL_SHARED_SECRET` server-side only. It is used by n8n HTTP Request nodes as the `x-internal-shared-secret` header when calling API internal routes. Do not put it in any `VITE_*` variable and do not send it from browser code.
+Keep `INTERNAL_SHARED_SECRET`, `N8N_ENCRYPTION_KEY`, and `N8N_BASIC_AUTH_PASSWORD` server-side only. `INTERNAL_SHARED_SECRET` is used by n8n HTTP Request nodes as the `x-internal-shared-secret` header when calling API internal routes. Do not put secrets in any `VITE_*` variable and do not send them from browser code; Vite exposes `VITE_*` values to the browser bundle.
+
+Keep `ALLOW_SENSITIVE_HEALTH_DATA=false`. The Clinic local demo uses fake or anonymized data only. n8n retention is configured to avoid saving execution payloads by default; temporarily loosen those values only when debugging with fake data.
 
 ### Host vs Docker database URLs
 
@@ -325,7 +336,7 @@ Use:
 - username: `N8N_BASIC_AUTH_USER`
 - password: `N8N_BASIC_AUTH_PASSWORD`
 
-The current workflow exports are all inactive in JSON, so importing is not enough. Import and publish all twelve workflows.
+The current workflow exports are all inactive in JSON, so importing is not enough. Import and publish all fifteen workflows.
 
 ### Workflow files involved
 
@@ -388,6 +399,7 @@ The practical webhook verification is the stack smoke script after API, n8n, Pos
 
 ```bash
 INTERNAL_SHARED_SECRET="$(awk -F= '$1=="INTERNAL_SHARED_SECRET"{print substr($0,index($0,"=")+1); exit}' .env)" bash scripts/smoke-core.sh
+INTERNAL_SHARED_SECRET="$(awk -F= '$1=="INTERNAL_SHARED_SECRET"{print substr($0,index($0,"=")+1); exit}' .env)" bash scripts/smoke-clinic-demo.sh
 ```
 
 ## 10. Ollama Setup
@@ -529,6 +541,7 @@ Note the difference:
 
 - `pnpm run test:smoke` runs Vitest smoke tests with fake model responses.
 - `bash scripts/smoke-core.sh` calls the live API and n8n webhooks.
+- `bash scripts/smoke-clinic-demo.sh` calls the live Clinic Pilot path with fake data and bounded diagnostics.
 
 ## 13. Manual MVP Alpha Browser Test Script
 
@@ -750,7 +763,7 @@ cat /tmp/sokrai-pdf.headers
 
 ### Step 9: Run PR9 Data/AI/Privacy in the Browser
 
-Keep using fake or anonymized information only. The PR9 browser path requires the same twelve workflows imported and published in section 9, especially:
+Keep using fake or anonymized information only. The PR9 browser path requires the same fifteen workflows imported and published in section 9, especially:
 
 - `data_ai_privacy_start_v1`
 - `data_ai_privacy_reply_v1`
@@ -798,6 +811,26 @@ Expected persisted artifacts from `GET /api/v1/sessions/:sessionId`:
 - `chat_turns` for the module contain PR10 questions, answers, warnings, and audit refs when follow-up is needed.
 - `alpha_gaps` can contain `module = "medical_device_triage"` gap rows.
 - `generated_sections` contains `section_kind = "medical_device_triage"` after completion.
+
+### Step 11: Run PR11 Resources/Pilot/Viability in the Browser
+
+After the solution section exists, the workspace can start the PR11
+`resources_pilot_viability` flow. This module collects operational inputs for a
+future pilot; it does not score, rank, approve, reject, cost, or decide go/no-go.
+
+Suggested answer:
+
+```text
+El piloto ficticio requiere un portatil local, Ollama, n8n, PostgreSQL, dos revisores de urgencias, sesiones semanales y datos sinteticos. Las metricas son tiempo de entrevista, completitud del brief y numero de gaps aclarados. Riesgos: expectativas clinicas indebidas, introduccion accidental de datos reales y dependencia de disponibilidad local.
+```
+
+Expected persisted artifacts from `GET /api/v1/sessions/:sessionId`:
+
+- `module_chats` contains `module = "resources_pilot_viability"`.
+- `chat_turns` for the module contain PR11 questions, answers, warnings, and audit refs.
+- `alpha_gaps` can contain `module = "resources_pilot_viability"` gap rows.
+- `generated_sections` contains `section_kind = "resources_pilot_viability"` after completion.
+- The Basic Alpha Report remains Alpha-only and does not include resources/pilot/viability.
 
 ## 14. Example Fake Proposal
 
@@ -980,13 +1013,13 @@ Use `postgres:5432` only from Docker services. The API container override alread
 Symptoms:
 
 - browser reports a network or HTML response error
-- `scripts/smoke-core.sh` fails at `proposal-start-v1`
+- `scripts/smoke-core.sh` or `scripts/smoke-clinic-demo.sh` fails at a webhook step
 - n8n returns webhook not registered
 
 Fix:
 
-1. Import all twelve workflow files.
-2. Publish all twelve workflows.
+1. Import all fifteen workflow files.
+2. Publish all fifteen workflows.
 3. Restart n8n.
 4. Run the live smoke script.
 
@@ -1000,7 +1033,7 @@ INTERNAL_SHARED_SECRET="$(awk -F= '$1=="INTERNAL_SHARED_SECRET"{print substr($0,
 The committed workflow JSON files have `"active": false`. After import, publish them with:
 
 ```bash
-for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json infra/n8n/workflows/data_ai_privacy_start_v1.json infra/n8n/workflows/data_ai_privacy_reply_v1.json infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json infra/n8n/workflows/medical_device_triage_start_v1.json infra/n8n/workflows/medical_device_triage_reply_v1.json infra/n8n/workflows/agent_medical_device_triage_v1.json; do
+for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json infra/n8n/workflows/data_ai_privacy_start_v1.json infra/n8n/workflows/data_ai_privacy_reply_v1.json infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json infra/n8n/workflows/medical_device_triage_start_v1.json infra/n8n/workflows/medical_device_triage_reply_v1.json infra/n8n/workflows/agent_medical_device_triage_v1.json infra/n8n/workflows/resources_pilot_viability_start_v1.json infra/n8n/workflows/resources_pilot_viability_reply_v1.json infra/n8n/workflows/agent_resources_pilot_viability_v1.json; do
   workflow_id="$(awk -F'"' '/^[[:space:]]*"id":[[:space:]]*"/ { print $4; exit }' "$workflow_path")"
   docker compose exec -T -u node n8n n8n publish:workflow --id="$workflow_id"
 done
@@ -1125,6 +1158,13 @@ Reset the local application database volume and n8n volume only when you are sur
 docker compose down -v
 ```
 
+For the beta stack, stop it first and then remove the beta project volumes only when you are sure the local demo state can be deleted:
+
+```bash
+./scripts/stop-beta.sh
+docker compose -p sokrai-beta -f docker-compose.yml -f docker-compose.beta.yml down -v
+```
+
 If you used the default compose file, local bind-mounted data may also exist in:
 
 - `postgres_data`
@@ -1144,7 +1184,7 @@ Clear browser state if the web UI keeps showing old recent sessions:
 - No enterprise auth.
 - No OCR for scanned PDFs.
 - No remote or VPS AI provider.
-- No Clinic Pilot modules beyond the PR9 data/AI/privacy gap flow and PR10 conditional medical-device triage.
+- No Clinic Pilot modules beyond the PR9 data/AI/privacy gap flow, PR10 conditional medical-device triage, and PR11 resources/pilot/viability.
 - Basic Alpha Report composition currently requires the internal compose API call after both generated sections exist; the app displays the report after it has been composed.
 
 ## 20. Final Checklist
@@ -1157,6 +1197,11 @@ pnpm install --store-dir ./.pnpm-store
 docker compose up -d postgres ollama api n8n web
 docker compose exec ollama ollama pull qwen2.5:3b-instruct
 pnpm run migrate
+pnpm build
+pnpm test
+pnpm verify
+INTERNAL_SHARED_SECRET="$(awk -F= '$1=="INTERNAL_SHARED_SECRET"{print substr($0,index($0,"=")+1); exit}' .env)" bash scripts/smoke-core.sh
+INTERNAL_SHARED_SECRET="$(awk -F= '$1=="INTERNAL_SHARED_SECRET"{print substr($0,index($0,"=")+1); exit}' .env)" bash scripts/smoke-clinic-demo.sh
 ```
 
 ```bash

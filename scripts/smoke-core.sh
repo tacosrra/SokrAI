@@ -43,9 +43,52 @@ const data = JSON.parse(fs.readFileSync(file, 'utf8'));
 const ok = Function('data', `return (${expression});`)(data);
 
 if (!ok) {
+  const summary = {
+    top_level_keys: Object.keys(data).slice(0, 24),
+    session_id: data.session_id || data.session?.id,
+    request_id: data.request_id,
+    error_code: data.error_code,
+    safe_message: data.safe_message,
+    status: data.status || data.session?.status || data.report_status,
+    counts: Object.fromEntries(
+      Object.entries(data)
+        .filter(([, value]) => Array.isArray(value))
+        .map(([key, value]) => [key, value.length]),
+    ),
+  };
   console.error(message);
-  console.error(JSON.stringify(data, null, 2));
+  console.error(JSON.stringify(summary, null, 2));
   process.exit(1);
+}
+NODE
+}
+
+json_summary() {
+  local file="$1"
+
+  node - "$file" <<'NODE'
+const fs = require('node:fs');
+const file = process.argv[2];
+
+try {
+  const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const summary = {
+    top_level_keys: Object.keys(data).slice(0, 24),
+    session_id: data.session_id || data.session?.id,
+    request_id: data.request_id,
+    error_code: data.error_code,
+    safe_message: data.safe_message,
+    status: data.status || data.session?.status || data.report_status,
+    counts: Object.fromEntries(
+      Object.entries(data)
+        .filter(([, value]) => Array.isArray(value))
+        .map(([key, value]) => [key, value.length]),
+    ),
+  };
+  process.stdout.write(JSON.stringify(summary));
+} catch {
+  const stats = fs.statSync(file);
+  process.stdout.write(JSON.stringify({ parse_error: 'non_json_response', bytes: stats.size }));
 }
 NODE
 }
@@ -97,7 +140,7 @@ http_json() {
     )"
   fi
 
-  [[ "$status" =~ ^2[0-9][0-9]$ ]] || fail "$method $url returned HTTP $status: $(cat "$output")"
+  [[ "$status" =~ ^2[0-9][0-9]$ ]] || fail "$method $url returned HTTP $status: $(json_summary "$output")"
 }
 
 build_start_payload() {

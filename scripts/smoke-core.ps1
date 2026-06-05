@@ -16,6 +16,23 @@ function Fail {
   throw "smoke-core: $Message"
 }
 
+function ConvertTo-SafeFailureSummary {
+  param([Parameter(Mandatory = $true)] $ErrorRecord)
+
+  $response = $ErrorRecord.Exception.Response
+  $statusCode = $null
+
+  if ($null -ne $response -and $null -ne $response.StatusCode) {
+    $statusCode = [int]$response.StatusCode
+  }
+
+  return @{
+    status_code = $statusCode
+    error_type = $ErrorRecord.Exception.GetType().Name
+    message = $ErrorRecord.Exception.Message
+  } | ConvertTo-Json -Compress
+}
+
 function New-SmokeRequestId {
   return "smoke-$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())-$([Guid]::NewGuid())"
 }
@@ -40,7 +57,11 @@ function Invoke-JsonRequest {
     $params.Body = ($Body | ConvertTo-Json -Depth 20)
   }
 
-  return Invoke-RestMethod @params
+  try {
+    return Invoke-RestMethod @params
+  } catch {
+    Fail "$Method $Uri failed: $(ConvertTo-SafeFailureSummary -ErrorRecord $_)"
+  }
 }
 
 function Assert-Smoke {
