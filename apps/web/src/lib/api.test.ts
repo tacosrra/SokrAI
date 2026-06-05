@@ -706,6 +706,57 @@ describe('requestJson transport options', () => {
     });
   });
 
+  it('rejects HTML responses for PDF downloads as proxy errors', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response('<!doctype html><html><body>Vite fallback</body></html>', {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html',
+        },
+      }),
+    );
+    stubGlobal('fetch', fetchMock);
+
+    await expect(downloadBasicAlphaReportPdf('session-1')).rejects.toMatchObject({
+      errorCode: 'unexpected_html_response',
+      statusCode: 502,
+    });
+  });
+
+  it('rejects successful non-PDF responses for PDF downloads', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }),
+    );
+    stubGlobal('fetch', fetchMock);
+
+    await expect(downloadBasicAlphaReportPdf('session-1')).rejects.toMatchObject({
+      errorCode: 'invalid_response_contract',
+      statusCode: 502,
+    });
+  });
+
+  it('rejects binary content that is not advertised as a PDF download', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(new Blob(['not a pdf'], { type: 'application/octet-stream' }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/octet-stream',
+        },
+      }),
+    );
+    stubGlobal('fetch', fetchMock);
+
+    await expect(downloadBasicAlphaReportPdf('session-1')).rejects.toMatchObject({
+      errorCode: 'invalid_response_contract',
+      statusCode: 502,
+    });
+  });
+
   it('maps invalid report responses to invalid_response_contract', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(

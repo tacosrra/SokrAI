@@ -547,6 +547,10 @@ TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pn
 TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pnpm verify
 ```
 
+Los argumentos de archivo en los comandos API son pistas de revision para
+localizar el caso cubierto; los scripts actuales ejecutan los directorios de
+suite configurados.
+
 `tests/helpers/test-environment.ts` usa `localhost:5433` por defecto para alinearse con Docker Compose. Puedes seguir sobreescribiendo `TEST_DATABASE_URL` si tu Postgres de pruebas vive en otro puerto.
 
 ## Smoke local contra stack vivo
