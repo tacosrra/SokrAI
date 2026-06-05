@@ -34,6 +34,7 @@ This guide covers MVP Alpha plus the PR9 and PR10 Clinic Pilot extensions:
 - generated `problem` and `solution` sections
 - persisted audit and resume behavior
 - Basic Alpha Report composition and app display
+- Basic Alpha Report local PDF download
 - PR9 `hospital_clinic_v1` data/AI/privacy gap flow after solution completion
 - PR10 conditional `medical_device_triage` flow after data/AI/privacy completion
 - PR10 generated section limited to gaps/questions/uncertainty and competent human review
@@ -44,6 +45,7 @@ The canonical contracts live in `contracts/schemas`. The relevant public app sur
 - API health: `http://localhost:3001/healthz`
 - session audit: `GET http://localhost:3001/api/v1/sessions/:sessionId`
 - Basic Alpha Report: `GET http://localhost:3001/api/v1/sessions/:sessionId/report`
+- Basic Alpha Report PDF: `GET http://localhost:3001/api/v1/sessions/:sessionId/report.pdf`
 - n8n editor: `http://localhost:5678`
 
 ## 3. Intentionally Out of Scope
@@ -56,7 +58,6 @@ Do not test or present these as implemented MVP Alpha, PR9, or PR10 capabilities
 - legal, regulatory, clinical, privacy, or medical-device dictamen
 - compliance, non-compliance, approval, rejection, scoring, or ranking
 - resources/pilot/viability modules
-- PDF export
 - RAG
 - remote or VPS AI provider
 - enterprise auth
@@ -722,6 +723,31 @@ Expected behavior:
 - The report shows brief fields, open gaps, problem section, solution section, gap states, internal sources, and warnings.
 - The report does not show raw model output, prompts, model parameters, or validated raw run payloads.
 
+### Step 8b: Download the Basic Alpha Report PDF
+
+After composing the report, click `Download PDF` in the Basic Alpha Report panel.
+
+Expected behavior:
+
+- the browser downloads a file named `sokrai-report-...pdf`
+- the UI shows a prepared/download-started banner with the export id
+- the API response is `application/pdf`
+- the response includes `X-Sokrai-Export-Id`, `X-Sokrai-Report-Sha256`
+  and `X-Sokrai-Pdf-Sha256`
+- the PDF does not include raw model output, prompt fields, scoring,
+  approval/rejection, or legal/clinical/regulatory dictamen
+
+Optional terminal verification:
+
+```bash
+SESSION_ID="replace-with-session-id"
+curl -sS -D /tmp/sokrai-pdf.headers \
+  "http://localhost:3001/api/v1/sessions/${SESSION_ID}/report.pdf" \
+  -o /tmp/sokrai-report.pdf
+head -c 4 /tmp/sokrai-report.pdf
+cat /tmp/sokrai-pdf.headers
+```
+
 ### Step 9: Run PR9 Data/AI/Privacy in the Browser
 
 Keep using fake or anonymized information only. The PR9 browser path requires the same twelve workflows imported and published in section 9, especially:
@@ -903,7 +929,7 @@ These fields must not appear in the public report response or app report panel:
 - approval or rejection decision
 - legal, clinical, or regulatory dictamen
 - committee scoring or ranking
-- PDF export URL
+- `pdf_url` or embedded PDF export metadata
 
 ## 17. Troubleshooting
 
@@ -1115,7 +1141,6 @@ Clear browser state if the web UI keeps showing old recent sessions:
 - Demo local only.
 - No real patient data.
 - No RAG.
-- No PDF export.
 - No enterprise auth.
 - No OCR for scanned PDFs.
 - No remote or VPS AI provider.

@@ -70,9 +70,16 @@ export class PdfExportService {
       exportedAt,
       reportPayloadSha256: null,
     });
-    const reportPayloadSha256 = sha256(JSON.stringify(payloadModel));
+    // Hash only the stable report payload. Per-export metadata and the hash
+    // itself belong in the rendered model, not in the report snapshot identity.
+    const reportPayloadSha256 = sha256(JSON.stringify(toReportPayloadHashInput(payloadModel)));
     const renderModel = withReportPayloadHash(payloadModel, reportPayloadSha256);
-    const pdf = await renderPdf(renderModel);
+    const pdf = await renderPdf(renderModel, {
+      logger: this.logger,
+      requestId: command.requestId,
+      sessionId: command.sessionId,
+      reportId: report.report_id,
+    });
     const pdfSha256 = sha256Buffer(pdf);
     const metadata: BasicReportPdfExport['metadata'] = {
       export_id: exportId,
@@ -166,19 +173,55 @@ function withReportPayloadHash(
   };
 }
 
-async function renderPdf(model: BasicReportPdfModel): Promise<Buffer> {
+function toReportPayloadHashInput(model: BasicReportPdfModel) {
+  return {
+    template_version: model.template_version,
+    report_id: model.report_id,
+    proposal_id: model.proposal_id,
+    proposal_title: model.proposal_title,
+    report_schema_version: model.report_schema_version,
+    report_status: model.report_status,
+    report_generated_at: model.report_generated_at,
+    structured_brief: model.structured_brief,
+    sections: model.sections,
+    open_gaps: model.open_gaps,
+    internal_sources: model.internal_sources,
+    audit_refs: model.audit_refs,
+    warnings: model.warnings,
+  };
+}
+
+async function renderPdf(
+  model: BasicReportPdfModel,
+  context: {
+    logger: Logger;
+    requestId: string;
+    sessionId: string;
+    reportId: string;
+  },
+): Promise<Buffer> {
   try {
     return await renderBasicReportPdf(model);
   } catch (error) {
+    const cause = error instanceof Error ? error.message : 'unknown';
+
+    context.logger.error('basic_report_pdf_export_failed', {
+      request_id: context.requestId,
+      session_id: context.sessionId,
+      proposal_id: model.proposal_id,
+      report_id: context.reportId,
+      template_version: model.template_version,
+      export_id: model.export_id,
+      cause,
+    });
+
     throw new AppError(
       500,
       'pdf_export_failed',
       'The Basic Alpha report PDF could not be generated',
       true,
       model.proposal_id,
-      {
-        cause: error instanceof Error ? error.message : 'unknown',
-      },
+      { cause },
     );
   }
 }

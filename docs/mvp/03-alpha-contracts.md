@@ -1,6 +1,6 @@
 # Alpha contract inventory
 
-PR 2A defined schema-backed contracts and TypeScript domain types for the MVP Alpha data model. Later PRs extend the inventory with persisted Alpha/Clinic contracts while keeping RAG, PDF export, enterprise auth, and remote AI provider behavior outside this v1 surface.
+PR 2A defined schema-backed contracts and TypeScript domain types for the MVP Alpha data model. Later PRs extend the inventory with persisted Alpha/Clinic contracts while keeping RAG, embedded PDF fields, enterprise auth, and remote AI provider behavior outside this v1 surface.
 
 ## Contract files
 
@@ -100,8 +100,25 @@ n8n/internal orchestration. The public app-facing read model is
 contract; raw `agent_runs` output remains available in the audit endpoint but is
 not copied into the report payload or UI.
 
-Still excluded: PDF/export fields, legal/regulatory or medical-device
-decisions, RAG citations, scoring, ranking, approval and rejection.
+Still excluded from `BasicAlphaReport`: `pdf_url`, embedded export fields,
+legal/regulatory or medical-device decisions, RAG citations, scoring, ranking,
+approval and rejection.
+
+## Basic Alpha report PDF export
+
+PR 12 adds a separate local export surface for the composed Basic Alpha report:
+
+- public route: `GET /api/v1/sessions/:sessionId/report.pdf`
+- binary response: `application/pdf`
+- headers: `X-Sokrai-Export-Id`, `X-Sokrai-Report-Sha256`,
+  `X-Sokrai-Pdf-Sha256`
+- audit event: `basic_report_pdf_exported` in `audit_events.payload_json`
+- template version: `basic-report-pdf.v1`
+
+`BasicAlphaReport` still does not contain `pdf_url` or embedded export fields.
+The PDF is generated from validated persisted report/section data and must not
+include raw model output, prompt fields, model parameters, scoring, ranking,
+approval/rejection, or legal/clinical/regulatory dictamen.
 
 ## Data/AI/privacy Clinic lane
 

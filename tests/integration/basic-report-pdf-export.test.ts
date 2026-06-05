@@ -29,10 +29,20 @@ describe('Basic Alpha report PDF export integration', () => {
         'x-request-id': 'req-pdf-export',
       },
     });
+    const secondResponse = await app.inject({
+      method: 'GET',
+      url: `/api/v1/sessions/${sessionId}/report.pdf`,
+      headers: {
+        'x-request-id': 'req-pdf-export-again',
+      },
+    });
     const pdfBytes = response.rawPayload;
     const exportId = String(response.headers['x-sokrai-export-id']);
     const reportSha256 = String(response.headers['x-sokrai-report-sha256']);
     const pdfSha256 = String(response.headers['x-sokrai-pdf-sha256']);
+    const secondExportId = String(secondResponse.headers['x-sokrai-export-id']);
+    const secondReportSha256 = String(secondResponse.headers['x-sokrai-report-sha256']);
+    const secondPdfSha256 = String(secondResponse.headers['x-sokrai-pdf-sha256']);
     const auditEvent = await app.services.database.query<{
       event_type: string;
       payload_json: Record<string, unknown>;
@@ -44,19 +54,25 @@ describe('Basic Alpha report PDF export integration', () => {
 
     expect(compose.statusCode).toBe(200);
     expect(response.statusCode).toBe(200);
+    expect(secondResponse.statusCode).toBe(200);
     expect(response.headers['content-type']).toContain('application/pdf');
     expect(response.headers['content-disposition']).toMatch(/^attachment; filename="sokrai-report-/);
     expect(pdfBytes.subarray(0, 4).toString('utf8')).toBe('%PDF');
     expect(exportId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(secondExportId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(secondExportId).not.toBe(exportId);
     expect(reportSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(secondReportSha256).toBe(reportSha256);
     expect(pdfSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(secondPdfSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(secondPdfSha256).not.toBe(pdfSha256);
     expect(auditEvent.rows).toHaveLength(1);
     expect(payload).toMatchObject({
-      export_id: exportId,
+      export_id: secondExportId,
       report_id: compose.body.report_id,
       proposal_id: sessionId,
-      report_payload_sha256: reportSha256,
-      pdf_sha256: pdfSha256,
+      report_payload_sha256: secondReportSha256,
+      pdf_sha256: secondPdfSha256,
       section_count: 2,
       open_gap_count: expect.any(Number),
       source_count: expect.any(Number),

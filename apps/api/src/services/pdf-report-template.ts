@@ -375,8 +375,19 @@ function renderParagraphBlock(doc: PDFKit.PDFDocument, label: string, value: str
   renderBodyText(doc, value || 'Not persisted');
 }
 
+function renderSubheading(doc: PDFKit.PDFDocument, text: string): void {
+  ensureSpace(doc, 36);
+  doc.font('Helvetica-Bold').fontSize(10).fillColor('#1f2937').text(text);
+  doc.moveDown(0.2);
+}
+
 function renderList(doc: PDFKit.PDFDocument, label: string, values: string[]): void {
-  renderParagraphBlock(doc, label, values.length === 0 ? 'None recorded.' : '');
+  renderSubheading(doc, label);
+
+  if (values.length === 0) {
+    renderBodyText(doc, 'None recorded.');
+    return;
+  }
 
   for (const value of values) {
     renderBodyText(doc, `- ${value}`);
@@ -393,7 +404,7 @@ function renderMarkdownLikeText(doc: PDFKit.PDFDocument, value: string): void {
     }
 
     if (normalized.startsWith('#')) {
-      renderParagraphBlock(doc, normalized.replace(/^#+\s*/, ''), '');
+      renderSubheading(doc, normalized.replace(/^#+\s*/, ''));
       continue;
     }
 

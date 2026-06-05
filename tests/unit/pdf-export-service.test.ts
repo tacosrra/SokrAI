@@ -1,3 +1,5 @@
+import { createRequire } from 'node:module';
+
 import { describe, expect, it } from 'vitest';
 
 import type {
@@ -15,6 +17,10 @@ import {
 } from '../../apps/api/src/services/pdf-report-template';
 
 const createdAt = '2026-06-05T10:00:00.000Z';
+const requireFromTest = createRequire(import.meta.url);
+const pdfParse = requireFromTest('../../apps/api/node_modules/pdf-parse') as (pdf: Buffer) => Promise<{
+  text: string;
+}>;
 
 describe('Basic Alpha report PDF export template', () => {
   it('builds a structured export model with sections, open gaps, sources, warnings, and metadata', () => {
@@ -58,16 +64,60 @@ describe('Basic Alpha report PDF export template', () => {
     });
   });
 
-  it('renders PDF bytes without raw or model fields', async () => {
-    const model = buildBasicReportPdfModel(createReport(), [], {
+  it('uses only the latest non-superseded section per kind in fixed report order', () => {
+    const report = createReport();
+    const older = createGeneratedSection('data_ai_privacy');
+    const supersededNewer: GeneratedSection = {
+      ...createGeneratedSection('data_ai_privacy'),
+      section_id: 'section-data-ai-superseded',
+      section_status: 'superseded',
+      section_version: 3,
+      title: 'Do not render',
+      created_at: '2026-06-05T12:00:00.000Z',
+    };
+    const current: GeneratedSection = {
+      ...createGeneratedSection('data_ai_privacy'),
+      section_id: 'section-data-ai-current',
+      section_version: 2,
+      title: 'Current data AI privacy section',
+      created_at: '2026-06-05T11:00:00.000Z',
+    };
+
+    const model = buildBasicReportPdfModel(report, [older, supersededNewer, current], {
+      exportId: 'export-1',
+      exportedAt: '2026-06-05T10:30:00.000Z',
+      reportPayloadSha256: 'hash-report',
+    });
+
+    expect(model.sections.map((section) => section.section_id)).toEqual([
+      'section-problem',
+      'section-solution',
+      'section-data-ai-current',
+    ]);
+    expect(model.sections.map((section) => section.title)).not.toContain('Do not render');
+  });
+
+  it('renders required report content into the PDF text', async () => {
+    const model = buildBasicReportPdfModel(createReport(), [createGeneratedSection('data_ai_privacy')], {
       exportId: 'export-1',
       exportedAt: '2026-06-05T10:30:00.000Z',
       reportPayloadSha256: 'hash-report',
     });
     const pdf = await renderBasicReportPdf(model);
+    const parsed = await pdfParse(pdf);
     const serializedModel = JSON.stringify(model);
 
     expect(pdf.subarray(0, 4).toString('utf8')).toBe('%PDF');
+    expect(parsed.text).toContain('Emergency triage support');
+    expect(parsed.text).toContain('Reduce avoidable triage delays');
+    expect(parsed.text).toContain('data ai privacy section');
+    expect(parsed.text).toContain('Clarify scope for open');
+    expect(parsed.text).toContain('Initial proposal');
+    expect(parsed.text).toContain('agent_run: run-problem');
+    expect(parsed.text).toContain('This Alpha report is not a dictamen');
+    expect(parsed.text).toContain('REPORT PAYLOAD SHA-256');
+    expect(parsed.text).toContain('hash-report');
+    expect(parsed.text).not.toContain('Not persisted');
     expect(serializedModel).not.toContain('raw_model_output');
     expect(serializedModel).not.toContain('validated_output_json');
     expect(serializedModel).not.toContain('prompt_name');

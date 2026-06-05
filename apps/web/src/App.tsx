@@ -19,6 +19,7 @@ import {
   startSolution,
   startSession,
 } from './lib/api';
+import { saveBlobDownload } from './lib/download';
 import { mapApiError } from './lib/feedback';
 import { deriveSessionPresentation } from './lib/session-view';
 import { readLastSessionId, readRecentSessions, persistRecentSession } from './lib/storage';
@@ -375,19 +376,12 @@ export function App() {
 
     try {
       const result = await downloadBasicAlphaReportPdf(sessionId);
-      const objectUrl = URL.createObjectURL(result.blob);
-      const anchor = document.createElement('a');
 
-      anchor.href = objectUrl;
-      anchor.download = result.fileName;
-      document.body.append(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(objectUrl);
+      saveBlobDownload(result.blob, result.fileName);
 
       setBanner({
         tone: 'success',
-        text: `PDF exportado. Export ID: ${result.exportId ?? 'sin cabecera'}.`,
+        text: `PDF preparado. Export ID: ${result.exportId ?? 'sin cabecera'}.`,
       });
     } catch (error) {
       setBanner({
