@@ -551,6 +551,25 @@ describe('parseSessionAuditView', () => {
     });
   });
 
+  it('accepts redacted public audit run raw fields', () => {
+    const audit = parseSessionAuditView(
+      createAuditView([
+        {
+          ...validAgentRun,
+          raw_model_output: null,
+          validated_output_json: null,
+        },
+      ]),
+    );
+
+    expect(audit.runs[0]).toMatchObject({
+      raw_model_output: null,
+      validated_output_json: null,
+      prompt_name: 'problem-definition-agent',
+      prompt_sha256: 'a'.repeat(64),
+    });
+  });
+
   it.each([
     ['model_provider', 42, /runs\[0\]\.model_provider/],
     ['model_name', null, /runs\[0\]\.model_name/],

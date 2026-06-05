@@ -28,6 +28,19 @@ export interface DetectInitialGapCandidatesInput {
   maxCandidates?: number;
 }
 
+export interface FilteredInitialGapCandidate {
+  module: AlphaModule;
+  gap_kind: GapKind;
+  origin: GapOrigin;
+  field: string;
+  reason: 'forbidden_scope';
+}
+
+export interface InitialGapAnalysisResult {
+  candidates: InitialGapCandidate[];
+  filtered: FilteredInitialGapCandidate[];
+}
+
 interface FieldRule {
   module: AlphaModule;
   field: keyof StructuredBrief;
@@ -120,15 +133,23 @@ const FORBIDDEN_SCOPE_PATTERNS = [
  * module/field/kind and truncated to the configured max candidate limit.
  */
 export function detectInitialGapCandidates(input: DetectInitialGapCandidatesInput): InitialGapCandidate[] {
+  return analyzeInitialGapCandidates(input).candidates;
+}
+
+export function analyzeInitialGapCandidates(input: DetectInitialGapCandidatesInput): InitialGapAnalysisResult {
   const maxCandidates = input.maxCandidates ?? MAX_INITIAL_GAPS;
-  const candidates = filterForbiddenScope([
+  const analyzedScope = filterForbiddenScope([
     ...detectMissingFieldGaps(input.structuredBrief),
     ...detectMissingInformationGaps(input.structuredBrief),
     ...detectAmbiguityGaps(input.structuredBrief),
     ...detectSourceConfirmationGaps(input.structuredBrief, input.sources ?? []),
   ]);
+  const candidates = dedupeGapCandidates(analyzedScope.kept).slice(0, maxCandidates);
 
-  return dedupeGapCandidates(candidates).slice(0, maxCandidates);
+  return {
+    candidates,
+    filtered: analyzedScope.filtered,
+  };
 }
 
 export function buildGapQuestionHint(field: string, module: AlphaModule): string {
@@ -165,8 +186,14 @@ export function dedupeGapCandidates(candidates: InitialGapCandidate[]): InitialG
   return deduped;
 }
 
-export function filterForbiddenScope(candidates: InitialGapCandidate[]): InitialGapCandidate[] {
-  return candidates.filter((candidate) => {
+export function filterForbiddenScope(candidates: InitialGapCandidate[]): {
+  kept: InitialGapCandidate[];
+  filtered: FilteredInitialGapCandidate[];
+} {
+  const kept: InitialGapCandidate[] = [];
+  const filtered: FilteredInitialGapCandidate[] = [];
+
+  for (const candidate of candidates) {
     const combinedText = [
       candidate.field,
       candidate.description,
@@ -174,8 +201,21 @@ export function filterForbiddenScope(candidates: InitialGapCandidate[]): Initial
       ...candidate.warnings,
     ].join(' ');
 
-    return !FORBIDDEN_SCOPE_PATTERNS.some((pattern) => pattern.test(combinedText));
-  });
+    if (FORBIDDEN_SCOPE_PATTERNS.some((pattern) => pattern.test(combinedText))) {
+      filtered.push({
+        module: candidate.module,
+        gap_kind: candidate.gap_kind,
+        origin: candidate.origin,
+        field: candidate.field,
+        reason: 'forbidden_scope',
+      });
+      continue;
+    }
+
+    kept.push(candidate);
+  }
+
+  return { kept, filtered };
 }
 
 function detectMissingFieldGaps(brief: StructuredBrief): InitialGapCandidate[] {

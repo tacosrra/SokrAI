@@ -154,6 +154,30 @@ describe('problem-definition invalid JSON handling', () => {
     expect(failedRun.rows[0]?.model_provider).toBe('ollama');
     expect(failedRun.rows[0]?.model_name).toBe('fake-model');
     expect(typeof failedRun.rows[0]?.model_params_json).toBe('object');
+
+    const auditResponse = await app.inject({
+      method: 'GET',
+      url: `/api/v1/sessions/${sessionId}`,
+    });
+    const publicRuns = auditResponse.json().runs as Array<{
+      request_id: string | null;
+      raw_model_output: string | null;
+      validated_output_json: Record<string, unknown> | null;
+      prompt_name: string;
+      prompt_sha256: string;
+      model_name: string;
+    }>;
+    const publicFailedRun = publicRuns.find((run) => run.request_id === 'req-unrepairable-agent');
+
+    expect(auditResponse.statusCode).toBe(200);
+    expect(publicFailedRun).toMatchObject({
+      raw_model_output: null,
+      validated_output_json: null,
+      prompt_name: 'problem-definition-agent',
+      model_name: 'fake-model',
+    });
+    expect(publicFailedRun?.prompt_sha256).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.stringify(auditResponse.json())).not.toContain('not json');
   });
 
   it('returns a controlled ollama timeout error and blocks the session for inspection', async () => {

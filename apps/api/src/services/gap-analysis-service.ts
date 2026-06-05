@@ -1,6 +1,6 @@
 import { assertAlphaGap } from '../contracts/schema-registry';
 import type { AlphaGap, ProposalSource, StructuredBrief } from '../contracts/types';
-import { detectInitialGapCandidates } from '../domain/gap-analysis';
+import { analyzeInitialGapCandidates } from '../domain/gap-analysis';
 import type { AlphaStore } from '../repositories/alpha-store';
 import type { SqlExecutor } from '../repositories/database';
 import type { Logger } from '../utils/logger';
@@ -20,11 +20,27 @@ export class GapAnalysisService {
   ) {}
 
   async createInitialGaps(executor: SqlExecutor, params: CreateInitialGapsParams): Promise<AlphaGap[]> {
-    const candidates = detectInitialGapCandidates({
+    const analysis = analyzeInitialGapCandidates({
       structuredBrief: params.structuredBrief,
       sources: params.sources,
     });
+    const candidates = analysis.candidates;
     const persistedGaps: AlphaGap[] = [];
+
+    if (analysis.filtered.length > 0) {
+      await this.alphaStore.appendAuditEvent(executor, {
+        proposalId: params.proposalId,
+        sessionId: params.sessionId,
+        eventType: 'gap_candidates_filtered',
+        actorType: 'system',
+        requestId: params.requestId,
+        payloadJson: {
+          filter_reason: 'forbidden_scope',
+          filtered_count: analysis.filtered.length,
+          filtered_candidates: analysis.filtered,
+        },
+      });
+    }
 
     for (const candidate of candidates) {
       const gap = assertAlphaGap(
@@ -66,6 +82,7 @@ export class GapAnalysisService {
       session_id: params.sessionId,
       proposal_id: params.proposalId,
       gap_count: persistedGaps.length,
+      filtered_gap_candidate_count: analysis.filtered.length,
     });
 
     return persistedGaps;

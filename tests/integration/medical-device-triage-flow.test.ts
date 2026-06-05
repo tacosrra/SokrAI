@@ -280,6 +280,116 @@ describe('medical-device triage flow integration', () => {
     expect(Number(persisted.rows[0].review_warnings)).toBe(1);
   });
 
+  it('returns completed status for medical-device triage start recovery without duplicating side effects', async () => {
+    ({ app, database } = await buildTestApp(await createMedicalDeviceApplicableModel()));
+
+    const sessionId = await completeClinicFlow(app, 'req-med-recover-start');
+    const start = await medicalDeviceStartFlow(app, 'req-med-recover-start-run', sessionId);
+    const recoverStatus = await app.inject({
+      method: 'POST',
+      url: '/api/v1/requests/req-med-recover-start-run/recover',
+    });
+    const secondRecoverStatus = await app.inject({
+      method: 'POST',
+      url: '/api/v1/requests/req-med-recover-start-run/recover',
+    });
+    const sideEffects = await database!.query<{
+      request_runs: string;
+      medical_chats: string;
+      medical_turns: string;
+      medical_sections: string;
+    }>(
+      [
+        'SELECT',
+        '  (SELECT COUNT(*) FROM agent_runs WHERE request_id = $2 AND run_purpose = \'medical_device_triage\') AS request_runs,',
+        '  (SELECT COUNT(*) FROM module_chats mc JOIN proposals p ON p.id = mc.proposal_id',
+        '   WHERE p.session_id = $1 AND mc.module = \'medical_device_triage\') AS medical_chats,',
+        '  (SELECT COUNT(*) FROM chat_turns ct JOIN proposals p ON p.id = ct.proposal_id',
+        '   WHERE p.session_id = $1 AND ct.module = \'medical_device_triage\') AS medical_turns,',
+        '  (SELECT COUNT(*) FROM generated_sections gs JOIN proposals p ON p.id = gs.proposal_id',
+        '   WHERE p.session_id = $1 AND gs.section_kind = \'medical_device_triage\') AS medical_sections',
+      ].join(' '),
+      [sessionId, 'req-med-recover-start-run'],
+    );
+
+    expect(start.statusCode).toBe(200);
+    expect(recoverStatus.statusCode).toBe(200);
+    expect(recoverStatus.json()).toMatchObject({
+      request_id: 'req-med-recover-start-run',
+      request_kind: 'medical_device_triage_start',
+      status: 'completed',
+      session_id: sessionId,
+    });
+    expect(secondRecoverStatus.json()).toMatchObject(recoverStatus.json());
+    expect(sideEffects.rows[0]).toMatchObject({
+      request_runs: '1',
+      medical_chats: '1',
+      medical_turns: '1',
+      medical_sections: '0',
+    });
+  });
+
+  it('actively recovers a medical-device triage reply request without duplicating side effects', async () => {
+    ({ app, database } = await buildTestApp(await createMedicalDeviceReplyRecoveryModel()));
+
+    const sessionId = await completeClinicFlow(app, 'req-med-recover-reply');
+    await medicalDeviceStartFlow(app, 'req-med-recover-reply-start', sessionId);
+
+    const firstReply = await medicalDeviceReplyFlow(
+      app,
+      'req-med-recover-reply-run',
+      sessionId,
+      'The intended-use boundary, clinical decision role, required evidence, and competent human review are documented before any pilot use.',
+    );
+    const pendingStatus = await app.inject({
+      method: 'GET',
+      url: '/api/v1/requests/req-med-recover-reply-run',
+    });
+    const recoverStatus = await app.inject({
+      method: 'POST',
+      url: '/api/v1/requests/req-med-recover-reply-run/recover',
+    });
+    const sideEffects = await database!.query<{
+      request_runs: string;
+      answer_sources: string;
+      medical_turns: string;
+      medical_sections: string;
+    }>(
+      [
+        'SELECT',
+        '  (SELECT COUNT(*) FROM agent_runs WHERE request_id = $2 AND run_purpose = \'medical_device_triage\') AS request_runs,',
+        '  (SELECT COUNT(*) FROM proposal_sources ps JOIN proposals p ON p.id = ps.proposal_id',
+        '   WHERE p.session_id = $1 AND ps.source_kind = \'user_answer\' AND ps.metadata_json->>\'request_id\' = $2) AS answer_sources,',
+        '  (SELECT COUNT(*) FROM chat_turns ct JOIN proposals p ON p.id = ct.proposal_id',
+        '   WHERE p.session_id = $1 AND ct.module = \'medical_device_triage\') AS medical_turns,',
+        '  (SELECT COUNT(*) FROM generated_sections gs JOIN proposals p ON p.id = gs.proposal_id',
+        '   WHERE p.session_id = $1 AND gs.section_kind = \'medical_device_triage\') AS medical_sections',
+      ].join(' '),
+      [sessionId, 'req-med-recover-reply-run'],
+    );
+
+    expect(firstReply.statusCode).toBe(500);
+    expect(pendingStatus.json()).toMatchObject({
+      request_id: 'req-med-recover-reply-run',
+      request_kind: 'medical_device_triage_reply',
+      status: 'pending',
+      session_id: sessionId,
+    });
+    expect(recoverStatus.statusCode).toBe(200);
+    expect(recoverStatus.json()).toMatchObject({
+      request_id: 'req-med-recover-reply-run',
+      request_kind: 'medical_device_triage_reply',
+      status: 'completed',
+      session_id: sessionId,
+    });
+    expect(sideEffects.rows[0]).toMatchObject({
+      request_runs: '1',
+      answer_sources: '1',
+      medical_turns: '1',
+      medical_sections: '1',
+    });
+  });
+
   it('persists prerequisite failures for medical-device start request recovery', async () => {
     ({ app, database } = await buildTestApp(await createDataAiPrivacyPrerequisiteMissingModel()));
 
@@ -567,6 +677,30 @@ async function createMedicalDeviceRepairFailureModel() {
     JSON.stringify(continueMedicalTurn),
     'not json',
     'not json',
+  ]);
+}
+
+async function createMedicalDeviceReplyRecoveryModel() {
+  const { prefix, continueMedicalTurn } = await createApplicableMedicalDeviceBaseOutputs();
+  const doneMedicalTurn = {
+    ...continueMedicalTurn,
+    agent_status: 'done',
+    updated_medical_device_triage: {
+      ...continueMedicalTurn.updated_medical_device_triage,
+      intended_use_claims: ['The assistant drafts risk stratification context for competent human review.'],
+      clinical_decision_role: 'The assistant does not decide triage priority and requires reviewer confirmation.',
+      evidence_needed: ['Clarify intended use, validation evidence, and workflow boundaries.'],
+      human_review_plan: 'Clinical governance and regulatory owners review before any pilot use.',
+    },
+    next_question: '',
+    completion_reason: 'medical-device triage gaps sufficiently clarified for human review',
+  };
+
+  return new QueueLanguageModelClient([
+    ...prefix,
+    JSON.stringify(continueMedicalTurn),
+    new Error('transient medical-device reply failure'),
+    JSON.stringify(doneMedicalTurn),
   ]);
 }
 

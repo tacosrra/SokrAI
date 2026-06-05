@@ -97,8 +97,12 @@ Alpha state:
 Composition is exposed through `POST /internal/reports/basic-alpha/compose` for
 n8n/internal orchestration. The public app-facing read model is
 `GET /api/v1/sessions/:sessionId/report`. That route returns only the report
-contract; raw `agent_runs` output remains available in the audit endpoint but is
-not copied into the report payload or UI.
+contract and never copies raw `agent_runs` output into the report payload or UI.
+
+The public session audit route `GET /api/v1/sessions/:sessionId` returns run
+metadata but redacts `runs[].raw_model_output` and
+`runs[].validated_output_json` to `null`. The database may still persist those
+fields for controlled backend inspection and recovery analysis.
 
 Still excluded from `BasicAlphaReport`: `pdf_url`, embedded export fields,
 legal/regulatory or medical-device decisions, RAG citations, scoring, ranking,

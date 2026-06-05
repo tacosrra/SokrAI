@@ -7,12 +7,67 @@ export interface Logger {
 
 type Level = 'debug' | 'info' | 'warn' | 'error';
 
+const REDACTED_VALUE = '[REDACTED]';
+
+const sensitiveKeys = new Set([
+  'answer',
+  'body',
+  'contentbase64',
+  'databaseurl',
+  'documenttext',
+  'inputpayloadjson',
+  'internalsharedsecret',
+  'n8nbasicauthpassword',
+  'n8nencryptionkey',
+  'normalizedtext',
+  'pastedtext',
+  'payload',
+  'prompt',
+  'proposaltext',
+  'rawmodeloutput',
+  'systemprompt',
+  'userprompt',
+  'validatedoutputjson',
+]);
+
 const levelOrder: Record<Level, number> = {
   debug: 10,
   info: 20,
   warn: 30,
   error: 40,
 };
+
+function normalizeKey(key: string): string {
+  return key.replace(/[_-]/g, '').toLowerCase();
+}
+
+function redactLogValue(value: unknown, seen = new WeakSet<object>()): unknown {
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  if (seen.has(value)) {
+    return '[Circular]';
+  }
+
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    const redactedArray = value.map((item) => redactLogValue(item, seen));
+    seen.delete(value);
+    return redactedArray;
+  }
+
+  const redacted = Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) => [
+      key,
+      sensitiveKeys.has(normalizeKey(key)) ? REDACTED_VALUE : redactLogValue(nestedValue, seen),
+    ]),
+  );
+
+  seen.delete(value);
+  return redacted;
+}
 
 export class JsonLogger implements Logger {
   constructor(private readonly minimumLevel: Level = 'info') {}
@@ -42,7 +97,7 @@ export class JsonLogger implements Logger {
       timestamp: new Date().toISOString(),
       level,
       message,
-      ...(data ?? {}),
+      ...((data ? redactLogValue(data) : {}) as Record<string, unknown>),
     };
 
     const line = JSON.stringify(payload);

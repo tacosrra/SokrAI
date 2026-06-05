@@ -59,7 +59,11 @@ describe('basic report flow integration', () => {
 
     expect(persisted.rows[0]).toEqual({ count: '1' });
     expect(auditEvent.rows).toHaveLength(1);
-    expect(audit.json().runs.some((run: { raw_model_output: string | null }) => run.raw_model_output)).toBe(true);
+    expect(
+      audit.json().runs.every((run: { raw_model_output: string | null; validated_output_json: unknown | null }) =>
+        run.raw_model_output === null && run.validated_output_json === null,
+      ),
+    ).toBe(true);
     expect(getReport.statusCode).toBe(200);
     expect(getReport.json().report_id).toBe(report.report_id);
     expect(JSON.stringify(getReport.json())).not.toContain('raw_model_output');

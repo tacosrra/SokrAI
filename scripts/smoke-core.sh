@@ -43,11 +43,129 @@ const data = JSON.parse(fs.readFileSync(file, 'utf8'));
 const ok = Function('data', `return (${expression});`)(data);
 
 if (!ok) {
+  const summary = {
+    top_level_keys: Object.keys(data).slice(0, 24),
+    session_id: data.session_id || data.session?.id,
+    request_id: data.request_id,
+    error_code: data.error_code,
+    safe_message: data.safe_message,
+    status: data.status || data.session?.status || data.report_status,
+    counts: Object.fromEntries(
+      Object.entries(data)
+        .filter(([, value]) => Array.isArray(value))
+        .map(([key, value]) => [key, value.length]),
+    ),
+  };
   console.error(message);
-  console.error(JSON.stringify(data, null, 2));
+  console.error(JSON.stringify(summary, null, 2));
   process.exit(1);
 }
 NODE
+}
+
+json_summary() {
+  local file="$1"
+
+  node - "$file" <<'NODE'
+const fs = require('node:fs');
+const file = process.argv[2];
+
+try {
+  const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const summary = {
+    top_level_keys: Object.keys(data).slice(0, 24),
+    session_id: data.session_id || data.session?.id,
+    request_id: data.request_id,
+    error_code: data.error_code,
+    safe_message: data.safe_message,
+    status: data.status || data.session?.status || data.report_status,
+    counts: Object.fromEntries(
+      Object.entries(data)
+        .filter(([, value]) => Array.isArray(value))
+        .map(([key, value]) => [key, value.length]),
+    ),
+  };
+  process.stdout.write(JSON.stringify(summary));
+} catch {
+  const stats = fs.statSync(file);
+  process.stdout.write(JSON.stringify({ parse_error: 'non_json_response', bytes: stats.size }));
+}
+NODE
+}
+
+local_stack_diagnosis() {
+  local url="$1"
+
+  if [[ "$url" == *":5678"* || "$url" == *"/webhook/"* ]]; then
+    printf 'local_diagnosis=n8n webhook/service unavailable; check docker compose ps, n8n import/publish state, and N8N_BASE_URL=%s' "$N8N_BASE_URL"
+    return
+  fi
+
+  if [[ "$url" == *":3001"* || "$url" == *"/api/"* || "$url" == *"/healthz"* ]]; then
+    printf 'local_diagnosis=API unavailable or rejected request; check pnpm --filter @sokrai/api dev, DATABASE_URL, migrations, and API_BASE_URL=%s' "$API_BASE_URL"
+    return
+  fi
+
+  printf 'local_diagnosis=local service unavailable; check API/n8n/PostgreSQL/Ollama stack and configured base URLs'
+}
+
+curl_failure_summary() {
+  local exit_code="$1"
+  local stderr_file="$2"
+  local output_file="$3"
+  local url="$4"
+
+  node - "$exit_code" "$stderr_file" "$output_file" "$url" "$(local_stack_diagnosis "$url")" <<'NODE'
+const fs = require('node:fs');
+const [exitCode, stderrFile, outputFile, url, diagnosis] = process.argv.slice(2);
+
+const readText = (file) => {
+  try {
+    return fs.readFileSync(file, 'utf8');
+  } catch {
+    return '';
+  }
+};
+
+const stderr = readText(stderrFile).replace(/\s+/g, ' ').trim().slice(0, 300);
+let responseSummary = null;
+
+try {
+  const stats = fs.statSync(outputFile);
+  responseSummary = { bytes: stats.size };
+} catch {
+  responseSummary = { bytes: 0 };
+}
+
+process.stdout.write(JSON.stringify({
+  error_type: 'curl_transport_failure',
+  curl_exit_code: Number(exitCode),
+  curl_error: stderr || null,
+  url_kind: url.includes('/webhook/') || url.includes(':5678') ? 'n8n' : 'api',
+  response: responseSummary,
+  local_diagnosis: diagnosis,
+}));
+NODE
+}
+
+run_curl() {
+  local method="$1"
+  local url="$2"
+  local output="$3"
+  shift 3
+
+  local stderr_file="$TMP_DIR/curl-stderr-$(date +%s%N).log"
+  local status
+  set +e
+  status="$(curl -sS --max-time "$REQUEST_TIMEOUT_SECONDS" -o "$output" -w "%{http_code}" "$@" 2>"$stderr_file")"
+  local curl_exit_code=$?
+  set -e
+
+  if [[ "$curl_exit_code" -ne 0 ]]; then
+    fail "$method $url transport failed: $(curl_failure_summary "$curl_exit_code" "$stderr_file" "$output" "$url")"
+  fi
+
+  RUN_CURL_STATUS="$status"
 }
 
 json_value() {
@@ -82,22 +200,20 @@ http_json() {
 
   local status
   if [[ -n "$payload" ]]; then
-    status="$(
-      curl -sS --max-time "$REQUEST_TIMEOUT_SECONDS" -o "$output" -w "%{http_code}" \
-        -X "$method" "$url" \
+    run_curl "$method" "$url" "$output" \
+      -X "$method" "$url" \
         -H 'content-type: application/json' \
         "${extra_args[@]}" \
         --data-binary "@$payload"
-    )"
+    status="$RUN_CURL_STATUS"
   else
-    status="$(
-      curl -sS --max-time "$REQUEST_TIMEOUT_SECONDS" -o "$output" -w "%{http_code}" \
-        -X "$method" "$url" \
-        "${extra_args[@]}"
-    )"
+    run_curl "$method" "$url" "$output" \
+      -X "$method" "$url" \
+      "${extra_args[@]}"
+    status="$RUN_CURL_STATUS"
   fi
 
-  [[ "$status" =~ ^2[0-9][0-9]$ ]] || fail "$method $url returned HTTP $status: $(cat "$output")"
+  [[ "$status" =~ ^2[0-9][0-9]$ ]] || fail "$method $url returned HTTP $status: $(json_summary "$output"); $(local_stack_diagnosis "$url")"
 }
 
 build_start_payload() {

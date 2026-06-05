@@ -821,7 +821,7 @@ export class SessionStore {
       ),
       generated_sections: generatedSections.rows.map(mapGeneratedSection),
       turns: turns.rows,
-      runs: runs.rows,
+      runs: runs.rows.map(redactPublicAgentRun),
       snapshots: snapshots.rows,
       events: buildAuditTimelineEvents(sessionEvents.rows, alphaEvents.rows),
     };
@@ -1278,6 +1278,14 @@ function toProposalSource(record: ProposalSourceRecord): ProposalSource {
     span: record.span_json ?? undefined,
     created_at: record.created_at,
     metadata: record.metadata_json,
+  };
+}
+
+function redactPublicAgentRun(record: AgentRunRecord): AgentRunRecord {
+  return {
+    ...record,
+    raw_model_output: null,
+    validated_output_json: null,
   };
 }
 
