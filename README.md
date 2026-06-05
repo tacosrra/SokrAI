@@ -427,6 +427,7 @@ No cambies `N8N_ENCRYPTION_KEY` una vez que `n8n` haya inicializado su volumen p
 
 - `GET /api/v1/sessions/:sessionId`
 - `GET /api/v1/sessions/:sessionId/report`
+- `GET /api/v1/sessions/:sessionId/report.pdf`
 - `GET /api/v1/requests/:requestId`
 - `POST /api/v1/requests/:requestId/recover`
 - `GET /healthz`
@@ -463,6 +464,7 @@ El flujo normal Alpha es:
 6. responder con `solution_reply_v1` hasta `agent_status = "done"`
 7. componer el informe con `POST /internal/reports/basic-alpha/compose`
 8. leerlo con `GET /api/v1/sessions/:sessionId/report`
+9. descargar el PDF con `GET /api/v1/sessions/:sessionId/report.pdf`
 
 La extension Clinic Pilot, despues de cerrar la solucion, es:
 
@@ -512,8 +514,19 @@ referencias de auditoria y advertencias fijas. La ruta publica
 `BasicAlphaReport`; no expone `raw_model_output`, prompts, parametros de modelo
 ni payloads crudos de los `agent_runs`.
 
+Cuando el reporte ya esta compuesto, la UI puede descargar un PDF local desde
+`GET /api/v1/sessions/:sessionId/report.pdf`. La API genera el archivo con
+PDFKit desde datos estructurados persistidos, devuelve `application/pdf` y
+cabeceras `X-Sokrai-Export-Id`, `X-Sokrai-Report-Sha256` y
+`X-Sokrai-Pdf-Sha256`, y persiste un evento `basic_report_pdf_exported` en
+`audit_events.payload_json`. El PDF incluye identificador/titulo, versiones,
+fecha, secciones actuales, gaps abiertos, fuentes internas, referencias de
+auditoria, advertencias y metadata de exportacion. No es dictamen, aprobacion,
+rechazo, ranking ni opinion legal/regulatoria/clinica, y no pasa por n8n ni por
+servicios remotos.
+
 Siguen fuera de alcance en esta PR: plan de negocio, costes, dictamen
-legal/regulatorio, clasificacion definitiva medical-device, PDF export, RAG,
+legal/regulatorio, clasificacion definitiva medical-device, RAG,
 scoring y aprobacion/rechazo.
 
 ## Tests
@@ -527,9 +540,16 @@ pnpm test:contracts
 pnpm test:unit
 pnpm test:web
 TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pnpm test:integration
+pnpm test:unit -- --run tests/unit/pdf-export-service.test.ts
+pnpm test:integration -- --run tests/integration/basic-report-pdf-export.test.ts
+pnpm --filter @sokrai/web test -- src/lib/api.test.ts
 TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pnpm test:smoke
 TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pnpm verify
 ```
+
+Los argumentos de archivo en los comandos API son pistas de revision para
+localizar el caso cubierto; los scripts actuales ejecutan los directorios de
+suite configurados.
 
 `tests/helpers/test-environment.ts` usa `localhost:5433` por defecto para alinearse con Docker Compose. Puedes seguir sobreescribiendo `TEST_DATABASE_URL` si tu Postgres de pruebas vive en otro puerto.
 

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  downloadBasicAlphaReportPdf,
   fetchBasicAlphaReport,
   recoverRequestExecution,
   replyDataAiPrivacy,
@@ -650,6 +651,110 @@ describe('requestJson transport options', () => {
     expect(url).toBe('/api/v1/sessions/session-1/report');
     expect(init.method).toBe('GET');
     expect(result.report_id).toBe('report-1');
+  });
+
+  it('downloads a Basic Alpha report PDF with filename and export metadata', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(new Blob(['%PDF-1.7'], { type: 'application/pdf' }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': 'attachment; filename="sokrai-report-triage-report-1.pdf"',
+          'X-Sokrai-Export-Id': 'export-1',
+          'X-Sokrai-Pdf-Sha256': 'pdf-hash',
+          'X-Sokrai-Report-Sha256': 'report-hash',
+        },
+      }),
+    );
+    stubGlobal('fetch', fetchMock);
+
+    const result = await downloadBasicAlphaReportPdf('session-1');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toBe('/api/v1/sessions/session-1/report.pdf');
+    expect(init.method).toBe('GET');
+    expect(result.blob.type).toBe('application/pdf');
+    expect(result.fileName).toBe('sokrai-report-triage-report-1.pdf');
+    expect(result.exportId).toBe('export-1');
+    expect(result.pdfSha256).toBe('pdf-hash');
+    expect(result.reportSha256).toBe('report-hash');
+  });
+
+  it('maps PDF download JSON errors to ApiError', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error_code: 'report_not_found',
+          safe_message: 'The requested Alpha report does not exist',
+          request_id: 'req-1',
+          retryable: false,
+        }),
+        {
+          status: 404,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        },
+      ),
+    );
+    stubGlobal('fetch', fetchMock);
+
+    await expect(downloadBasicAlphaReportPdf('session-1')).rejects.toMatchObject({
+      errorCode: 'report_not_found',
+      statusCode: 404,
+      requestId: 'req-1',
+    });
+  });
+
+  it('rejects HTML responses for PDF downloads as proxy errors', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response('<!doctype html><html><body>Vite fallback</body></html>', {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/html',
+        },
+      }),
+    );
+    stubGlobal('fetch', fetchMock);
+
+    await expect(downloadBasicAlphaReportPdf('session-1')).rejects.toMatchObject({
+      errorCode: 'unexpected_html_response',
+      statusCode: 502,
+    });
+  });
+
+  it('rejects successful non-PDF responses for PDF downloads', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }),
+    );
+    stubGlobal('fetch', fetchMock);
+
+    await expect(downloadBasicAlphaReportPdf('session-1')).rejects.toMatchObject({
+      errorCode: 'invalid_response_contract',
+      statusCode: 502,
+    });
+  });
+
+  it('rejects binary content that is not advertised as a PDF download', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(new Blob(['not a pdf'], { type: 'application/octet-stream' }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/octet-stream',
+        },
+      }),
+    );
+    stubGlobal('fetch', fetchMock);
+
+    await expect(downloadBasicAlphaReportPdf('session-1')).rejects.toMatchObject({
+      errorCode: 'invalid_response_contract',
+      statusCode: 502,
+    });
   });
 
   it('maps invalid report responses to invalid_response_contract', async () => {

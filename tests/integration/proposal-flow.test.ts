@@ -85,7 +85,15 @@ describe('proposal flow integration', () => {
       model_name: string;
       model_params_json: Record<string, unknown>;
     }>(
-      'SELECT run_purpose, prompt_version, model_provider, model_name, model_params_json FROM agent_runs ORDER BY started_at ASC',
+      [
+        'SELECT run_purpose, prompt_version, model_provider, model_name, model_params_json',
+        'FROM agent_runs',
+        'ORDER BY',
+        "  CASE run_purpose WHEN 'brief_extraction' THEN 0 ELSE 1 END ASC,",
+        '  turn_seq ASC NULLS FIRST,',
+        '  attempt_no ASC,',
+        '  id ASC',
+      ].join(' '),
     );
     const snapshots = await app.services.database.query<{ count: string }>(
       'SELECT COUNT(*)::text AS count FROM session_snapshots',

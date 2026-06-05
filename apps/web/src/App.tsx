@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import type { BasicAlphaReport, ProposalStartRequest, RecentSession, SessionAuditView } from './domain/contracts';
 import {
   ApiError,
+  downloadBasicAlphaReportPdf,
   fetchBasicAlphaReport,
   fetchRequestExecution,
   recoverRequestExecution,
@@ -18,6 +19,7 @@ import {
   startSolution,
   startSession,
 } from './lib/api';
+import { saveBlobDownload } from './lib/download';
 import { mapApiError } from './lib/feedback';
 import { deriveSessionPresentation } from './lib/session-view';
 import { readLastSessionId, readRecentSessions, persistRecentSession } from './lib/storage';
@@ -286,6 +288,7 @@ export function App() {
   const [isSubmittingStart, setIsSubmittingStart] = useState(false);
   const [isLoadingSession, setIsLoadingSession] = useState(false);
   const [isReplying, setIsReplying] = useState(false);
+  const [isDownloadingReportPdf, setIsDownloadingReportPdf] = useState(false);
   const [banner, setBanner] = useState<BannerState | null>(null);
 
   useEffect(() => {
@@ -365,6 +368,28 @@ export function App() {
       }
 
       throw error;
+    }
+  }
+
+  async function handleDownloadReportPdf(sessionId: string): Promise<void> {
+    setIsDownloadingReportPdf(true);
+
+    try {
+      const result = await downloadBasicAlphaReportPdf(sessionId);
+
+      saveBlobDownload(result.blob, result.fileName);
+
+      setBanner({
+        tone: 'success',
+        text: `PDF preparado. Export ID: ${result.exportId ?? 'sin cabecera'}.`,
+      });
+    } catch (error) {
+      setBanner({
+        tone: 'error',
+        text: mapApiError(error),
+      });
+    } finally {
+      setIsDownloadingReportPdf(false);
     }
   }
 
@@ -1305,7 +1330,9 @@ export function App() {
               audit={activeAudit}
               report={activeReport}
               isReplying={isReplying}
+              isDownloadingReportPdf={isDownloadingReportPdf}
               onReply={handleReply}
+              onDownloadReportPdf={handleDownloadReportPdf}
               onSolutionReply={handleSolutionReply}
               onDataAiPrivacyReply={handleDataAiPrivacyReply}
               onMedicalDeviceTriageReply={handleMedicalDeviceTriageReply}

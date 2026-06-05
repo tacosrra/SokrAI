@@ -44,13 +44,20 @@ La rama actual contiene:
 - `infra/n8n/workflows`: workflows exportados.
 - `prompts/v1`: prompts versionados.
 - `tests`: contratos, unidad, integracion, smoke y frontend.
+- Exportacion PDF local del reporte estructurado mediante
+  `GET /api/v1/sessions/:sessionId/report.pdf`.
+
+El export PDF se genera en API con PDFKit desde datos persistidos y validados,
+devuelve `application/pdf`, publica cabeceras `X-Sokrai-Export-Id`,
+`X-Sokrai-Report-Sha256` y `X-Sokrai-Pdf-Sha256`, y registra
+`basic_report_pdf_exported` en `audit_events`. No usa servicio remoto, no anade
+workflow n8n binario y no guarda `pdf_url` en `BasicAlphaReport`.
 
 No contiene actualmente:
 
 - RAG en la rama principal.
 - pgvector.
 - Legal/regulatorio productivo.
-- Exportacion PDF.
 - Auth de usuarios.
 - Proveedor IA remoto.
 

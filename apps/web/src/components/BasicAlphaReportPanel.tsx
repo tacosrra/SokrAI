@@ -4,6 +4,8 @@ import { StatusBadge } from './StatusBadge';
 
 interface BasicAlphaReportPanelProps {
   report: BasicAlphaReport;
+  isDownloadingPdf: boolean;
+  onDownloadPdf: () => Promise<void>;
 }
 
 function FieldValue({ label, value }: { label: string; value: string }) {
@@ -51,7 +53,11 @@ function SourceList({ sources }: { sources: ProposalSource[] }) {
   );
 }
 
-export function BasicAlphaReportPanel({ report }: BasicAlphaReportPanelProps) {
+export function BasicAlphaReportPanel({
+  report,
+  isDownloadingPdf,
+  onDownloadPdf,
+}: BasicAlphaReportPanelProps) {
   const presentation = deriveReportPresentation(report);
 
   return (
@@ -65,10 +71,21 @@ export function BasicAlphaReportPanel({ report }: BasicAlphaReportPanelProps) {
           </p>
         </div>
 
-        <div className="basic-report__meta">
-          <StatusBadge label={presentation.status} tone={report.report_status === 'ready' ? 'success' : 'warning'} />
-          <span>{presentation.schemaVersion}</span>
-          <span>{presentation.generatedAt}</span>
+        <div className="basic-report__header-actions">
+          <div className="basic-report__meta">
+            <StatusBadge label={presentation.status} tone={report.report_status === 'ready' ? 'success' : 'warning'} />
+            <span>{presentation.schemaVersion}</span>
+            <span>{presentation.generatedAt}</span>
+          </div>
+
+          <button
+            className="button button--secondary basic-report__download"
+            type="button"
+            onClick={() => void onDownloadPdf()}
+            disabled={isDownloadingPdf}
+          >
+            {isDownloadingPdf ? 'Descargando...' : 'Download PDF'}
+          </button>
         </div>
       </header>
 

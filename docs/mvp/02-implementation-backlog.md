@@ -398,6 +398,7 @@ No incluye:
 Objetivo:
 
 - Exportar PDF desde el reporte estructurado.
+- Descarga local desde `GET /api/v1/sessions/:sessionId/report.pdf`.
 
 Incluye:
 
@@ -406,11 +407,14 @@ Incluye:
 - Fuentes internas.
 - Advertencias.
 - Metadata/hash/evento de exportacion.
+- Evento `basic_report_pdf_exported` en `audit_events`.
 
 No incluye:
 
 - PDF desde HTML improvisado sin estructura.
 - Raw model output.
+- Servicio remoto de PDF.
+- Workflow n8n binario nuevo.
 
 ## 18. PR 13: Hardening demo local Clinic
 

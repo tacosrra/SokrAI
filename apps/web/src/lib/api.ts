@@ -91,6 +91,14 @@ export class ApiError extends Error {
   }
 }
 
+export interface BasicAlphaReportPdfDownload {
+  blob: Blob;
+  fileName: string;
+  exportId?: string;
+  pdfSha256?: string;
+  reportSha256?: string;
+}
+
 async function requestJson<T>(params: {
   url: string;
   method?: 'GET' | 'POST';
@@ -175,6 +183,91 @@ async function requestJson<T>(params: {
       503,
       'network_error',
       true,
+    );
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
+async function requestBlob(params: {
+  url: string;
+  timeoutMs: number;
+}): Promise<{
+  blob: Blob;
+  headers: Headers;
+}> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), params.timeoutMs);
+
+  try {
+    const response = await fetch(params.url, {
+      method: 'GET',
+      signal: controller.signal,
+    });
+    const contentType = response.headers.get('content-type') ?? '';
+
+    if (!response.ok) {
+      const body = contentType.includes('application/json')
+        ? ((await response.json()) as unknown)
+        : ((await response.text()) as unknown);
+
+      throw toApiError(response.status, body);
+    }
+
+    if (contentType.includes('text/html')) {
+      const body = await response.text();
+
+      if (isHtmlDocument(body)) {
+        throw new ApiError(
+          'El proxy devolvió HTML en lugar del PDF esperado.',
+          502,
+          'unexpected_html_response',
+          false,
+        );
+      }
+    }
+
+    if (!contentType.includes('application/pdf')) {
+      throw new ApiError(
+        'Los servicios locales respondieron con un payload que no cumple el contrato esperado.',
+        502,
+        'invalid_response_contract',
+        false,
+      );
+    }
+
+    return {
+      blob: await response.blob(),
+      headers: response.headers,
+    };
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new ApiError(
+        'La solicitud ha superado el tiempo de espera configurado.',
+        408,
+        'request_timeout',
+        true,
+      );
+    }
+
+    if (error instanceof TypeError) {
+      throw new ApiError(
+        'No se pudo contactar con los servicios locales. Revisa API, n8n y el proxy del frontend.',
+        503,
+        'network_error',
+        true,
+      );
+    }
+
+    throw new ApiError(
+      'Los servicios locales respondieron con un payload que no cumple el contrato esperado.',
+      502,
+      'invalid_response_contract',
+      false,
     );
   } finally {
     window.clearTimeout(timeoutId);
@@ -397,6 +490,22 @@ export async function fetchBasicAlphaReport(sessionId: string): Promise<BasicAlp
   });
 }
 
+export async function downloadBasicAlphaReportPdf(sessionId: string): Promise<BasicAlphaReportPdfDownload> {
+  const result = await requestBlob({
+    url: joinUrl(API_BASE_URL, `/api/v1/sessions/${encodeURIComponent(sessionId)}/report.pdf`),
+    timeoutMs: SESSION_AUDIT_TIMEOUT_MS,
+  });
+
+  return {
+    blob: result.blob,
+    fileName: parseContentDispositionFileName(result.headers.get('content-disposition')) ??
+      `sokrai-report-${sessionId}.pdf`,
+    exportId: result.headers.get('x-sokrai-export-id') ?? undefined,
+    pdfSha256: result.headers.get('x-sokrai-pdf-sha256') ?? undefined,
+    reportSha256: result.headers.get('x-sokrai-report-sha256') ?? undefined,
+  };
+}
+
 export async function fetchRequestExecution(requestId: string): Promise<RequestExecutionResponse> {
   return requestJson({
     url: joinUrl(API_BASE_URL, `/api/v1/requests/${encodeURIComponent(requestId)}`),
@@ -406,6 +515,26 @@ export async function fetchRequestExecution(requestId: string): Promise<RequestE
     timeoutMs: REQUEST_STATUS_TIMEOUT_MS,
     parse: parseRequestExecutionResponse,
   });
+}
+
+function parseContentDispositionFileName(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(value);
+
+  if (encoded?.[1]) {
+    try {
+      return decodeURIComponent(encoded[1].trim().replace(/^"|"$/g, ''));
+    } catch {
+      return encoded[1].trim().replace(/^"|"$/g, '');
+    }
+  }
+
+  const plain = /filename="?([^";]+)"?/i.exec(value);
+
+  return plain?.[1]?.trim() || null;
 }
 
 export async function recoverRequestExecution(requestId: string): Promise<RequestExecutionResponse> {
