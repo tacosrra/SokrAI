@@ -33,6 +33,7 @@ import { MedicalDeviceTriageService } from './services/medical-device-triage-ser
 import { ProblemDefinitionService } from './services/problem-definition-service';
 import { ProposalReplyService } from './services/proposal-reply-service';
 import { ProposalStartService } from './services/proposal-start-service';
+import { PdfExportService } from './services/pdf-export-service';
 import { ResourcesPilotViabilityService } from './services/resources-pilot-viability-service';
 import { SolutionDefinitionService } from './services/solution-definition-service';
 import { SolutionReplyService } from './services/solution-reply-service';
@@ -56,6 +57,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const llmOrchestrator = new LlmOrchestrator(config, aiProvider);
   const gapAnalysisService = new GapAnalysisService(logger, alphaStore);
   const basicReportService = new BasicReportService(logger, alphaStore);
+  const pdfExportService = new PdfExportService(logger, alphaStore, basicReportService);
   const proposalStartService = new ProposalStartService(
     config,
     logger,
@@ -116,6 +118,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     llmOrchestrator,
     gapAnalysisService,
     basicReportService,
+    pdfExportService,
     proposalStartService,
     proposalReplyService,
     problemDefinitionService,
@@ -193,6 +196,26 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     );
 
     return reply.send(report);
+  });
+
+  app.get('/api/v1/sessions/:sessionId/report.pdf', async (request, reply) => {
+    const params = request.params as { sessionId: string };
+    const exportResult = await assertBasicAlphaReportPdfExportResponse(
+      () => pdfExportService.exportForSession({
+        sessionId: params.sessionId,
+        requestId: getRequestId(request),
+      }),
+      params.sessionId,
+    );
+
+    reply
+      .header('Content-Type', exportResult.contentType)
+      .header('Content-Disposition', `attachment; filename="${exportResult.fileName}"`)
+      .header('X-Sokrai-Export-Id', exportResult.metadata.export_id)
+      .header('X-Sokrai-Report-Sha256', exportResult.metadata.report_payload_sha256)
+      .header('X-Sokrai-Pdf-Sha256', exportResult.metadata.pdf_sha256);
+
+    return reply.send(exportResult.pdf);
   });
 
   app.get('/api/v1/requests/:requestId', async (request, reply) => {
@@ -788,8 +811,25 @@ async function assertBasicAlphaReportResponse(
   loadReport: () => Promise<unknown>,
   sessionId: string,
 ) {
+  return mapInvalidBasicAlphaReportResponse(
+    async () => assertBasicAlphaReport(await loadReport()),
+    sessionId,
+  );
+}
+
+async function assertBasicAlphaReportPdfExportResponse<T>(
+  loadExport: () => Promise<T>,
+  sessionId: string,
+): Promise<T> {
+  return mapInvalidBasicAlphaReportResponse(loadExport, sessionId);
+}
+
+async function mapInvalidBasicAlphaReportResponse<T>(
+  loadValue: () => Promise<T>,
+  sessionId: string,
+): Promise<T> {
   try {
-    return assertBasicAlphaReport(await loadReport());
+    return await loadValue();
   } catch (error) {
     if (error instanceof AppError && error.errorCode === 'invalid_basic_alpha_report') {
       throw new AppError(

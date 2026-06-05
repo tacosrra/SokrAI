@@ -9,7 +9,9 @@ interface SessionWorkspaceProps {
   audit: SessionAuditView;
   report: BasicAlphaReport | null;
   isReplying: boolean;
+  isDownloadingReportPdf: boolean;
   onReply: (answer: string) => Promise<void>;
+  onDownloadReportPdf: (sessionId: string) => Promise<void>;
   onSolutionReply: (answer: string) => Promise<void>;
   onDataAiPrivacyReply: (answer: string) => Promise<void>;
   onMedicalDeviceTriageReply: (answer: string) => Promise<void>;
@@ -25,7 +27,9 @@ export function SessionWorkspace({
   audit,
   report,
   isReplying,
+  isDownloadingReportPdf,
   onReply,
+  onDownloadReportPdf,
   onSolutionReply,
   onDataAiPrivacyReply,
   onMedicalDeviceTriageReply,
@@ -329,7 +333,11 @@ export function SessionWorkspace({
       ) : null}
 
       {report ? (
-        <BasicAlphaReportPanel report={report} />
+        <BasicAlphaReportPanel
+          report={report}
+          isDownloadingPdf={isDownloadingReportPdf}
+          onDownloadPdf={() => onDownloadReportPdf(audit.session.id)}
+        />
       ) : presentation.latestProblemSection && presentation.latestSolutionSection ? (
         <section className="question-callout question-callout--muted">
           <span className="question-callout__label">Informe Alpha</span>

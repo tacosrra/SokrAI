@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import type { BasicAlphaReport, ProposalStartRequest, RecentSession, SessionAuditView } from './domain/contracts';
 import {
   ApiError,
+  downloadBasicAlphaReportPdf,
   fetchBasicAlphaReport,
   fetchRequestExecution,
   recoverRequestExecution,
@@ -286,6 +287,7 @@ export function App() {
   const [isSubmittingStart, setIsSubmittingStart] = useState(false);
   const [isLoadingSession, setIsLoadingSession] = useState(false);
   const [isReplying, setIsReplying] = useState(false);
+  const [isDownloadingReportPdf, setIsDownloadingReportPdf] = useState(false);
   const [banner, setBanner] = useState<BannerState | null>(null);
 
   useEffect(() => {
@@ -365,6 +367,35 @@ export function App() {
       }
 
       throw error;
+    }
+  }
+
+  async function handleDownloadReportPdf(sessionId: string): Promise<void> {
+    setIsDownloadingReportPdf(true);
+
+    try {
+      const result = await downloadBasicAlphaReportPdf(sessionId);
+      const objectUrl = URL.createObjectURL(result.blob);
+      const anchor = document.createElement('a');
+
+      anchor.href = objectUrl;
+      anchor.download = result.fileName;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+
+      setBanner({
+        tone: 'success',
+        text: `PDF exportado. Export ID: ${result.exportId ?? 'sin cabecera'}.`,
+      });
+    } catch (error) {
+      setBanner({
+        tone: 'error',
+        text: mapApiError(error),
+      });
+    } finally {
+      setIsDownloadingReportPdf(false);
     }
   }
 
@@ -1305,7 +1336,9 @@ export function App() {
               audit={activeAudit}
               report={activeReport}
               isReplying={isReplying}
+              isDownloadingReportPdf={isDownloadingReportPdf}
               onReply={handleReply}
+              onDownloadReportPdf={handleDownloadReportPdf}
               onSolutionReply={handleSolutionReply}
               onDataAiPrivacyReply={handleDataAiPrivacyReply}
               onMedicalDeviceTriageReply={handleMedicalDeviceTriageReply}

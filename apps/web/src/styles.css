@@ -1535,7 +1535,8 @@ a {
 
 .basic-report__header,
 .basic-report__section-heading,
-.basic-report__meta {
+.basic-report__meta,
+.basic-report__header-actions {
   display: flex;
   gap: 12px;
 }
@@ -1566,6 +1567,18 @@ a {
   min-width: 220px;
   font-size: 0.82rem;
   color: var(--muted-strong);
+}
+
+.basic-report__header-actions {
+  align-items: flex-end;
+  flex-direction: column;
+}
+
+.basic-report__download {
+  min-height: 38px;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
 }
 
 .basic-report__summary,
@@ -1858,7 +1871,8 @@ a {
   }
 
   .basic-report__header,
-  .basic-report__meta {
+  .basic-report__meta,
+  .basic-report__header-actions {
     flex-direction: column;
     align-items: stretch;
   }

@@ -8,9 +8,11 @@ import type { DataAiPrivacyService } from '../services/data-ai-privacy-service';
 import type { GapAnalysisService } from '../services/gap-analysis-service';
 import type { LlmOrchestrator } from '../services/llm-orchestrator';
 import type { MedicalDeviceTriageService } from '../services/medical-device-triage-service';
+import type { PdfExportService } from '../services/pdf-export-service';
 import type { ProblemDefinitionService } from '../services/problem-definition-service';
 import type { ProposalReplyService } from '../services/proposal-reply-service';
 import type { ProposalStartService } from '../services/proposal-start-service';
+import type { ResourcesPilotViabilityService } from '../services/resources-pilot-viability-service';
 import type { SolutionDefinitionService } from '../services/solution-definition-service';
 import type { SolutionReplyService } from '../services/solution-reply-service';
 import type { Logger } from '../utils/logger';
@@ -27,6 +29,7 @@ declare module 'fastify' {
       llmOrchestrator: LlmOrchestrator;
       gapAnalysisService: GapAnalysisService;
       basicReportService: BasicReportService;
+      pdfExportService: PdfExportService;
       proposalStartService: ProposalStartService;
       proposalReplyService: ProposalReplyService;
       problemDefinitionService: ProblemDefinitionService;
@@ -34,6 +37,7 @@ declare module 'fastify' {
       solutionDefinitionService: SolutionDefinitionService;
       dataAiPrivacyService: DataAiPrivacyService;
       medicalDeviceTriageService: MedicalDeviceTriageService;
+      resourcesPilotViabilityService: ResourcesPilotViabilityService;
     };
   }
 }
