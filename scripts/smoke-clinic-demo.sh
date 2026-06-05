@@ -22,6 +22,13 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || fail "missing required command: $1"
 }
 
+require_positive_integer() {
+  local name="$1"
+  local value="$2"
+
+  [[ "$value" =~ ^[1-9][0-9]*$ ]] || fail "$name must be a positive integer, got '$value'"
+}
+
 log_step() {
   echo "[smoke-clinic-demo] $*"
 }
@@ -66,6 +73,81 @@ try {
   process.stdout.write(JSON.stringify({ parse_error: 'non_json_response', bytes: stats.size }));
 }
 NODE
+}
+
+local_stack_diagnosis() {
+  local url="$1"
+
+  if [[ "$url" == *":5678"* || "$url" == *"/webhook/"* ]]; then
+    printf 'local_diagnosis=n8n webhook/service unavailable; check docker compose ps, workflow import/publish state, and N8N_BASE_URL=%s' "$N8N_BASE_URL"
+    return
+  fi
+
+  if [[ "$url" == *":3001"* || "$url" == *"/api/"* || "$url" == *"/healthz"* ]]; then
+    printf 'local_diagnosis=API unavailable or rejected request; check pnpm --filter @sokrai/api dev, DATABASE_URL, migrations, Ollama reachability, and API_BASE_URL=%s' "$API_BASE_URL"
+    return
+  fi
+
+  printf 'local_diagnosis=local service unavailable; check API/n8n/PostgreSQL/Ollama stack and configured base URLs'
+}
+
+curl_failure_summary() {
+  local exit_code="$1"
+  local stderr_file="$2"
+  local output_file="$3"
+  local url="$4"
+
+  node - "$exit_code" "$stderr_file" "$output_file" "$url" "$(local_stack_diagnosis "$url")" <<'NODE'
+const fs = require('node:fs');
+const [exitCode, stderrFile, outputFile, url, diagnosis] = process.argv.slice(2);
+
+const readText = (file) => {
+  try {
+    return fs.readFileSync(file, 'utf8');
+  } catch {
+    return '';
+  }
+};
+
+const stderr = readText(stderrFile).replace(/\s+/g, ' ').trim().slice(0, 300);
+let responseSummary = null;
+
+try {
+  const stats = fs.statSync(outputFile);
+  responseSummary = { bytes: stats.size };
+} catch {
+  responseSummary = { bytes: 0 };
+}
+
+process.stdout.write(JSON.stringify({
+  error_type: 'curl_transport_failure',
+  curl_exit_code: Number(exitCode),
+  curl_error: stderr || null,
+  url_kind: url.includes('/webhook/') || url.includes(':5678') ? 'n8n' : 'api',
+  response: responseSummary,
+  local_diagnosis: diagnosis,
+}));
+NODE
+}
+
+run_curl() {
+  local method="$1"
+  local url="$2"
+  local output="$3"
+  shift 3
+
+  local stderr_file="$TMP_DIR/curl-stderr-$(date +%s%N).log"
+  local status
+  set +e
+  status="$(curl -sS --max-time "$REQUEST_TIMEOUT_SECONDS" -o "$output" -w "%{http_code}" "$@" 2>"$stderr_file")"
+  local curl_exit_code=$?
+  set -e
+
+  if [[ "$curl_exit_code" -ne 0 ]]; then
+    fail "$method $url transport failed: $(curl_failure_summary "$curl_exit_code" "$stderr_file" "$output" "$url")"
+  fi
+
+  RUN_CURL_STATUS="$status"
 }
 
 json_assert() {
@@ -142,22 +224,20 @@ http_json() {
 
   local status
   if [[ -n "$payload" ]]; then
-    status="$(
-      curl -sS --max-time "$REQUEST_TIMEOUT_SECONDS" -o "$output" -w "%{http_code}" \
-        -X "$method" "$url" \
+    run_curl "$method" "$url" "$output" \
+      -X "$method" "$url" \
         -H 'content-type: application/json' \
         "${extra_args[@]}" \
         --data-binary "@$payload"
-    )"
+    status="$RUN_CURL_STATUS"
   else
-    status="$(
-      curl -sS --max-time "$REQUEST_TIMEOUT_SECONDS" -o "$output" -w "%{http_code}" \
-        -X "$method" "$url" \
-        "${extra_args[@]}"
-    )"
+    run_curl "$method" "$url" "$output" \
+      -X "$method" "$url" \
+      "${extra_args[@]}"
+    status="$RUN_CURL_STATUS"
   fi
 
-  [[ "$status" =~ ^2[0-9][0-9]$ ]] || fail "$method $url returned HTTP $status: $(json_summary "$output")"
+  [[ "$status" =~ ^2[0-9][0-9]$ ]] || fail "$method $url returned HTTP $status: $(json_summary "$output"); $(local_stack_diagnosis "$url")"
 }
 
 build_start_payload() {
@@ -250,11 +330,16 @@ reply_until_done() {
   local answers=("$@")
   local current_response="$start_response"
   local status
+  local turns=0
 
   status="$(json_value "$current_response" 'data.agent_status')"
 
   for answer in "${answers[@]}"; do
     if [[ "$status" == "done" || "$status" == "blocked" ]]; then
+      break
+    fi
+
+    if ((turns >= MAX_CLINIC_TURNS)); then
       break
     fi
 
@@ -267,11 +352,12 @@ reply_until_done() {
     json_assert "$response" 'data.session_id && ["continue", "done", "blocked"].includes(data.agent_status)' "$label reply response has invalid contract"
     current_response="$response"
     status="$(json_value "$current_response" 'data.agent_status')"
+    turns=$((turns + 1))
     log_step "$label status=$status"
   done
 
   if [[ "$status" != "done" ]]; then
-    fail "$label did not reach done within $MAX_CLINIC_TURNS turns: $(json_summary "$current_response")"
+    fail "$label did not reach done within $MAX_CLINIC_TURNS turns (executed $turns): $(json_summary "$current_response")"
   fi
 }
 
@@ -287,6 +373,7 @@ assert_audit_redacted() {
 
 require_command curl
 require_command node
+require_positive_integer MAX_CLINIC_TURNS "$MAX_CLINIC_TURNS"
 
 health_response="$TMP_DIR/health.json"
 log_step "Checking API health"
@@ -392,11 +479,10 @@ json_assert "$report_get_response" 'typeof data.report_id === "string" && data.p
 
 pdf_headers="$TMP_DIR/report-pdf.headers"
 pdf_body="$TMP_DIR/report.pdf"
-pdf_status="$(
-  curl -sS --max-time "$REQUEST_TIMEOUT_SECONDS" -D "$pdf_headers" -o "$pdf_body" -w "%{http_code}" \
-    "$API_BASE_URL/api/v1/sessions/$session_id/report.pdf"
-)"
-[[ "$pdf_status" =~ ^2[0-9][0-9]$ ]] || fail "PDF GET returned HTTP $pdf_status"
+pdf_url="$API_BASE_URL/api/v1/sessions/$session_id/report.pdf"
+run_curl "GET" "$pdf_url" "$pdf_body" -D "$pdf_headers" "$pdf_url"
+pdf_status="$RUN_CURL_STATUS"
+[[ "$pdf_status" =~ ^2[0-9][0-9]$ ]] || fail "GET $pdf_url returned HTTP $pdf_status: $(json_summary "$pdf_body"); $(local_stack_diagnosis "$pdf_url")"
 grep -qi '^content-type: application/pdf' "$pdf_headers" || fail "PDF response missing application/pdf content type"
 head -c 4 "$pdf_body" | grep -q '%PDF' || fail "PDF body missing PDF header"
 

@@ -2,6 +2,7 @@ import pdf from 'pdf-parse';
 
 import { AppError } from '../utils/errors';
 import { sha256Buffer } from '../utils/hash';
+import type { Logger } from '../utils/logger';
 
 export interface PdfExtractionResult {
   text: string;
@@ -19,6 +20,12 @@ interface PdfParseMetadata {
 type PdfParser = typeof pdf;
 
 const BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
+const NOOP_LOGGER: Logger = {
+  debug: () => undefined,
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 
 export function decodePdfPayload(contentBase64: string): Buffer {
   const normalized = contentBase64.trim();
@@ -42,7 +49,10 @@ export function decodePdfPayload(contentBase64: string): Buffer {
 }
 
 export class PdfExtractionService {
-  constructor(private readonly parser: PdfParser = pdf) {}
+  constructor(
+    private readonly parser: PdfParser = pdf,
+    private readonly logger: Logger = NOOP_LOGGER,
+  ) {}
 
   async extractDocument(fileName: string, contentBase64: string): Promise<PdfExtractionResult> {
     const normalizedFileName = fileName.trim();
@@ -82,6 +92,13 @@ export class PdfExtractionService {
         throw error;
       }
 
+      this.logger.warn('pdf_parser_failed', {
+        pdf_sha256: sha256Buffer(buffer),
+        byte_length: buffer.length,
+        parser_error_type: error instanceof Error ? error.name : typeof error,
+        parser_error_message: sanitizeParserErrorMessage(error),
+      });
+
       throw new AppError(400, 'pdf_extraction_failed', 'The PDF could not be parsed. v1 supports text-based PDFs only.', false, undefined, {
         cause: error instanceof Error ? error.message : 'unknown',
       });
@@ -92,4 +109,9 @@ export class PdfExtractionService {
     const result = await this.extractDocument(fileName, contentBase64);
     return result.text;
   }
+}
+
+function sanitizeParserErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : 'unknown';
+  return message.replace(/\s+/g, ' ').trim().slice(0, 180);
 }

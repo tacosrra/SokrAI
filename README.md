@@ -9,6 +9,7 @@ Guia detallada de arranque y prueba:
 - [docs/INICIALIZACION_V1.md](docs/INICIALIZACION_V1.md)
 - [docs/manual-testing/mvp-alpha-local-demo-guide.md](docs/manual-testing/mvp-alpha-local-demo-guide.md) para la demo manual end-to-end del MVP Alpha, Clinic Pilot y el Basic Alpha Report.
 - [docs/manual-testing/clinic-local-demo-hardening.md](docs/manual-testing/clinic-local-demo-hardening.md) para la ruta controlada de demo local Clinic, secretos, retencion, redaccion y reset.
+- [docs/manual-testing/clinic-local-demo-full-guide.md](docs/manual-testing/clinic-local-demo-full-guide.md) para preparar, ejecutar y aceptar manualmente toda la demo local Clinic implementada.
 
 ## Alcance de esta v1
 
@@ -593,7 +594,7 @@ bash scripts/smoke-core.sh
 bash scripts/smoke-clinic-demo.sh
 ```
 
-`smoke-core.sh` usa solo payloads ficticios de `examples/`, valida `healthz`, start/reply via webhooks de `n8n`, auditoria de sesion, estado por `request_id` y recuperacion activa de una solicitud parcialmente persistida. `smoke-clinic-demo.sh` recorre problema, solucion, informe/PDF, datos/IA/privacidad, medical-device triage y recursos/piloto/viabilidad con respuestas ficticias y bounded retries. Ningun script valida texto exacto del modelo; ambos imprimen ids, estados y conteos, no cuerpos completos.
+`smoke-core.sh` usa solo payloads ficticios de `examples/`, valida `healthz`, start/reply via webhooks de `n8n`, auditoria de sesion, estado por `request_id` y recuperacion activa de una solicitud parcialmente persistida. `smoke-clinic-demo.sh` recorre problema, solucion, informe/PDF, datos/IA/privacidad, medical-device triage y recursos/piloto/viabilidad con respuestas ficticias, turnos acotados y diagnosticos seguros. Ningun script valida texto exacto del modelo; ambos imprimen ids, estados y conteos, no cuerpos completos.
 
 Para reset local, detén el stack antes de borrar datos:
 

@@ -85,10 +85,25 @@ describe('initial Alpha gap analysis', () => {
       events: Array<{ event_type: string; payload_json: Record<string, unknown> }>;
     };
     const gapEvents = auditBody.events.filter((event) => event.event_type === 'gap_detected');
+    const filteredEvent = auditBody.events.find((event) => event.event_type === 'gap_candidates_filtered');
 
     expect(audit.statusCode).toBe(200);
     expect(auditBody.gaps).toEqual(expect.arrayContaining([expect.objectContaining({ gap_id: evidenceGap?.gap_id })]));
     expect(gapEvents).toHaveLength(gaps.length);
+    expect(filteredEvent?.payload_json).toMatchObject({
+      filter_reason: 'forbidden_scope',
+      filtered_count: 1,
+      filtered_candidates: [
+        {
+          module: 'problem',
+          gap_kind: 'missing_information',
+          origin: 'structured_brief_missing_information',
+          field: 'missing_information',
+          reason: 'forbidden_scope',
+        },
+      ],
+    });
+    expect(JSON.stringify(filteredEvent?.payload_json)).not.toContain('medical device classification');
     expect(gapEvents).toEqual(
       expect.arrayContaining(
         gaps.map((gap) =>

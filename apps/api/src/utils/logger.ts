@@ -42,10 +42,6 @@ function normalizeKey(key: string): string {
 }
 
 function redactLogValue(value: unknown, seen = new WeakSet<object>()): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => redactLogValue(item, seen));
-  }
-
   if (!value || typeof value !== 'object') {
     return value;
   }
@@ -55,6 +51,12 @@ function redactLogValue(value: unknown, seen = new WeakSet<object>()): unknown {
   }
 
   seen.add(value);
+
+  if (Array.isArray(value)) {
+    const redactedArray = value.map((item) => redactLogValue(item, seen));
+    seen.delete(value);
+    return redactedArray;
+  }
 
   const redacted = Object.fromEntries(
     Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) => [

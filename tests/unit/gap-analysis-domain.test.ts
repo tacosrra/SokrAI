@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ProposalSource, StructuredBrief } from '../../apps/api/src/contracts/types.ts';
-import { detectInitialGapCandidates } from '../../apps/api/src/domain/gap-analysis.ts';
+import {
+  analyzeInitialGapCandidates,
+  detectInitialGapCandidates,
+} from '../../apps/api/src/domain/gap-analysis.ts';
 
 const baseBrief: StructuredBrief = {
   project_title: 'Triage IA',
@@ -83,7 +86,7 @@ describe('gap analysis domain rules', () => {
   });
 
   it('filters forbidden Alpha scope items instead of persisting them as gaps', () => {
-    const gaps = detectInitialGapCandidates({
+    const analysis = analyzeInitialGapCandidates({
       structuredBrief: {
         ...baseBrief,
         evidence_of_problem: 'Registro interno de esperas',
@@ -91,10 +94,23 @@ describe('gap analysis domain rules', () => {
         ambiguities: ['regulatory clinic pathway is unclear'],
       },
     });
+    const gaps = analysis.candidates;
 
     expect(gaps).not.toEqual(
       expect.arrayContaining([
         expect.objectContaining({ description: expect.stringMatching(/medical device|legal|regulatory|budget/i) }),
+      ]),
+    );
+    expect(analysis.filtered).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          field: 'missing_information',
+          reason: 'forbidden_scope',
+        }),
+        expect.objectContaining({
+          field: 'ambiguities',
+          reason: 'forbidden_scope',
+        }),
       ]),
     );
   });

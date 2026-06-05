@@ -88,4 +88,90 @@ describe('JsonLogger redaction', () => {
     expect(JSON.stringify(payload)).not.toContain('system text');
     expect(JSON.stringify(payload)).not.toContain('unsafe');
   });
+
+  it('logs circular objects without throwing while preserving safe metadata', () => {
+    const errorMock = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const logger = new JsonLogger('debug');
+    const circular: Record<string, unknown> = {
+      request_id: 'req-circular-object',
+      payload: 'secret payload',
+    };
+    circular.self = circular;
+
+    expect(() =>
+      logger.error('original_error', {
+        error_code: 'pdf_extraction_failed',
+        circular,
+      }),
+    ).not.toThrow();
+
+    const payload = parseLoggedPayload(errorMock);
+
+    expect(payload).toMatchObject({
+      level: 'error',
+      message: 'original_error',
+      error_code: 'pdf_extraction_failed',
+      circular: {
+        request_id: 'req-circular-object',
+        payload: '[REDACTED]',
+        self: '[Circular]',
+      },
+    });
+    expect(JSON.stringify(payload)).not.toContain('secret payload');
+  });
+
+  it('logs arrays containing themselves without recursing forever', () => {
+    const logMock = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const logger = new JsonLogger('debug');
+    const circularArray: unknown[] = [{ request_id: 'req-array' }];
+    circularArray.push(circularArray);
+
+    expect(() =>
+      logger.info('array_cycle', {
+        items: circularArray,
+      }),
+    ).not.toThrow();
+
+    const payload = parseLoggedPayload(logMock);
+
+    expect(payload).toMatchObject({
+      level: 'info',
+      message: 'array_cycle',
+      items: [{ request_id: 'req-array' }, '[Circular]'],
+    });
+  });
+
+  it('logs nested circular arrays and objects with sensitive values redacted', () => {
+    const logMock = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const logger = new JsonLogger('debug');
+    const nestedArray: unknown[] = [];
+    const nestedObject: Record<string, unknown> = {
+      answer: 'free text patient-like answer',
+      nestedArray,
+    };
+    nestedArray.push(nestedObject);
+    nestedArray.push(nestedArray);
+
+    expect(() =>
+      logger.info('nested_cycle', {
+        root: {
+          nestedObject,
+        },
+      }),
+    ).not.toThrow();
+
+    const payload = parseLoggedPayload(logMock);
+
+    expect(payload).toMatchObject({
+      level: 'info',
+      message: 'nested_cycle',
+      root: {
+        nestedObject: {
+          answer: '[REDACTED]',
+          nestedArray: ['[Circular]', '[Circular]'],
+        },
+      },
+    });
+    expect(JSON.stringify(payload)).not.toContain('patient-like');
+  });
 });

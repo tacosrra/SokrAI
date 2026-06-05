@@ -71,15 +71,27 @@ describe('PdfExtractionService', () => {
 
   it('wraps parser failures as controlled extraction errors', async () => {
     const parser = vi.fn().mockRejectedValue(new Error('parser exploded'));
+    const logger = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
 
     await expect(
-      new PdfExtractionService(parser).extractDocument(
+      new PdfExtractionService(parser, logger).extractDocument(
         'broken.pdf',
         Buffer.from('%PDF-broken').toString('base64'),
       ),
     ).rejects.toMatchObject({
       errorCode: 'pdf_extraction_failed',
       statusCode: 400,
+    });
+    expect(logger.warn).toHaveBeenCalledWith('pdf_parser_failed', {
+      pdf_sha256: sha256Buffer(Buffer.from('%PDF-broken')),
+      byte_length: Buffer.from('%PDF-broken').length,
+      parser_error_type: 'Error',
+      parser_error_message: 'parser exploded',
     });
   });
 });

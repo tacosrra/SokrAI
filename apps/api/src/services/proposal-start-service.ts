@@ -24,7 +24,7 @@ import { PdfExtractionService } from './pdf-extraction-service';
 import type { StartContextCommand, StartContextResponse } from './service-types';
 
 export class ProposalStartService {
-  private readonly pdfExtractionService = new PdfExtractionService();
+  private readonly pdfExtractionService: PdfExtractionService;
 
   constructor(
     private readonly config: AppConfig,
@@ -33,7 +33,9 @@ export class ProposalStartService {
     private readonly llmOrchestrator: LlmOrchestrator,
     private readonly alphaStore: AlphaStore,
     private readonly gapAnalysisService: GapAnalysisService,
-  ) {}
+  ) {
+    this.pdfExtractionService = new PdfExtractionService(undefined, logger);
+  }
 
   async execute(command: StartContextCommand): Promise<StartContextResponse> {
     const payload = assertProposalStartRequest(command.payload);
