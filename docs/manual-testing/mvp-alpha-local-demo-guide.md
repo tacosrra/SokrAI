@@ -352,13 +352,16 @@ The current workflow exports are all inactive in JSON, so importing is not enoug
 - `infra/n8n/workflows/medical_device_triage_start_v1.json`
 - `infra/n8n/workflows/medical_device_triage_reply_v1.json`
 - `infra/n8n/workflows/agent_medical_device_triage_v1.json`
+- `infra/n8n/workflows/resources_pilot_viability_start_v1.json`
+- `infra/n8n/workflows/resources_pilot_viability_reply_v1.json`
+- `infra/n8n/workflows/agent_resources_pilot_viability_v1.json`
 
 ### CLI import and publish
 
 Run this after `n8n` is up:
 
 ```bash
-for workflow in proposal_start_v1.json proposal_reply_v1.json agent_problem_definition_v1.json solution_start_v1.json solution_reply_v1.json agent_solution_definition_v1.json data_ai_privacy_start_v1.json data_ai_privacy_reply_v1.json agent_data_ai_privacy_gap_v1.json medical_device_triage_start_v1.json medical_device_triage_reply_v1.json agent_medical_device_triage_v1.json; do
+for workflow in proposal_start_v1.json proposal_reply_v1.json agent_problem_definition_v1.json solution_start_v1.json solution_reply_v1.json agent_solution_definition_v1.json data_ai_privacy_start_v1.json data_ai_privacy_reply_v1.json agent_data_ai_privacy_gap_v1.json medical_device_triage_start_v1.json medical_device_triage_reply_v1.json agent_medical_device_triage_v1.json resources_pilot_viability_start_v1.json resources_pilot_viability_reply_v1.json agent_resources_pilot_viability_v1.json; do
   docker compose exec -T -u node n8n n8n import:workflow --input="/workflows/${workflow}"
 done
 ```
@@ -366,7 +369,7 @@ done
 Publish the imported workflows by their committed workflow IDs:
 
 ```bash
-for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json infra/n8n/workflows/data_ai_privacy_start_v1.json infra/n8n/workflows/data_ai_privacy_reply_v1.json infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json infra/n8n/workflows/medical_device_triage_start_v1.json infra/n8n/workflows/medical_device_triage_reply_v1.json infra/n8n/workflows/agent_medical_device_triage_v1.json; do
+for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json infra/n8n/workflows/data_ai_privacy_start_v1.json infra/n8n/workflows/data_ai_privacy_reply_v1.json infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json infra/n8n/workflows/medical_device_triage_start_v1.json infra/n8n/workflows/medical_device_triage_reply_v1.json infra/n8n/workflows/agent_medical_device_triage_v1.json infra/n8n/workflows/resources_pilot_viability_start_v1.json infra/n8n/workflows/resources_pilot_viability_reply_v1.json infra/n8n/workflows/agent_resources_pilot_viability_v1.json; do
   workflow_id="$(awk -F'"' '/^[[:space:]]*"id":[[:space:]]*"/ { print $4; exit }' "$workflow_path")"
   docker compose exec -T -u node n8n n8n publish:workflow --id="$workflow_id"
 done
@@ -388,12 +391,18 @@ Public entry webhooks:
 - `POST http://localhost:5678/webhook/solution-reply-v1`
 - `POST http://localhost:5678/webhook/data-ai-privacy-start-v1`
 - `POST http://localhost:5678/webhook/data-ai-privacy-reply-v1`
+- `POST http://localhost:5678/webhook/medical-device-triage-start-v1`
+- `POST http://localhost:5678/webhook/medical-device-triage-reply-v1`
+- `POST http://localhost:5678/webhook/resources-pilot-viability-start-v1`
+- `POST http://localhost:5678/webhook/resources-pilot-viability-reply-v1`
 
 Internal workflow webhooks also exist, but the current public workflows call the API internal agent routes directly:
 
 - `POST http://localhost:5678/webhook/agent-problem-definition-v1`
 - `POST http://localhost:5678/webhook/agent-solution-definition-v1`
 - `POST http://localhost:5678/webhook/agent-data-ai-privacy-gap-v1`
+- `POST http://localhost:5678/webhook/agent-medical-device-triage-v1`
+- `POST http://localhost:5678/webhook/agent-resources-pilot-viability-v1`
 
 The practical webhook verification is the stack smoke script after API, n8n, Postgres, and Ollama are running:
 
@@ -1205,13 +1214,13 @@ INTERNAL_SHARED_SECRET="$(awk -F= '$1=="INTERNAL_SHARED_SECRET"{print substr($0,
 ```
 
 ```bash
-for workflow in proposal_start_v1.json proposal_reply_v1.json agent_problem_definition_v1.json solution_start_v1.json solution_reply_v1.json agent_solution_definition_v1.json data_ai_privacy_start_v1.json data_ai_privacy_reply_v1.json agent_data_ai_privacy_gap_v1.json medical_device_triage_start_v1.json medical_device_triage_reply_v1.json agent_medical_device_triage_v1.json; do
+for workflow in proposal_start_v1.json proposal_reply_v1.json agent_problem_definition_v1.json solution_start_v1.json solution_reply_v1.json agent_solution_definition_v1.json data_ai_privacy_start_v1.json data_ai_privacy_reply_v1.json agent_data_ai_privacy_gap_v1.json medical_device_triage_start_v1.json medical_device_triage_reply_v1.json agent_medical_device_triage_v1.json resources_pilot_viability_start_v1.json resources_pilot_viability_reply_v1.json agent_resources_pilot_viability_v1.json; do
   docker compose exec -T -u node n8n n8n import:workflow --input="/workflows/${workflow}"
 done
 ```
 
 ```bash
-for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json infra/n8n/workflows/data_ai_privacy_start_v1.json infra/n8n/workflows/data_ai_privacy_reply_v1.json infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json infra/n8n/workflows/medical_device_triage_start_v1.json infra/n8n/workflows/medical_device_triage_reply_v1.json infra/n8n/workflows/agent_medical_device_triage_v1.json; do
+for workflow_path in infra/n8n/workflows/proposal_start_v1.json infra/n8n/workflows/proposal_reply_v1.json infra/n8n/workflows/agent_problem_definition_v1.json infra/n8n/workflows/solution_start_v1.json infra/n8n/workflows/solution_reply_v1.json infra/n8n/workflows/agent_solution_definition_v1.json infra/n8n/workflows/data_ai_privacy_start_v1.json infra/n8n/workflows/data_ai_privacy_reply_v1.json infra/n8n/workflows/agent_data_ai_privacy_gap_v1.json infra/n8n/workflows/medical_device_triage_start_v1.json infra/n8n/workflows/medical_device_triage_reply_v1.json infra/n8n/workflows/agent_medical_device_triage_v1.json infra/n8n/workflows/resources_pilot_viability_start_v1.json infra/n8n/workflows/resources_pilot_viability_reply_v1.json infra/n8n/workflows/agent_resources_pilot_viability_v1.json; do
   workflow_id="$(awk -F'"' '/^[[:space:]]*"id":[[:space:]]*"/ { print $4; exit }' "$workflow_path")"
   docker compose exec -T -u node n8n n8n publish:workflow --id="$workflow_id"
 done

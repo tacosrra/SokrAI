@@ -597,6 +597,32 @@ describe('contract schemas', () => {
     expect(powershellScript).not.toContain('n8n update:workflow --all --active=true');
   });
 
+  it('keeps Clinic smoke scripts fake-data only and redaction-focused', async () => {
+    const bashScriptPath = fromRepoRoot('scripts', 'smoke-clinic-demo.sh');
+    const powershellScriptPath = fromRepoRoot('scripts', 'smoke-clinic-demo.ps1');
+    const [bashScript, powershellScript] = await Promise.all([
+      readFile(bashScriptPath, 'utf8'),
+      readFile(powershellScriptPath, 'utf8'),
+    ]);
+
+    for (const script of [bashScript, powershellScript]) {
+      expect(script).toContain('fake');
+      expect(script).toContain('raw_model_output');
+      expect(script).toContain('validated_output_json');
+      expect(script).toContain('content_base64');
+      expect(script).toContain('INTERNAL_SHARED_SECRET');
+      expect(script).toContain('report.pdf');
+    }
+
+    expect(bashScript).toContain('MAX_CLINIC_TURNS');
+    expect(bashScript).toContain('json_summary');
+    expect(bashScript).not.toContain('cat "$output"');
+
+    expect(powershellScript).toContain('$MaxClinicTurns');
+    expect(powershellScript).toContain('ConvertTo-SafeSummary');
+    expect(powershellScript).not.toContain('ConvertTo-Json -Depth 100');
+  });
+
   it('requires completed request execution statuses in core smoke scripts', async () => {
     const bashScriptPath = fromRepoRoot('scripts', 'smoke-core.sh');
     const powershellScriptPath = fromRepoRoot('scripts', 'smoke-core.ps1');
