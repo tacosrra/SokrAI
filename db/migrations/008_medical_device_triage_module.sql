@@ -3,28 +3,28 @@ ALTER TABLE module_chats
 
 ALTER TABLE module_chats
     ADD CONSTRAINT module_chats_module_check
-    CHECK (module IN ('problem', 'solution', 'data_ai_privacy', 'medical_device_triage'));
+    CHECK (module IN ('problem', 'solution', 'data_ai_privacy', 'medical_device_triage', 'resources_pilot_viability'));
 
 ALTER TABLE chat_turns
     DROP CONSTRAINT IF EXISTS chat_turns_module_check;
 
 ALTER TABLE chat_turns
     ADD CONSTRAINT chat_turns_module_check
-    CHECK (module IN ('problem', 'solution', 'data_ai_privacy', 'medical_device_triage'));
+    CHECK (module IN ('problem', 'solution', 'data_ai_privacy', 'medical_device_triage', 'resources_pilot_viability'));
 
 ALTER TABLE alpha_gaps
     DROP CONSTRAINT IF EXISTS alpha_gaps_module_check;
 
 ALTER TABLE alpha_gaps
     ADD CONSTRAINT alpha_gaps_module_check
-    CHECK (module IN ('problem', 'solution', 'data_ai_privacy', 'medical_device_triage'));
+    CHECK (module IN ('problem', 'solution', 'data_ai_privacy', 'medical_device_triage', 'resources_pilot_viability'));
 
 ALTER TABLE generated_sections
     DROP CONSTRAINT IF EXISTS generated_sections_section_kind_check;
 
 ALTER TABLE generated_sections
     ADD CONSTRAINT generated_sections_section_kind_check
-    CHECK (section_kind IN ('problem', 'solution', 'data_ai_privacy', 'medical_device_triage'));
+    CHECK (section_kind IN ('problem', 'solution', 'data_ai_privacy', 'medical_device_triage', 'resources_pilot_viability'));
 
 ALTER TABLE agent_runs
     DROP CONSTRAINT IF EXISTS agent_runs_run_purpose_check;
@@ -38,5 +38,6 @@ ALTER TABLE agent_runs
         'basic_report_compose',
         'data_ai_privacy_gap',
         'medical_device_triage',
+        'resources_pilot_viability',
         'json_repair'
     ));

@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sokrai.local/contracts/schemas/resources-pilot-viability-turn.schema.json",
+  "title": "ResourcesPilotViabilityTurn",
+  "description": "Operational pilot execution readiness inputs. This is not a viability score, approval decision, ranking, or financial model.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "agent_status": {
+      "type": "string",
+      "enum": [
+        "continue",
+        "done",
+        "blocked"
+      ]
+    },
+    "diagnosis": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+        "type": "string"
+      }
+    },
+    "updated_resources_pilot_viability": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "human_resources": {
+          "type": "string"
+        },
+        "technical_resources": {
+          "type": "string"
+        },
+        "pilot_environment": {
+          "type": "string"
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "indicators_metrics": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "operational_risks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "uncertainties": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "human_resources",
+        "technical_resources",
+        "pilot_environment",
+        "dependencies",
+        "indicators_metrics",
+        "constraints",
+        "operational_risks",
+        "assumptions",
+        "uncertainties"
+      ]
+    },
+    "next_question": {
+      "type": "string"
+    },
+    "completion_reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "agent_status",
+    "diagnosis",
+    "updated_resources_pilot_viability",
+    "next_question",
+    "completion_reason"
+  ]
+}

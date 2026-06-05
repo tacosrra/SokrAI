@@ -75,6 +75,7 @@ export interface AgentRunRecord {
     | 'basic_report_compose'
     | 'data_ai_privacy_gap'
     | 'medical_device_triage'
+    | 'resources_pilot_viability'
     | 'json_repair';
   agent_name: string;
   prompt_name: string;
@@ -152,6 +153,8 @@ export interface RequestExecutionLookup {
     | 'data_ai_privacy_reply'
     | 'medical_device_triage_start'
     | 'medical_device_triage_reply'
+    | 'resources_pilot_viability_start'
+    | 'resources_pilot_viability_reply'
     | 'unknown';
   status: 'pending' | 'completed' | 'failed' | 'not_found';
   session_id?: string;
@@ -1034,6 +1037,71 @@ export class SessionStore {
       return toRequestExecutionFromRun(requestId, 'medical_device_triage_start', medicalDeviceTriageRun);
     }
 
+    const resourcesPilotViabilityReplyTurn = await this.findAlphaTurnByAnswerRequestId(
+      requestId,
+      'resources_pilot_viability',
+    );
+
+    if (resourcesPilotViabilityReplyTurn) {
+      const resourcesPilotViabilityRun = await this.findLatestAgentRunStatus(requestId, 'resources_pilot_viability');
+
+      if (resourcesPilotViabilityRun) {
+        return toRequestExecutionFromRun(
+          requestId,
+          'resources_pilot_viability_reply',
+          resourcesPilotViabilityRun,
+        );
+      }
+
+      if (resourcesPilotViabilityReplyTurn.turn_status === 'resolved') {
+        return {
+          request_id: requestId,
+          request_kind: 'resources_pilot_viability_reply',
+          status: 'completed',
+          session_id: resourcesPilotViabilityReplyTurn.proposal_id,
+        };
+      }
+
+      if (resourcesPilotViabilityReplyTurn.turn_status === 'failed') {
+        return {
+          request_id: requestId,
+          request_kind: 'resources_pilot_viability_reply',
+          status: 'failed',
+          session_id: resourcesPilotViabilityReplyTurn.proposal_id,
+          error_code: 'resources_pilot_viability_reply_processing_failed',
+          safe_message: 'The resources pilot viability reply was persisted but the turn failed before completing',
+          retryable: true,
+        };
+      }
+
+      return {
+        request_id: requestId,
+        request_kind: 'resources_pilot_viability_reply',
+        status: 'pending',
+        session_id: resourcesPilotViabilityReplyTurn.proposal_id,
+      };
+    }
+
+    const resourcesPilotViabilityRun = await this.findLatestAgentRunStatus(requestId, 'resources_pilot_viability');
+
+    if (resourcesPilotViabilityRun) {
+      return toRequestExecutionFromRun(requestId, 'resources_pilot_viability_start', resourcesPilotViabilityRun);
+    }
+
+    const resourcesPilotViabilityStart = await this.findAlphaAuditEventRequestSession(
+      requestId,
+      'resources_pilot_viability_start_requested',
+    );
+
+    if (resourcesPilotViabilityStart) {
+      return {
+        request_id: requestId,
+        request_kind: 'resources_pilot_viability_start',
+        status: 'pending',
+        session_id: resourcesPilotViabilityStart.session_id,
+      };
+    }
+
     const solutionDefinitionRun = await this.findLatestAgentRunStatus(requestId, 'solution_definition');
 
     if (solutionDefinitionRun) {
@@ -1067,7 +1135,7 @@ export class SessionStore {
 
   private async findAlphaTurnByAnswerRequestId(
     requestId: string,
-    module: 'problem' | 'solution' | 'data_ai_privacy' | 'medical_device_triage',
+    module: 'problem' | 'solution' | 'data_ai_privacy' | 'medical_device_triage' | 'resources_pilot_viability',
   ): Promise<AlphaChatTurnStatusLookup | null> {
     const result = await this.database.query<AlphaChatTurnStatusLookup>(
       [
@@ -1077,6 +1145,24 @@ export class SessionStore {
         'LIMIT 1',
       ].join(' '),
       [requestId, module],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+  private async findAlphaAuditEventRequestSession(
+    requestId: string,
+    eventType: string,
+  ): Promise<{ session_id: string } | null> {
+    const result = await this.database.query<{ session_id: string }>(
+      [
+        'SELECT session_id',
+        'FROM audit_events',
+        'WHERE request_id = $1 AND event_type = $2 AND session_id IS NOT NULL',
+        'ORDER BY created_at DESC, event_seq DESC',
+        'LIMIT 1',
+      ].join(' '),
+      [requestId, eventType],
     );
 
     return result.rows[0] ?? null;

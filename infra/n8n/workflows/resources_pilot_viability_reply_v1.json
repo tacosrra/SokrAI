@@ -1,0 +1,144 @@
+{
+  "id": "3e3166c0-d746-42e9-9ff5-5bd5fe4f3a66",
+  "name": "resources_pilot_viability_reply_v1",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "resources-pilot-viability-reply-v1",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "4d0dc2b0-5527-45ba-9808-9d0ee6412d37",
+      "name": "Webhook_ResourcesPilotViabilityReply",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        260,
+        300
+      ],
+      "webhookId": "resources-pilot-viability-reply-v1"
+    },
+    {
+      "parameters": {
+        "keepOnlySet": false,
+        "values": {
+          "string": [
+            {
+              "name": "request_id",
+              "value": "={{ $node[\"Webhook_ResourcesPilotViabilityReply\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_ResourcesPilotViabilityReply\"].json.body?.request_id || $execution.id }}"
+            },
+            {
+              "name": "workflow_version",
+              "value": "resources_pilot_viability_reply_v1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9760a0e3-d09e-478f-a53a-2eb417c4ed99",
+      "name": "Set_ReplyPayload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:3001/internal/sessions/resources-pilot-viability-reply",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-internal-shared-secret",
+              "value": "={{ $env.INTERNAL_SHARED_SECRET }}"
+            },
+            {
+              "name": "x-request-id",
+              "value": "={{ $node[\"Webhook_ResourcesPilotViabilityReply\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_ResourcesPilotViabilityReply\"].json.body?.request_id || $execution.id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { request_id: ($node[\"Webhook_ResourcesPilotViabilityReply\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_ResourcesPilotViabilityReply\"].json.body?.request_id || $execution.id), workflow_version: $json.workflow_version, workflow_execution_id: $execution.id, payload: $node[\"Webhook_ResourcesPilotViabilityReply\"].json.body } }}",
+        "options": {
+          "timeout": 450000,
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "5f319bfc-81ca-49b7-982b-ae6177f70f2b",
+      "name": "HTTP_ReplyResourcesPilotViability",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.body ?? $json }}",
+        "options": {
+          "responseCode": "={{ Number($json.statusCode ?? 200) }}"
+        }
+      },
+      "id": "dd79009f-5099-4f43-9625-4835fdc77321",
+      "name": "Respond_Reply",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1080,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook_ResourcesPilotViabilityReply": {
+      "main": [
+        [
+          {
+            "node": "Set_ReplyPayload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set_ReplyPayload": {
+      "main": [
+        [
+          {
+            "node": "HTTP_ReplyResourcesPilotViability",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP_ReplyResourcesPilotViability": {
+      "main": [
+        [
+          {
+            "node": "Respond_Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "resources_pilot_viability_reply_v1"
+}

@@ -20,6 +20,8 @@
         "data_ai_privacy_reply",
         "medical_device_triage_start",
         "medical_device_triage_reply",
+        "resources_pilot_viability_start",
+        "resources_pilot_viability_reply",
         "unknown"
       ]
     },

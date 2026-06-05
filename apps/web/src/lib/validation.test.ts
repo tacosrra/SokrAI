@@ -9,6 +9,8 @@ import {
   parseProposalReplyResponse,
   parseProposalStartResponse,
   parseRequestExecutionResponse,
+  parseResourcesPilotViabilityReplyResponse,
+  parseResourcesPilotViabilityStartResponse,
   parseSessionAuditView,
   parseSolutionReplyResponse,
   parseSolutionStartResponse,
@@ -191,6 +193,18 @@ const validMedicalDeviceTriageState = {
   human_review_plan: 'requires competent human review',
   needs_human_review: true,
   requires_competent_human_review: true,
+};
+
+const validResourcesPilotViabilityState = {
+  human_resources: 'Pilot delivery is owned by one clinical lead and one coordinator.',
+  technical_resources: 'The pilot uses the secure web app and hospital SSO.',
+  pilot_environment: 'The pilot runs in one outpatient intake workflow during weekday hours.',
+  dependencies: ['Hospital SSO access must be ready before launch.'],
+  indicators_metrics: ['Weekly completed intake summaries and correction rate.'],
+  constraints: ['Staff availability limits pilot sessions to weekday mornings.'],
+  operational_risks: ['Late SSO provisioning could delay onboarding.'],
+  assumptions: ['Clinic staff can reserve time for weekly review.'],
+  uncertainties: ['Exact pilot start date remains open.'],
 };
 
 function createAuditView(runs: unknown[] = []) {
@@ -415,6 +429,56 @@ describe('parseMedicalDeviceTriageReplyResponse', () => {
 
     expect(response.agent_status).toBe('done');
     expect(response.updated_medical_device_triage.triage_status).toBe('applicable');
+  });
+});
+
+describe('parseResourcesPilotViabilityResponse', () => {
+  it('accepts PR11 start and reply responses', () => {
+    const start = parseResourcesPilotViabilityStartResponse({
+      body: JSON.stringify({
+        session_id: 'session-1',
+        stage: 'resources_pilot_viability',
+        agent_status: 'continue',
+        updated_resources_pilot_viability: validResourcesPilotViabilityState,
+        diagnosis: ['Falta concretar riesgos operativos.'],
+        next_question: 'What operational risks should be tracked?',
+        completion_reason: '',
+        warnings: ['This section is not a viability score, approval decision, ranking, or financial model.'],
+      }),
+    });
+    const reply = parseResourcesPilotViabilityReplyResponse({
+      session_id: 'session-1',
+      stage: 'resources_pilot_viability',
+      agent_status: 'done',
+      updated_resources_pilot_viability: validResourcesPilotViabilityState,
+      diagnosis: ['Minimum operational inputs are clear.'],
+      next_question: '',
+      completion_reason: 'resources pilot viability inputs sufficiently clarified',
+      warnings: ['This section is not a viability score, approval decision, ranking, or financial model.'],
+    });
+
+    expect(start.stage).toBe('resources_pilot_viability');
+    expect(reply.updated_resources_pilot_viability.operational_risks).toContain(
+      'Late SSO provisioning could delay onboarding.',
+    );
+  });
+
+  it('rejects malformed PR11 state arrays', () => {
+    expect(() =>
+      parseResourcesPilotViabilityStartResponse({
+        session_id: 'session-1',
+        stage: 'resources_pilot_viability',
+        agent_status: 'continue',
+        updated_resources_pilot_viability: {
+          ...validResourcesPilotViabilityState,
+          dependencies: 'SSO access',
+        },
+        diagnosis: [],
+        next_question: 'What dependency is blocking launch?',
+        completion_reason: '',
+        warnings: [],
+      }),
+    ).toThrow(/dependencies/);
   });
 });
 
@@ -875,6 +939,24 @@ describe('parseRequestExecutionResponse', () => {
 
     expect(startResponse.request_kind).toBe('solution_start');
     expect(replyResponse.request_kind).toBe('solution_reply');
+  });
+
+  it('accepts resources pilot viability recovery request kinds', () => {
+    const startResponse = parseRequestExecutionResponse({
+      request_id: 'web-resources-start-1',
+      request_kind: 'resources_pilot_viability_start',
+      status: 'completed',
+      session_id: 'session-1',
+    });
+    const replyResponse = parseRequestExecutionResponse({
+      request_id: 'web-resources-reply-1',
+      request_kind: 'resources_pilot_viability_reply',
+      status: 'pending',
+      session_id: 'session-1',
+    });
+
+    expect(startResponse.request_kind).toBe('resources_pilot_viability_start');
+    expect(replyResponse.request_kind).toBe('resources_pilot_viability_reply');
   });
 
   it('unwraps response envelopes when the recovery endpoint is proxied', () => {

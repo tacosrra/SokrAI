@@ -14,6 +14,11 @@ import type {
   ProposalReplyRequest,
   ProposalReplyResponse,
   ProposalStartRequest,
+  ResourcesPilotViabilityReplyRequest,
+  ResourcesPilotViabilityReplyResponse,
+  ResourcesPilotViabilityStartRequest,
+  ResourcesPilotViabilityStartResponse,
+  ResourcesPilotViabilityState,
   SolutionDefinitionState,
   SolutionReplyRequest,
   SolutionReplyResponse,
@@ -82,6 +87,16 @@ export interface MedicalDeviceTriageReplyContextCommand {
   payload: MedicalDeviceTriageReplyRequest;
 }
 
+export interface ResourcesPilotViabilityStartContextCommand {
+  context: WorkflowContext;
+  payload: ResourcesPilotViabilityStartRequest;
+}
+
+export interface ResourcesPilotViabilityReplyContextCommand {
+  context: WorkflowContext;
+  payload: ResourcesPilotViabilityReplyRequest;
+}
+
 export interface RunProblemDefinitionCommand {
   context: WorkflowContext;
   sessionId: string;
@@ -101,6 +116,12 @@ export interface RunDataAiPrivacyCommand {
 }
 
 export interface RunMedicalDeviceTriageCommand {
+  context: WorkflowContext;
+  sessionId: string;
+  trigger: 'start' | 'reply';
+}
+
+export interface RunResourcesPilotViabilityCommand {
   context: WorkflowContext;
   sessionId: string;
   trigger: 'start' | 'reply';
@@ -153,3 +174,15 @@ export interface MedicalDeviceTriageAgentResponseState {
 }
 
 export type MedicalDeviceTriageStartServiceResponse = MedicalDeviceTriageStartResponse;
+
+export interface ResourcesPilotViabilityRunResponse extends ResourcesPilotViabilityReplyResponse {
+  run_id: string;
+}
+
+export interface ResourcesPilotViabilityAgentResponseState {
+  updatedResourcesPilotViability: ResourcesPilotViabilityState;
+  detectedGaps: string[];
+  response: ResourcesPilotViabilityReplyResponse;
+}
+
+export type ResourcesPilotViabilityStartServiceResponse = ResourcesPilotViabilityStartResponse;

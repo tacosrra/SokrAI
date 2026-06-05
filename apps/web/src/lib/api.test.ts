@@ -5,9 +5,11 @@ import {
   recoverRequestExecution,
   replyDataAiPrivacy,
   replyMedicalDeviceTriage,
+  replyResourcesPilotViability,
   replySolution,
   startDataAiPrivacy,
   startMedicalDeviceTriage,
+  startResourcesPilotViability,
   startSession,
   startSolution,
 } from './api';
@@ -155,6 +157,37 @@ const MEDICAL_DEVICE_TRIAGE_REPLY_RESPONSE = {
   diagnosis: ['Gaps are sufficiently clear for review.'],
   next_question: '',
   completion_reason: 'medical-device triage gaps sufficiently clarified for human review',
+};
+
+const RESOURCES_PILOT_VIABILITY_STATE = {
+  human_resources: 'Pilot delivery is owned by one clinical lead and one coordinator.',
+  technical_resources: 'The pilot uses the secure web app and hospital SSO.',
+  pilot_environment: 'The pilot runs in one outpatient intake workflow during weekday hours.',
+  dependencies: ['Hospital SSO access must be ready before launch.'],
+  indicators_metrics: ['Weekly completed intake summaries and correction rate.'],
+  constraints: ['Staff availability limits pilot sessions to weekday mornings.'],
+  operational_risks: ['Late SSO provisioning could delay onboarding.'],
+  assumptions: ['Clinic staff can reserve time for weekly review.'],
+  uncertainties: ['Exact pilot start date remains open.'],
+};
+
+const RESOURCES_PILOT_VIABILITY_START_RESPONSE = {
+  session_id: 'session-1',
+  stage: 'resources_pilot_viability',
+  agent_status: 'continue',
+  updated_resources_pilot_viability: RESOURCES_PILOT_VIABILITY_STATE,
+  diagnosis: ['Falta concretar riesgos operativos.'],
+  next_question: 'What operational risks should be tracked?',
+  completion_reason: '',
+  warnings: ['This section is not a viability score, approval decision, ranking, or financial model.'],
+};
+
+const RESOURCES_PILOT_VIABILITY_REPLY_RESPONSE = {
+  ...RESOURCES_PILOT_VIABILITY_START_RESPONSE,
+  agent_status: 'done',
+  diagnosis: ['Minimum operational inputs are clear.'],
+  next_question: '',
+  completion_reason: 'resources pilot viability inputs sufficiently clarified',
 };
 
 const BASIC_ALPHA_REPORT_RESPONSE = {
@@ -534,6 +567,70 @@ describe('requestJson transport options', () => {
       answer: 'Clinical governance reviews intended use before pilot use.',
     });
     expect(result).toEqual(MEDICAL_DEVICE_TRIAGE_REPLY_RESPONSE);
+  });
+
+  it('posts resources pilot viability start payloads to the PR11 webhook with request id', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(RESOURCES_PILOT_VIABILITY_START_RESPONSE), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }),
+    );
+    stubGlobal('fetch', fetchMock);
+
+    const result = await startResourcesPilotViability({
+      request_id: 'web-resources-pilot-start-1',
+      session_id: 'session-1',
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toBe('/webhook/resources-pilot-viability-start-v1');
+    expect(init.method).toBe('POST');
+    expect(init.headers).toEqual({
+      'Content-Type': 'application/json',
+      'x-request-id': 'web-resources-pilot-start-1',
+    });
+    expect(JSON.parse(String(init.body))).toEqual({
+      request_id: 'web-resources-pilot-start-1',
+      session_id: 'session-1',
+    });
+    expect(result).toEqual(RESOURCES_PILOT_VIABILITY_START_RESPONSE);
+  });
+
+  it('posts resources pilot viability reply payloads to the PR11 webhook with request id', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(RESOURCES_PILOT_VIABILITY_REPLY_RESPONSE), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }),
+    );
+    stubGlobal('fetch', fetchMock);
+
+    const result = await replyResourcesPilotViability({
+      request_id: 'web-resources-pilot-reply-1',
+      session_id: 'session-1',
+      answer: 'The pilot uses one clinical lead, SSO, weekly metrics, and tracks onboarding delays.',
+    });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toBe('/webhook/resources-pilot-viability-reply-v1');
+    expect(init.method).toBe('POST');
+    expect(init.headers).toEqual({
+      'Content-Type': 'application/json',
+      'x-request-id': 'web-resources-pilot-reply-1',
+    });
+    expect(JSON.parse(String(init.body))).toEqual({
+      request_id: 'web-resources-pilot-reply-1',
+      session_id: 'session-1',
+      answer: 'The pilot uses one clinical lead, SSO, weekly metrics, and tracks onboarding delays.',
+    });
+    expect(result).toEqual(RESOURCES_PILOT_VIABILITY_REPLY_RESPONSE);
   });
 
   it('fetches a Basic Alpha report from the session report endpoint', async () => {

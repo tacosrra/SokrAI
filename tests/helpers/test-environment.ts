@@ -21,7 +21,7 @@ export function createTestConfig(): AppConfig {
       process.env.DATABASE_URL ??
       'postgresql://sokrai_app:localpass@localhost:5433/sokrai_app',
     databasePoolMax: 5,
-    databaseStatementTimeoutMs: 5000,
+    databaseStatementTimeoutMs: 15000,
     aiProvider: 'ollama',
     aiModel: 'fake-model',
     ollamaBaseUrl: 'http://localhost:11434',

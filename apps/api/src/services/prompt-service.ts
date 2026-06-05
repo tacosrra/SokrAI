@@ -17,6 +17,7 @@ const PROMPT_FILES = {
   'solution-definition-agent': 'solution-definition-agent.md',
   'data-ai-privacy-gap-agent': 'data-ai-privacy-gap-agent.md',
   'medical-device-triage-agent': 'medical-device-triage-agent.md',
+  'resources-pilot-viability-agent': 'resources-pilot-viability-agent.md',
 } as const;
 
 export async function loadPrompt(
