@@ -102,8 +102,13 @@ function createClientRequestId(
 
 function canComposeReportFromAudit(audit: SessionAuditView): boolean {
   const presentation = deriveSessionPresentation(audit);
+  const reportPhase = presentation.phaseProgress.steps.find((step) => step.id === 'report');
 
-  return Boolean(presentation.latestProblemSection && presentation.latestSolutionSection);
+  return Boolean(
+    reportPhase &&
+      (reportPhase.status === 'current' || reportPhase.status === 'ready') &&
+      reportPhase.primaryAction === 'prepare_report',
+  );
 }
 
 function isRecoverableWorkflowDeliveryError(error: unknown): error is ApiError {
@@ -290,6 +295,7 @@ function ModeCard({
 export function App() {
   const [activeAudit, setActiveAudit] = useState<SessionAuditView | null>(null);
   const [activeReport, setActiveReport] = useState<BasicAlphaReport | null>(null);
+  const [reportLoadError, setReportLoadError] = useState<string | null>(null);
   const [recentSessions, setRecentSessions] = useState<RecentSession[]>([]);
   const [defaultSessionId, setDefaultSessionId] = useState('');
   const [sessionLookupId, setSessionLookupId] = useState('');
@@ -299,6 +305,7 @@ export function App() {
   const [isReplying, setIsReplying] = useState(false);
   const [isComposingReport, setIsComposingReport] = useState(false);
   const [isDownloadingReportPdf, setIsDownloadingReportPdf] = useState(false);
+  const [lastPdfExportSessionId, setLastPdfExportSessionId] = useState<string | null>(null);
   const [banner, setBanner] = useState<BannerState | null>(null);
 
   useEffect(() => {
@@ -331,6 +338,7 @@ export function App() {
     }
 
     setIsLoadingSession(true);
+    setReportLoadError(null);
 
     try {
       const audit = await fetchSessionAudit(sessionId);
@@ -340,13 +348,25 @@ export function App() {
       setSessionLookupId(audit.session.id);
       writeSessionToUrl(audit.session.id);
 
+      let loadedReportError: string | null = null;
+
       try {
         setActiveReport(await loadReportIfAvailable(audit.session.id, audit));
-      } catch {
-        setActiveReport(null);
+        setReportLoadError(null);
+      } catch (error) {
+        loadedReportError = `Sesión ${audit.session.id} cargada, pero no se pudo recuperar o preparar el informe Alpha: ${mapApiError(error)}`;
+        setActiveReport((currentReport) =>
+          currentReport?.proposal_id === audit.session.id ? currentReport : null
+        );
+        setReportLoadError(loadedReportError);
       }
 
-      if (!options?.suppressSuccessBanner) {
+      if (loadedReportError) {
+        setBanner({
+          tone: 'error',
+          text: loadedReportError,
+        });
+      } else if (!options?.suppressSuccessBanner) {
         setBanner({
           tone: 'success',
           text:
@@ -358,6 +378,7 @@ export function App() {
       return audit;
     } catch (error) {
       setActiveReport(null);
+      setReportLoadError(null);
       setBanner({
         tone: 'error',
         text: mapApiError(error),
@@ -412,14 +433,17 @@ export function App() {
     try {
       const report = await composeBasicAlphaReport(sessionId, createClientRequestId('report-compose'));
       setActiveReport(report);
+      setReportLoadError(null);
       setBanner({
         tone: 'success',
         text: 'Informe Alpha preparado. Ya puedes descargar el PDF.',
       });
     } catch (error) {
+      const message = mapApiError(error);
+      setReportLoadError(message);
       setBanner({
         tone: 'error',
-        text: mapApiError(error),
+        text: message,
       });
     } finally {
       setIsComposingReport(false);
@@ -433,6 +457,7 @@ export function App() {
       const result = await downloadBasicAlphaReportPdf(sessionId);
 
       saveBlobDownload(result.blob, result.fileName);
+      setLastPdfExportSessionId(sessionId);
 
       setBanner({
         tone: 'success',
@@ -1253,6 +1278,8 @@ export function App() {
   function handleStartFreshSession() {
     setActiveAudit(null);
     setActiveReport(null);
+    setReportLoadError(null);
+    setLastPdfExportSessionId(null);
     setBanner(null);
     setDefaultSessionId('');
     setSessionLookupId('');
@@ -1276,9 +1303,19 @@ export function App() {
     await loadSession(trimmedSessionId);
   }
 
-  const presentation = activeAudit ? deriveSessionPresentation(activeAudit) : null;
+  const presentation = activeAudit
+    ? deriveSessionPresentation(activeAudit, {
+      report: activeReport,
+      isDownloadingReportPdf,
+      hasDownloadedReportPdf: lastPdfExportSessionId === activeAudit.session.id,
+    })
+    : null;
 
   if (presentation && activeAudit) {
+    const currentPhase = presentation.phaseProgress.steps.find((step) =>
+      step.id === presentation.phaseProgress.currentPhaseId,
+    ) ?? presentation.phaseProgress.steps[0];
+
     return (
       <div className="app-shell app-shell--workspace">
         <div className="app-shell__ambient" />
@@ -1288,29 +1325,31 @@ export function App() {
         <main className="workspace-shell">
           <aside className="workspace-rail">
             <div className="workspace-rail__brand">
-              <div className="brand-mark">S</div>
+                <div className="brand-mark">S</div>
               <div className="brand-copy">
                 <span className="brand-copy__eyebrow">SokrAI v1</span>
-                <strong>Problem Definition Console</strong>
-                <span className="brand-copy__meta">Inspirado en el shell conversacional de Stitch.</span>
+                <strong>Proposal maturation workspace</strong>
+                <span className="brand-copy__meta">{presentation.phaseProgress.currentPhaseLabel}</span>
               </div>
             </div>
 
             <section className="workspace-rail__section workspace-rail__section--hero">
               <span className="panel__eyebrow">Sesión activa</span>
               <h2>{presentation.projectTitle}</h2>
-              <p>{presentation.progress.description}</p>
+              <p>{currentPhase.lockedReason ?? currentPhase.explanation}</p>
 
               <LocalDemoSafetyNotice compact context="workspace" />
 
               <div className="rail-kpis">
                 <article>
-                  <strong>{presentation.progress.percent}%</strong>
-                  <span>madurez</span>
+                  <strong>{presentation.phaseProgress.percent}%</strong>
+                  <span>fases</span>
                 </article>
                 <article>
-                  <strong>{activeAudit.turns.length}</strong>
-                  <span>turnos</span>
+                  <strong>
+                    {presentation.phaseProgress.completedPhases}/{presentation.phaseProgress.totalApplicablePhases}
+                  </strong>
+                  <span>completas</span>
                 </article>
               </div>
 
@@ -1386,6 +1425,7 @@ export function App() {
             <SessionWorkspace
               audit={activeAudit}
               report={activeReport}
+              reportLoadError={reportLoadError}
               isReplying={isReplying}
               isComposingReport={isComposingReport}
               isDownloadingReportPdf={isDownloadingReportPdf}

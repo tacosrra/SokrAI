@@ -4,11 +4,12 @@ import type { BasicAlphaReport, SessionAuditView } from '../domain/contracts';
 import type { SessionPresentation } from '../lib/session-view';
 import { BasicAlphaReportPanel } from './BasicAlphaReportPanel';
 import { LocalDemoSafetyNotice } from './LocalDemoSafetyNotice';
-import { StatusBadge, agentTone, sessionTone } from './StatusBadge';
+import { StatusBadge, agentTone, phaseTone, sessionTone } from './StatusBadge';
 
 interface SessionWorkspaceProps {
   audit: SessionAuditView;
   report: BasicAlphaReport | null;
+  reportLoadError?: string | null;
   isReplying: boolean;
   isComposingReport: boolean;
   isDownloadingReportPdf: boolean;
@@ -29,6 +30,7 @@ interface SessionWorkspaceProps {
 export function SessionWorkspace({
   audit,
   report,
+  reportLoadError = null,
   isReplying,
   isComposingReport,
   isDownloadingReportPdf,
@@ -47,20 +49,24 @@ export function SessionWorkspace({
 }: SessionWorkspaceProps) {
   const [reply, setReply] = useState('');
   const [feedback, setFeedback] = useState('');
+  const [copyFeedback, setCopyFeedback] = useState('');
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setReply('');
     setFeedback('');
+    setCopyFeedback('');
   }, [presentation.sessionId, presentation.currentQuestion]);
 
   async function handleCopy() {
     try {
       await navigator.clipboard.writeText(presentation.sessionId);
       setCopied(true);
+      setCopyFeedback('');
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
       setCopied(false);
+      setCopyFeedback('No se pudo copiar el Session ID. Selecciónalo manualmente.');
     }
   }
 
@@ -121,31 +127,48 @@ export function SessionWorkspace({
     canDataAiPrivacyReply ||
     canSolutionReply ||
     canProblemReply;
+  const currentPhase = presentation.phaseProgress.steps.find((step) =>
+    step.id === presentation.phaseProgress.currentPhaseId,
+  ) ?? presentation.phaseProgress.steps[0];
+  const reportPhase = presentation.phaseProgress.steps.find((step) => step.id === 'report');
+  const pdfPhase = presentation.phaseProgress.steps.find((step) => step.id === 'pdf_export');
+  const canDownloadPdf = pdfPhase?.primaryAction === 'download_pdf';
   const canStartSolution = Boolean(
     presentation.latestProblemSection &&
       !canSolutionReply &&
       presentation.solutionModuleChat?.chat_status !== 'completed' &&
-      presentation.solutionModuleChat?.chat_status !== 'waiting_for_user',
+      presentation.solutionModuleChat?.chat_status !== 'waiting_for_user' &&
+      currentPhase.primaryAction === 'start_solution',
   );
   const canStartDataAiPrivacy = Boolean(
     presentation.latestSolutionSection &&
       !canDataAiPrivacyReply &&
       presentation.dataAiPrivacyModuleChat?.chat_status !== 'completed' &&
-      presentation.dataAiPrivacyModuleChat?.chat_status !== 'waiting_for_user',
+      presentation.dataAiPrivacyModuleChat?.chat_status !== 'waiting_for_user' &&
+      currentPhase.primaryAction === 'start_data_ai_privacy',
   );
   const canStartMedicalDeviceTriage = Boolean(
     presentation.latestDataAiPrivacySection &&
       !canMedicalDeviceTriageReply &&
       presentation.medicalDeviceTriageModuleChat?.chat_status !== 'completed' &&
-      presentation.medicalDeviceTriageModuleChat?.chat_status !== 'waiting_for_user',
+      presentation.medicalDeviceTriageModuleChat?.chat_status !== 'waiting_for_user' &&
+      currentPhase.primaryAction === 'start_medical_device_triage',
   );
   const canStartResourcesPilotViability = Boolean(
     presentation.latestSolutionSection &&
       !canResourcesPilotViabilityReply &&
       presentation.resourcesPilotViabilityModuleChat?.chat_status !== 'completed' &&
-      presentation.resourcesPilotViabilityModuleChat?.chat_status !== 'waiting_for_user',
+      presentation.resourcesPilotViabilityModuleChat?.chat_status !== 'waiting_for_user' &&
+      currentPhase.primaryAction === 'start_resources_pilot_viability',
   );
-  const canComposeReport = Boolean(!report && presentation.latestProblemSection && presentation.latestSolutionSection);
+  const canComposeReport = Boolean(
+    !report &&
+      reportPhase &&
+      (
+        reportPhase.primaryAction === 'prepare_report' ||
+        reportPhase.primaryAction === 'recover'
+      ),
+  );
   const resolvedTurns = audit.turns.filter((turn) => Boolean(turn.answer_text?.trim())).length;
 
   return (
@@ -172,12 +195,13 @@ export function SessionWorkspace({
           <button className="button button--ghost" type="button" onClick={() => void handleCopy()}>
             {copied ? 'Copiado' : 'Copiar ID'}
           </button>
+          {copyFeedback ? <div className="feedback feedback--error">{copyFeedback}</div> : null}
         </div>
       </header>
 
       <section className="conversation-toolbar">
         <div className="conversation-toolbar__badges">
-          <StatusBadge label={presentation.stage.replace('_', ' ')} tone="neutral" />
+          <StatusBadge label={currentPhase.label} tone={phaseTone(currentPhase.status)} />
           <StatusBadge
             label={presentation.status.replaceAll('_', ' ')}
             tone={sessionTone(presentation.status)}
@@ -194,9 +218,9 @@ export function SessionWorkspace({
             <strong>{resolvedTurns}</strong>
           </article>
           <article className="conversation-toolbar__stat">
-            <span>Categorías</span>
+            <span>Fases</span>
             <strong>
-              {presentation.progress.completedItems}/{presentation.progress.totalItems}
+              {presentation.phaseProgress.completedPhases}/{presentation.phaseProgress.totalApplicablePhases}
             </strong>
           </article>
           <article className="conversation-toolbar__stat">
@@ -210,17 +234,12 @@ export function SessionWorkspace({
 
       <section className="question-callout">
         <span className="question-callout__label">
-          {presentation.currentResourcesPilotViabilityQuestion
-            ? 'Pregunta abierta de recursos/piloto'
-            : presentation.currentMedicalDeviceTriageQuestion
-            ? 'Pregunta abierta de medical-device triage'
-            : presentation.currentDataAiPrivacyQuestion
-            ? 'Pregunta abierta de datos/IA/privacidad'
-            : presentation.currentSolutionQuestion
-              ? 'Pregunta abierta de solución'
-              : 'Pregunta abierta'}
+          {presentation.currentQuestion
+            ? `Pregunta abierta: ${currentPhase.label}`
+            : `Fase actual: ${currentPhase.label}`}
         </span>
         <p>{presentation.currentQuestion || 'La sesión no tiene una pregunta abierta en este momento.'}</p>
+        {currentPhase.lockedReason ? <p>{currentPhase.lockedReason}</p> : null}
       </section>
 
       {presentation.latestProblemSection ? (
@@ -349,13 +368,14 @@ export function SessionWorkspace({
       {report ? (
         <BasicAlphaReportPanel
           report={report}
+          canDownloadPdf={canDownloadPdf}
           isDownloadingPdf={isDownloadingReportPdf}
           onDownloadPdf={() => onDownloadReportPdf(audit.session.id)}
         />
-      ) : presentation.latestProblemSection && presentation.latestSolutionSection ? (
+      ) : reportPhase && reportPhase.status !== 'locked' ? (
         <section className="question-callout question-callout--muted">
           <span className="question-callout__label">Informe Alpha</span>
-          <p>El informe estructurado todavía no está compuesto para esta sesión.</p>
+          <p>{reportLoadError ?? reportPhase.explanation}</p>
 
           {canComposeReport ? (
             <button
@@ -364,7 +384,11 @@ export function SessionWorkspace({
               onClick={() => void onComposeReport(audit.session.id)}
               disabled={isComposingReport}
             >
-              {isComposingReport ? 'Preparando informe…' : 'Preparar informe'}
+              {isComposingReport
+                ? 'Preparando informe…'
+                : reportPhase.primaryAction === 'recover'
+                  ? 'Reintentar informe'
+                  : 'Preparar informe'}
             </button>
           ) : null}
 
@@ -380,8 +404,8 @@ export function SessionWorkspace({
         <article className="message message--system">
           <div className="message__avatar">AI</div>
           <div className="message__bubble">
-            <div className="message__meta">Estado del carril</div>
-            <p>{presentation.progress.description}</p>
+            <div className="message__meta">Estado de fase</div>
+            <p>{currentPhase.lockedReason ?? currentPhase.explanation}</p>
           </div>
         </article>
 
