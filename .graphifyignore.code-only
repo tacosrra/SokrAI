@@ -1,0 +1,84 @@
+# git / hidden tooling
+.git/
+.github/
+.archon/
+.claude/
+.agents/
+.codex/
+
+# dependencies / stores
+node_modules/
+.pnpm-store/
+.cache/
+
+# build/test outputs
+dist/
+build/
+coverage/
+test-results/
+playwright-report/
+apps/api/dist/
+apps/web/dist/
+
+# generated/runtime
+**/generated/
+**/*.generated.*
+*.log
+logs/
+tmp/
+.temp/
+
+# secrets
+.env
+.env.*
+!.env.example
+
+# docs / semantic files for code-only graph
+docs/
+infra/n8n/README.md
+README
+README.*
+AGENTS.md
+CHANGELOG*
+LICENSE*
+**/*.md
+**/*.mdx
+**/*.txt
+**/*.rst
+**/*.adoc
+**/*.pdf
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.webp
+**/*.gif
+**/*.svg
+**/*.docx
+**/*.xlsx
+**/*.pptx
+
+# graphify output
+graphify-out/
+
+# local postgres volume
+postgres_data/
+
+# remaining root docs/config docs
+.env.example
+AGENTS.md
+PLAN.md
+README.md
+infra/n8n/README.md
+
+# prompt/docs-like files
+prompts/
+
+# yaml/html/fixtures treated as semantic docs
+docker-compose.yml
+docker-compose.beta.yml
+pnpm-lock.yaml
+pnpm-workspace.yaml
+apps/web/index.html
+apps/web/dist/
+tests/fixtures/documents/
+tests/fixtures/model-output/

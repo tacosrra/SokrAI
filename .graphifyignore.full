@@ -1,0 +1,43 @@
+# git / hidden tooling
+.git/
+.github/
+.archon/
+.claude/
+.agents/
+.codex/
+
+# dependencies / package stores
+node_modules/
+.pnpm-store/
+.cache/
+
+# build/test outputs
+dist/
+build/
+coverage/
+test-results/
+playwright-report/
+apps/api/dist/
+apps/web/dist/
+
+# generated/runtime
+**/generated/
+**/*.generated.*
+*.log
+logs/
+tmp/
+.temp/
+
+# local database volume
+postgres_data/
+
+# secrets
+.env
+.env.*
+!.env.example
+
+# graphify output
+graphify-out/
+
+# vendor/reference material we do not want in SokrAI graph
+docs/vendor/
