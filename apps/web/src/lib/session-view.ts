@@ -103,7 +103,13 @@ export interface PhaseProgress {
 
 export interface DeriveSessionPresentationOptions {
   report?: BasicAlphaReport | null;
+  /** True while the frontend is waiting for the local PDF download request to finish. */
   isDownloadingReportPdf?: boolean;
+  /**
+   * Frontend-only, in-memory signal set after a successful PDF download in the
+   * current browser session. It is not backend-persisted export state and must
+   * not be treated as a source of truth after reload/resume.
+   */
   hasDownloadedReportPdf?: boolean;
   isRecovering?: boolean;
   lastKnownPhaseId?: PhaseId | null;
@@ -486,6 +492,7 @@ function stepIsComplete(step: PhaseStep): boolean {
 }
 
 function hasExplicitMedicalDeviceNotApplicable(audit: SessionAuditView): boolean {
+  // Only explicit audited run/event payloads may skip triage; absence of data is not a not-applicable fact.
   const valuesToInspect: unknown[] = [
     ...audit.runs
       .filter((run) => run.run_purpose === 'medical_device_triage' && run.status === 'completed')
@@ -746,6 +753,8 @@ function derivePhaseProgress(input: {
     return moduleSteps.get(phaseId)!;
   });
 
+  // Product precedence: deepest active module question wins, then ready phases,
+  // then PDF/export after report completion; recovery keeps the last known phase.
   const activeQuestionPhaseId =
     input.currentResourcesPilotViabilityQuestion ? 'resources_pilot_viability'
       : input.currentMedicalDeviceTriageQuestion ? 'medical_device_triage'

@@ -7,6 +7,7 @@ import type { AgentRun, BasicAlphaReport, SessionAuditView } from '../domain/con
 import { deriveSessionPresentation } from '../lib/session-view';
 import { BasicAlphaReportPanel } from './BasicAlphaReportPanel';
 import { LocalDemoSafetyNotice } from './LocalDemoSafetyNotice';
+import { SessionStatePanel } from './SessionStatePanel';
 import { SessionWorkspace } from './SessionWorkspace';
 
 const createdAt = '2026-06-05T10:00:00.000Z';
@@ -280,6 +281,40 @@ describe('BasicAlphaReportPanel', () => {
 });
 
 describe('SessionWorkspace', () => {
+  it('renders a phase-driven start action when solution is the current phase', () => {
+    const auditReadyForSolution: SessionAuditView = {
+      ...workspaceAudit,
+      module_chats: [workspaceAudit.module_chats[0]!],
+      generated_sections: [report.problem_section],
+      runs: [],
+    };
+    const html = renderToStaticMarkup(
+      h(SessionWorkspace, {
+        audit: auditReadyForSolution,
+        report: null,
+        isReplying: false,
+        isComposingReport: false,
+        isDownloadingReportPdf: false,
+        onReply: async () => undefined,
+        onComposeReport: async () => undefined,
+        onDownloadReportPdf: async () => undefined,
+        onSolutionReply: async () => undefined,
+        onDataAiPrivacyReply: async () => undefined,
+        onMedicalDeviceTriageReply: async () => undefined,
+        onResourcesPilotViabilityReply: async () => undefined,
+        onStartSolution: async () => undefined,
+        onStartDataAiPrivacy: async () => undefined,
+        onStartMedicalDeviceTriage: async () => undefined,
+        onStartResourcesPilotViability: async () => undefined,
+        presentation: deriveSessionPresentation(auditReadyForSolution),
+      }),
+    );
+
+    expect(html).toContain('Fase actual: Solución');
+    expect(html).toContain('Iniciar solución');
+    expect(html).not.toContain('Preparar informe');
+  });
+
   it('renders a report compose action when the report phase prerequisites are complete', () => {
     const html = renderToStaticMarkup(
       h(SessionWorkspace, {
@@ -306,6 +341,34 @@ describe('SessionWorkspace', () => {
     expect(html).toContain('Informe Alpha');
     expect(html).toContain('Preparar informe');
     expect(html).toContain('Prepara el resumen estructurado');
+  });
+
+  it('renders report load failures as report-specific workspace state', () => {
+    const html = renderToStaticMarkup(
+      h(SessionWorkspace, {
+        audit: workspaceAudit,
+        report: null,
+        reportLoadError: 'Sesión session-1 cargada, pero no se pudo recuperar el informe Alpha.',
+        isReplying: false,
+        isComposingReport: false,
+        isDownloadingReportPdf: false,
+        onReply: async () => undefined,
+        onComposeReport: async () => undefined,
+        onDownloadReportPdf: async () => undefined,
+        onSolutionReply: async () => undefined,
+        onDataAiPrivacyReply: async () => undefined,
+        onMedicalDeviceTriageReply: async () => undefined,
+        onResourcesPilotViabilityReply: async () => undefined,
+        onStartSolution: async () => undefined,
+        onStartDataAiPrivacy: async () => undefined,
+        onStartMedicalDeviceTriage: async () => undefined,
+        onStartResourcesPilotViability: async () => undefined,
+        presentation: deriveSessionPresentation(workspaceAudit),
+      }),
+    );
+
+    expect(html).toContain('Informe Alpha');
+    expect(html).toContain('Sesión session-1 cargada, pero no se pudo recuperar el informe Alpha.');
   });
 
   it('renders a retry action when report composition is recoverable', () => {
@@ -382,5 +445,24 @@ describe('SessionWorkspace', () => {
 
     expect(html).toContain('Download PDF');
     expect(html).toContain('disabled=""');
+  });
+});
+
+describe('SessionStatePanel', () => {
+  it('renders canonical proposal progress and phase path', () => {
+    const html = renderToStaticMarkup(
+      h(SessionStatePanel, {
+        audit: workspaceAudit,
+        presentation: deriveSessionPresentation(workspaceAudit),
+      }),
+    );
+
+    expect(html).toContain('Progreso de la propuesta');
+    expect(html).toContain('75%');
+    expect(html).toContain('6/8');
+    expect(html).toContain('Camino de fases');
+    expect(html).toContain('Intake / propuesta');
+    expect(html).toContain('Problema');
+    expect(html).toContain('PDF / export');
   });
 });

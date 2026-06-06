@@ -922,23 +922,43 @@ describe('deriveSessionPresentation', () => {
     const presentation = deriveSessionPresentation(auditWithAllSections({
       runs: [...auditFixture.runs, failedReportRun],
     }));
+    const reportPhase = presentation.phaseProgress.steps.find((step) => step.id === 'report');
 
     expect(presentation.phaseProgress.currentPhaseId).toBe('report');
-    expect(presentation.phaseProgress.steps.find((step) => step.id === 'report')).toMatchObject({
+    expect(presentation.phaseProgress.currentPhaseLabel).toBe('Informe');
+    expect(reportPhase).toMatchObject({
       status: 'error',
       primaryAction: 'recover',
+    });
+    expect(reportPhase).not.toMatchObject({
+      status: 'ready',
+      primaryAction: 'prepare_report',
+    });
+    expect(reportPhase).not.toMatchObject({
+      status: 'current',
+      primaryAction: 'prepare_report',
     });
   });
 
-  it('locks PDF export for reports that need revision', () => {
+  it('maps reports that need revision to a recoverable report phase error', () => {
     const presentation = deriveSessionPresentation(auditWithAllSections(), {
       report: reportFixture({ report_status: 'needs_revision' }),
     });
+    const reportPhase = presentation.phaseProgress.steps.find((step) => step.id === 'report');
 
     expect(presentation.phaseProgress.currentPhaseId).toBe('report');
-    expect(presentation.phaseProgress.steps.find((step) => step.id === 'report')).toMatchObject({
+    expect(presentation.phaseProgress.currentPhaseLabel).toBe('Informe');
+    expect(reportPhase).toMatchObject({
       status: 'error',
       primaryAction: 'recover',
+    });
+    expect(reportPhase).not.toMatchObject({
+      status: 'ready',
+      primaryAction: 'prepare_report',
+    });
+    expect(reportPhase).not.toMatchObject({
+      status: 'current',
+      primaryAction: 'review_report',
     });
     expect(presentation.phaseProgress.steps.find((step) => step.id === 'pdf_export')).toMatchObject({
       status: 'locked',

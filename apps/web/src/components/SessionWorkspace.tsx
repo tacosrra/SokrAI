@@ -9,6 +9,7 @@ import { StatusBadge, agentTone, phaseTone, sessionTone } from './StatusBadge';
 interface SessionWorkspaceProps {
   audit: SessionAuditView;
   report: BasicAlphaReport | null;
+  reportLoadError?: string | null;
   isReplying: boolean;
   isComposingReport: boolean;
   isDownloadingReportPdf: boolean;
@@ -29,6 +30,7 @@ interface SessionWorkspaceProps {
 export function SessionWorkspace({
   audit,
   report,
+  reportLoadError = null,
   isReplying,
   isComposingReport,
   isDownloadingReportPdf,
@@ -47,20 +49,24 @@ export function SessionWorkspace({
 }: SessionWorkspaceProps) {
   const [reply, setReply] = useState('');
   const [feedback, setFeedback] = useState('');
+  const [copyFeedback, setCopyFeedback] = useState('');
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setReply('');
     setFeedback('');
+    setCopyFeedback('');
   }, [presentation.sessionId, presentation.currentQuestion]);
 
   async function handleCopy() {
     try {
       await navigator.clipboard.writeText(presentation.sessionId);
       setCopied(true);
+      setCopyFeedback('');
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
       setCopied(false);
+      setCopyFeedback('No se pudo copiar el Session ID. Selecciónalo manualmente.');
     }
   }
 
@@ -189,6 +195,7 @@ export function SessionWorkspace({
           <button className="button button--ghost" type="button" onClick={() => void handleCopy()}>
             {copied ? 'Copiado' : 'Copiar ID'}
           </button>
+          {copyFeedback ? <div className="feedback feedback--error">{copyFeedback}</div> : null}
         </div>
       </header>
 
@@ -368,7 +375,7 @@ export function SessionWorkspace({
       ) : reportPhase && reportPhase.status !== 'locked' ? (
         <section className="question-callout question-callout--muted">
           <span className="question-callout__label">Informe Alpha</span>
-          <p>{reportPhase.explanation}</p>
+          <p>{reportLoadError ?? reportPhase.explanation}</p>
 
           {canComposeReport ? (
             <button

@@ -295,6 +295,7 @@ function ModeCard({
 export function App() {
   const [activeAudit, setActiveAudit] = useState<SessionAuditView | null>(null);
   const [activeReport, setActiveReport] = useState<BasicAlphaReport | null>(null);
+  const [reportLoadError, setReportLoadError] = useState<string | null>(null);
   const [recentSessions, setRecentSessions] = useState<RecentSession[]>([]);
   const [defaultSessionId, setDefaultSessionId] = useState('');
   const [sessionLookupId, setSessionLookupId] = useState('');
@@ -337,6 +338,7 @@ export function App() {
     }
 
     setIsLoadingSession(true);
+    setReportLoadError(null);
 
     try {
       const audit = await fetchSessionAudit(sessionId);
@@ -346,13 +348,25 @@ export function App() {
       setSessionLookupId(audit.session.id);
       writeSessionToUrl(audit.session.id);
 
+      let loadedReportError: string | null = null;
+
       try {
         setActiveReport(await loadReportIfAvailable(audit.session.id, audit));
-      } catch {
-        setActiveReport(null);
+        setReportLoadError(null);
+      } catch (error) {
+        loadedReportError = `Sesión ${audit.session.id} cargada, pero no se pudo recuperar o preparar el informe Alpha: ${mapApiError(error)}`;
+        setActiveReport((currentReport) =>
+          currentReport?.proposal_id === audit.session.id ? currentReport : null
+        );
+        setReportLoadError(loadedReportError);
       }
 
-      if (!options?.suppressSuccessBanner) {
+      if (loadedReportError) {
+        setBanner({
+          tone: 'error',
+          text: loadedReportError,
+        });
+      } else if (!options?.suppressSuccessBanner) {
         setBanner({
           tone: 'success',
           text:
@@ -364,6 +378,7 @@ export function App() {
       return audit;
     } catch (error) {
       setActiveReport(null);
+      setReportLoadError(null);
       setBanner({
         tone: 'error',
         text: mapApiError(error),
@@ -418,14 +433,17 @@ export function App() {
     try {
       const report = await composeBasicAlphaReport(sessionId, createClientRequestId('report-compose'));
       setActiveReport(report);
+      setReportLoadError(null);
       setBanner({
         tone: 'success',
         text: 'Informe Alpha preparado. Ya puedes descargar el PDF.',
       });
     } catch (error) {
+      const message = mapApiError(error);
+      setReportLoadError(message);
       setBanner({
         tone: 'error',
-        text: mapApiError(error),
+        text: message,
       });
     } finally {
       setIsComposingReport(false);
@@ -1260,6 +1278,7 @@ export function App() {
   function handleStartFreshSession() {
     setActiveAudit(null);
     setActiveReport(null);
+    setReportLoadError(null);
     setLastPdfExportSessionId(null);
     setBanner(null);
     setDefaultSessionId('');
@@ -1406,6 +1425,7 @@ export function App() {
             <SessionWorkspace
               audit={activeAudit}
               report={activeReport}
+              reportLoadError={reportLoadError}
               isReplying={isReplying}
               isComposingReport={isComposingReport}
               isDownloadingReportPdf={isDownloadingReportPdf}
