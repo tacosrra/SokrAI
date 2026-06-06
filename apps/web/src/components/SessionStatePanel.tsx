@@ -1,6 +1,6 @@
 import type { SessionAuditView } from '../domain/contracts';
 import type { SessionPresentation } from '../lib/session-view';
-import { StatusBadge, agentTone, sessionTone } from './StatusBadge';
+import { StatusBadge, agentTone, phaseTone, sessionTone } from './StatusBadge';
 
 interface SessionStatePanelProps {
   audit: SessionAuditView;
@@ -47,6 +47,9 @@ export function SessionStatePanel({
     presentation.structuredBrief.ambiguities;
   const assumptions =
     presentation.problemDefinition?.assumptions ?? presentation.structuredBrief.assumptions;
+  const currentPhase = presentation.phaseProgress.steps.find((step) =>
+    step.id === presentation.phaseProgress.currentPhaseId,
+  ) ?? presentation.phaseProgress.steps[0];
 
   return (
     <section className="state-shell">
@@ -54,22 +57,23 @@ export function SessionStatePanel({
         <div className="state-card__header">
           <div>
             <div className="panel__eyebrow">Panel de estado</div>
-            <h2>Maduración del problema</h2>
+            <h2>Progreso de la propuesta</h2>
           </div>
           <StatusBadge
-            label={presentation.status.replaceAll('_', ' ')}
-            tone={sessionTone(presentation.status)}
+            label={currentPhase.status.replaceAll('_', ' ')}
+            tone={phaseTone(currentPhase.status)}
           />
         </div>
 
         <div className="state-overview">
           <div>
-            <p>{presentation.progress.title}</p>
-            <strong>{presentation.progress.percent}%</strong>
+            <p>{currentPhase.explanation}</p>
+            <strong>{presentation.phaseProgress.percent}%</strong>
           </div>
 
           <div className="state-badges">
-            <StatusBadge label={presentation.stage.replace('_', ' ')} tone="neutral" />
+            <StatusBadge label={currentPhase.label} tone={phaseTone(currentPhase.status)} />
+            <StatusBadge label={presentation.status.replaceAll('_', ' ')} tone={sessionTone(presentation.status)} />
             <StatusBadge
               label={`agent ${presentation.agentStatus}`}
               tone={agentTone(presentation.agentStatus)}
@@ -80,27 +84,70 @@ export function SessionStatePanel({
         <div className="state-progress" aria-hidden="true">
           <span
             className="state-progress__fill"
-            style={{ width: `${presentation.progress.percent}%` }}
+            style={{ width: `${presentation.phaseProgress.percent}%` }}
           />
         </div>
 
         <div className="state-metrics">
           <article>
+            <span>Fases</span>
+            <strong>
+              {presentation.phaseProgress.completedPhases}/{presentation.phaseProgress.totalApplicablePhases}
+            </strong>
+          </article>
+          <article>
+            <span>Abiertas</span>
+            <strong>{currentPhase.openGapsCount}</strong>
+          </article>
+          <article>
+            <span>Resueltas</span>
+            <strong>{currentPhase.resolvedGapsCount}</strong>
+          </article>
+          <article>
             <span>Turnos</span>
             <strong>{audit.turns.length}</strong>
           </article>
-          <article>
-            <span>Snapshots</span>
-            <strong>{presentation.snapshotCount}</strong>
-          </article>
-          <article>
-            <span>Runs</span>
-            <strong>{presentation.runCount}</strong>
-          </article>
-          <article>
-            <span>Eventos</span>
-            <strong>{presentation.eventCount}</strong>
-          </article>
+        </div>
+      </section>
+
+      <section className="state-card">
+        <div className="state-card__header">
+          <div>
+            <h3>Camino de fases</h3>
+            <p>Estado derivado desde la auditoría persistida, sin inferir hechos no registrados.</p>
+          </div>
+          <strong className="state-count">
+            {presentation.phaseProgress.completedPhases}/{presentation.phaseProgress.totalApplicablePhases}
+          </strong>
+        </div>
+
+        <div className="state-checklist">
+          {presentation.phaseProgress.steps.map((step) => (
+            <article
+              key={step.id}
+              className={`state-checklist__item ${
+                step.status === 'complete' || step.status === 'not_applicable'
+                  ? 'state-checklist__item--complete'
+                  : 'state-checklist__item--pending'
+              }`}
+            >
+              <div className="state-checklist__main">
+                <div className="state-checklist__title">
+                  <span
+                    className={`state-checklist__marker ${
+                      step.status === 'complete' || step.status === 'not_applicable'
+                        ? 'state-checklist__marker--complete'
+                        : ''
+                    }`}
+                  />
+                  <strong>{step.label}</strong>
+                </div>
+                <p>{step.lockedReason ?? step.explanation}</p>
+              </div>
+
+              <StatusBadge label={step.status.replaceAll('_', ' ')} tone={phaseTone(step.status)} />
+            </article>
+          ))}
         </div>
       </section>
 
@@ -128,8 +175,8 @@ export function SessionStatePanel({
       <section className="state-card">
         <div className="state-card__header">
           <div>
-            <h3>Categorías clave</h3>
-            <p>Estado actual de cada bloque que el agente necesita consolidar.</p>
+            <h3>Detalle de la fase problema</h3>
+            <p>Checklist específico del problema; no representa la madurez completa de la propuesta.</p>
           </div>
           <strong className="state-count">
             {presentation.progress.completedItems}/{presentation.progress.totalItems}

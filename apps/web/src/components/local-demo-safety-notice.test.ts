@@ -126,8 +126,83 @@ const workspaceAudit: SessionAuditView = {
       completed_at: createdAt,
       warnings: [],
     },
+    {
+      chat_id: 'chat-data',
+      proposal_id: 'session-1',
+      module: 'data_ai_privacy',
+      chat_status: 'completed',
+      turns: [],
+      started_at: createdAt,
+      completed_at: createdAt,
+      warnings: [],
+    },
+    {
+      chat_id: 'chat-medical-device',
+      proposal_id: 'session-1',
+      module: 'medical_device_triage',
+      chat_status: 'completed',
+      turns: [],
+      started_at: createdAt,
+      completed_at: createdAt,
+      warnings: [],
+    },
+    {
+      chat_id: 'chat-resources',
+      proposal_id: 'session-1',
+      module: 'resources_pilot_viability',
+      chat_status: 'completed',
+      turns: [],
+      started_at: createdAt,
+      completed_at: createdAt,
+      warnings: [],
+    },
   ],
-  generated_sections: [report.problem_section, report.solution_section],
+  generated_sections: [
+    report.problem_section,
+    report.solution_section,
+    {
+      section_id: 'section-data',
+      proposal_id: 'session-1',
+      section_kind: 'data_ai_privacy',
+      section_status: 'generated',
+      section_version: 1,
+      title: 'Data, AI and privacy',
+      content_markdown: 'Datos ficticios definidos para revision humana.',
+      source_refs: [],
+      gap_refs: [],
+      generated_by_run_id: 'run-data',
+      warnings: [],
+      created_at: createdAt,
+    },
+    {
+      section_id: 'section-medical-device',
+      proposal_id: 'session-1',
+      section_kind: 'medical_device_triage',
+      section_status: 'generated',
+      section_version: 1,
+      title: 'Medical-device triage',
+      content_markdown: 'Triaje ficticio definido para revision humana competente.',
+      source_refs: [],
+      gap_refs: [],
+      generated_by_run_id: 'run-medical-device',
+      warnings: [],
+      created_at: createdAt,
+    },
+    {
+      section_id: 'section-resources',
+      proposal_id: 'session-1',
+      section_kind: 'resources_pilot_viability',
+      section_status: 'generated',
+      section_version: 1,
+      title: 'Resources and pilot',
+      content_markdown: 'Recursos ficticios definidos para revision humana.',
+      source_refs: [],
+      gap_refs: [],
+      generated_by_run_id: 'run-resources',
+      warnings: [],
+      created_at: createdAt,
+    },
+  ],
   turns: [
     {
       id: 'turn-1',
@@ -190,7 +265,7 @@ describe('BasicAlphaReportPanel', () => {
 });
 
 describe('SessionWorkspace', () => {
-  it('renders a report compose action when the report is still missing but both sections already exist', () => {
+  it('renders a report compose action when the report phase prerequisites are complete', () => {
     const html = renderToStaticMarkup(
       h(SessionWorkspace, {
         audit: workspaceAudit,
@@ -215,6 +290,6 @@ describe('SessionWorkspace', () => {
 
     expect(html).toContain('Informe Alpha');
     expect(html).toContain('Preparar informe');
-    expect(html).toContain('todavía no está compuesto');
+    expect(html).toContain('Prepara el resumen estructurado');
   });
 });

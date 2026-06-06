@@ -162,6 +162,8 @@ PDF/export should be treated as the final artifact action. It should show:
 - Download action.
 - Optional technical export details in advanced disclosure.
 
+Implementation note for UX1: current audit contracts do not persist a PDF export artifact. The UI may mark PDF/export complete only for the current in-memory session after a successful download, and must fall back to ready/current after reload until a durable export fact exists.
+
 ## Advanced/debug disclosure
 
 Add a collapsed section named "Audit details" or "Technical details". It should be available but not prominent.
@@ -240,4 +242,3 @@ Design principles:
 - Make the chat center feel stable and task-first.
 
 The UI should feel closer to a refined clinical review workspace than a generic AI dashboard. It should make the system feel trustworthy by being legible, quiet, and precise.
-

@@ -102,8 +102,13 @@ function createClientRequestId(
 
 function canComposeReportFromAudit(audit: SessionAuditView): boolean {
   const presentation = deriveSessionPresentation(audit);
+  const reportPhase = presentation.phaseProgress.steps.find((step) => step.id === 'report');
 
-  return Boolean(presentation.latestProblemSection && presentation.latestSolutionSection);
+  return Boolean(
+    reportPhase &&
+      (reportPhase.status === 'current' || reportPhase.status === 'ready') &&
+      reportPhase.primaryAction === 'prepare_report',
+  );
 }
 
 function isRecoverableWorkflowDeliveryError(error: unknown): error is ApiError {
@@ -299,6 +304,7 @@ export function App() {
   const [isReplying, setIsReplying] = useState(false);
   const [isComposingReport, setIsComposingReport] = useState(false);
   const [isDownloadingReportPdf, setIsDownloadingReportPdf] = useState(false);
+  const [lastPdfExportSessionId, setLastPdfExportSessionId] = useState<string | null>(null);
   const [banner, setBanner] = useState<BannerState | null>(null);
 
   useEffect(() => {
@@ -433,6 +439,7 @@ export function App() {
       const result = await downloadBasicAlphaReportPdf(sessionId);
 
       saveBlobDownload(result.blob, result.fileName);
+      setLastPdfExportSessionId(sessionId);
 
       setBanner({
         tone: 'success',
@@ -1253,6 +1260,7 @@ export function App() {
   function handleStartFreshSession() {
     setActiveAudit(null);
     setActiveReport(null);
+    setLastPdfExportSessionId(null);
     setBanner(null);
     setDefaultSessionId('');
     setSessionLookupId('');
@@ -1276,9 +1284,19 @@ export function App() {
     await loadSession(trimmedSessionId);
   }
 
-  const presentation = activeAudit ? deriveSessionPresentation(activeAudit) : null;
+  const presentation = activeAudit
+    ? deriveSessionPresentation(activeAudit, {
+      report: activeReport,
+      isDownloadingReportPdf,
+      hasDownloadedReportPdf: lastPdfExportSessionId === activeAudit.session.id,
+    })
+    : null;
 
   if (presentation && activeAudit) {
+    const currentPhase = presentation.phaseProgress.steps.find((step) =>
+      step.id === presentation.phaseProgress.currentPhaseId,
+    ) ?? presentation.phaseProgress.steps[0];
+
     return (
       <div className="app-shell app-shell--workspace">
         <div className="app-shell__ambient" />
@@ -1288,29 +1306,31 @@ export function App() {
         <main className="workspace-shell">
           <aside className="workspace-rail">
             <div className="workspace-rail__brand">
-              <div className="brand-mark">S</div>
+                <div className="brand-mark">S</div>
               <div className="brand-copy">
                 <span className="brand-copy__eyebrow">SokrAI v1</span>
-                <strong>Problem Definition Console</strong>
-                <span className="brand-copy__meta">Inspirado en el shell conversacional de Stitch.</span>
+                <strong>Proposal maturation workspace</strong>
+                <span className="brand-copy__meta">{presentation.phaseProgress.currentPhaseLabel}</span>
               </div>
             </div>
 
             <section className="workspace-rail__section workspace-rail__section--hero">
               <span className="panel__eyebrow">Sesión activa</span>
               <h2>{presentation.projectTitle}</h2>
-              <p>{presentation.progress.description}</p>
+              <p>{currentPhase.lockedReason ?? currentPhase.explanation}</p>
 
               <LocalDemoSafetyNotice compact context="workspace" />
 
               <div className="rail-kpis">
                 <article>
-                  <strong>{presentation.progress.percent}%</strong>
-                  <span>madurez</span>
+                  <strong>{presentation.phaseProgress.percent}%</strong>
+                  <span>fases</span>
                 </article>
                 <article>
-                  <strong>{activeAudit.turns.length}</strong>
-                  <span>turnos</span>
+                  <strong>
+                    {presentation.phaseProgress.completedPhases}/{presentation.phaseProgress.totalApplicablePhases}
+                  </strong>
+                  <span>completas</span>
                 </article>
               </div>
 

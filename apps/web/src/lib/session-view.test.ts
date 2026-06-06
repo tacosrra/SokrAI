@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import type { SessionAuditView } from '../domain/contracts';
+import type {
+  AgentRun,
+  AlphaGap,
+  BasicAlphaReport,
+  GeneratedSection,
+  ModuleChat,
+  SectionKind,
+  SessionAuditView,
+} from '../domain/contracts';
 import { deriveSessionPresentation } from './session-view';
 
 const auditFixture: SessionAuditView = {
@@ -136,6 +144,145 @@ const auditFixture: SessionAuditView = {
   events: [],
 };
 
+function generatedSection(
+  sectionKind: SectionKind,
+  overrides: Partial<GeneratedSection> = {},
+): GeneratedSection {
+  return {
+    section_id: `section-${sectionKind}`,
+    proposal_id: 'session-1',
+    section_kind: sectionKind,
+    section_status: 'generated',
+    section_version: 1,
+    title: `${sectionKind} section`,
+    content_markdown: `${sectionKind} content`,
+    source_refs: [],
+    gap_refs: [],
+    warnings: [],
+    created_at: '2026-05-24T14:30:00.000Z',
+    ...overrides,
+  };
+}
+
+function completedModuleChat(module: ModuleChat['module']): ModuleChat {
+  return {
+    chat_id: `chat-${module}`,
+    proposal_id: 'session-1',
+    module,
+    chat_status: 'completed',
+    turns: [],
+    started_at: '2026-05-24T14:00:00.000Z',
+    completed_at: '2026-05-24T14:30:00.000Z',
+    warnings: [],
+  };
+}
+
+function awaitingModuleChat(module: ModuleChat['module'], question: string): ModuleChat {
+  return {
+    chat_id: `chat-${module}`,
+    proposal_id: 'session-1',
+    module,
+    chat_status: 'waiting_for_user',
+    active_turn_id: `turn-${module}`,
+    turns: [
+      {
+        turn_id: `turn-${module}`,
+        chat_id: `chat-${module}`,
+        proposal_id: 'session-1',
+        module,
+        turn_seq: 1,
+        question_text: question,
+        turn_status: 'awaiting_user',
+        agent_status: 'continue',
+        diagnosis: [],
+        source_refs: [],
+        gap_refs: [],
+        audit_refs: [],
+        warnings: [],
+        created_at: '2026-05-24T14:30:00.000Z',
+      },
+    ],
+    started_at: '2026-05-24T14:30:00.000Z',
+    warnings: [],
+  };
+}
+
+function resolvedProblemAudit(overrides: Partial<SessionAuditView> = {}): SessionAuditView {
+  return {
+    ...auditFixture,
+    ...overrides,
+    session: {
+      ...auditFixture.session,
+      status: 'completed',
+      completion_reason: 'La definición del problema quedó lista para revisión.',
+      latest_problem_definition_json: {
+        ...auditFixture.session.latest_problem_definition_json!,
+        problem_owner: 'Dirección de Urgencias',
+      },
+      ...overrides.session,
+    },
+    turns: overrides.turns ?? [
+      {
+        ...auditFixture.turns[0],
+        answer_text: 'El problema lo lidera Dirección de Urgencias.',
+        status: 'resolved',
+        completion_reason: 'La definición del problema quedó lista para revisión.',
+      },
+    ],
+    snapshots: overrides.snapshots ?? [
+      {
+        ...auditFixture.snapshots[0],
+        current_problem_definition_json: {
+          ...auditFixture.snapshots[0].current_problem_definition_json!,
+          problem_owner: 'Dirección de Urgencias',
+        },
+        detected_gaps_json: [],
+        next_question_text: null,
+        agent_status: 'done',
+        completion_reason: 'La definición del problema quedó lista para revisión.',
+      },
+    ],
+  };
+}
+
+function auditWithAllSections(overrides: Partial<SessionAuditView> = {}): SessionAuditView {
+  return resolvedProblemAudit({
+    ...overrides,
+    module_chats: overrides.module_chats ?? [
+      completedModuleChat('problem'),
+      completedModuleChat('solution'),
+      completedModuleChat('data_ai_privacy'),
+      completedModuleChat('medical_device_triage'),
+      completedModuleChat('resources_pilot_viability'),
+    ],
+    generated_sections: overrides.generated_sections ?? [
+      generatedSection('problem'),
+      generatedSection('solution'),
+      generatedSection('data_ai_privacy'),
+      generatedSection('medical_device_triage'),
+      generatedSection('resources_pilot_viability'),
+    ],
+  });
+}
+
+function reportFixture(overrides: Partial<BasicAlphaReport> = {}): BasicAlphaReport {
+  return {
+    report_id: 'report-1',
+    proposal_id: 'session-1',
+    report_status: 'ready',
+    schema_version: 'v1',
+    structured_brief: auditFixture.session.latest_structured_brief_json,
+    current_gaps: [],
+    problem_section: generatedSection('problem'),
+    solution_section: generatedSection('solution'),
+    internal_sources: [],
+    audit_refs: [],
+    warnings: [],
+    generated_at: '2026-05-24T15:00:00.000Z',
+    ...overrides,
+  };
+}
+
 describe('deriveSessionPresentation', () => {
   it('prioritizes the latest snapshot and open turn data', () => {
     const presentation = deriveSessionPresentation(auditFixture);
@@ -158,6 +305,17 @@ describe('deriveSessionPresentation', () => {
       'complete',
       'current',
       'upcoming',
+    ]);
+    expect(presentation.phaseProgress.currentPhaseId).toBe('problem');
+    expect(presentation.phaseProgress.steps.map((step) => [step.id, step.status])).toEqual([
+      ['intake', 'complete'],
+      ['problem', 'current'],
+      ['solution', 'locked'],
+      ['data_ai_privacy', 'locked'],
+      ['medical_device_triage', 'locked'],
+      ['resources_pilot_viability', 'locked'],
+      ['report', 'locked'],
+      ['pdf_export', 'locked'],
     ]);
   });
 
@@ -256,6 +414,7 @@ describe('deriveSessionPresentation', () => {
     expect(presentation.solutionModuleChat?.chat_status).toBe('waiting_for_user');
     expect(presentation.currentSolutionQuestion).toBe('What does the solution do?');
     expect(presentation.currentQuestion).toBe('What does the solution do?');
+    expect(presentation.phaseProgress.currentPhaseId).toBe('solution');
     expect(presentation.latestProblemSection).toMatchObject({
       section_id: 'section-1',
       section_version: 1,
@@ -401,6 +560,7 @@ describe('deriveSessionPresentation', () => {
     );
     expect(presentation.currentSolutionQuestion).toBe('What does the solution do?');
     expect(presentation.currentQuestion).toBe('Que datos personales o de salud trataria la propuesta?');
+    expect(presentation.phaseProgress.currentPhaseId).toBe('data_ai_privacy');
     expect(presentation.dataAiPrivacyModuleChat?.chat_status).toBe('waiting_for_user');
     expect(presentation.latestSolutionSection?.section_id).toBe('section-solution');
     expect(presentation.latestDataAiPrivacySection).toMatchObject({
@@ -536,6 +696,7 @@ describe('deriveSessionPresentation', () => {
       'Que datos personales o de salud trataria la propuesta?',
     );
     expect(presentation.currentQuestion).toBe('Que uso previsto deberia revisar una persona competente?');
+    expect(presentation.phaseProgress.currentPhaseId).toBe('medical_device_triage');
     expect(presentation.medicalDeviceTriageModuleChat?.chat_status).toBe('waiting_for_user');
     expect(presentation.latestMedicalDeviceTriageSection).toMatchObject({
       section_id: 'section-medical-device',
@@ -671,10 +832,244 @@ describe('deriveSessionPresentation', () => {
       'Que uso previsto deberia revisar una persona competente?',
     );
     expect(presentation.currentQuestion).toBe('What operational risks should be tracked before pilot launch?');
+    expect(presentation.phaseProgress.currentPhaseId).toBe('resources_pilot_viability');
     expect(presentation.resourcesPilotViabilityModuleChat?.chat_status).toBe('waiting_for_user');
     expect(presentation.latestResourcesPilotViabilitySection).toMatchObject({
       section_id: 'section-resources',
       title: 'Resources, pilot and viability readiness inputs',
+    });
+  });
+
+  it('keeps a completed problem checklist from becoming whole-session maturity', () => {
+    const presentation = deriveSessionPresentation(resolvedProblemAudit());
+
+    expect(presentation.progress.percent).toBe(100);
+    expect(presentation.phaseProgress.percent).toBeLessThan(100);
+    expect(presentation.phaseProgress.currentPhaseId).toBe('solution');
+    expect(presentation.phaseProgress.steps.find((step) => step.id === 'problem')).toMatchObject({
+      status: 'complete',
+    });
+    expect(presentation.phaseProgress.steps.find((step) => step.id === 'solution')).toMatchObject({
+      status: 'current',
+      primaryAction: 'start_solution',
+    });
+  });
+
+  it('locks report until the required prior phases are complete or skipped', () => {
+    const presentation = deriveSessionPresentation(resolvedProblemAudit({
+      generated_sections: [generatedSection('problem'), generatedSection('solution')],
+      module_chats: [
+        completedModuleChat('problem'),
+        completedModuleChat('solution'),
+      ],
+    }));
+
+    expect(presentation.phaseProgress.steps.find((step) => step.id === 'report')).toMatchObject({
+      status: 'locked',
+      lockedReason: expect.stringContaining('Datos / IA / privacidad'),
+    });
+  });
+
+  it('marks report ready once all prior phases are complete and no report exists', () => {
+    const presentation = deriveSessionPresentation(auditWithAllSections());
+
+    expect(presentation.phaseProgress.currentPhaseId).toBe('report');
+    expect(presentation.phaseProgress.steps.find((step) => step.id === 'report')).toMatchObject({
+      status: 'current',
+      primaryAction: 'prepare_report',
+    });
+    expect(presentation.phaseProgress.steps.find((step) => step.id === 'pdf_export')).toMatchObject({
+      status: 'locked',
+    });
+  });
+
+  it('separates ready report and PDF export states', () => {
+    const presentation = deriveSessionPresentation(auditWithAllSections(), {
+      report: reportFixture(),
+    });
+
+    expect(presentation.phaseProgress.steps.find((step) => step.id === 'report')).toMatchObject({
+      status: 'complete',
+    });
+    expect(presentation.phaseProgress.currentPhaseId).toBe('pdf_export');
+    expect(presentation.phaseProgress.steps.find((step) => step.id === 'pdf_export')).toMatchObject({
+      status: 'current',
+      primaryAction: 'download_pdf',
+    });
+  });
+
+  it('marks PDF export complete only from transient frontend success state', () => {
+    const presentation = deriveSessionPresentation(auditWithAllSections(), {
+      report: reportFixture(),
+      hasDownloadedReportPdf: true,
+    });
+
+    expect(presentation.phaseProgress.steps.find((step) => step.id === 'pdf_export')).toMatchObject({
+      status: 'complete',
+    });
+    expect(presentation.phaseProgress.isComplete).toBe(true);
+  });
+
+  it('does not treat superseded-only generated sections as complete', () => {
+    const presentation = deriveSessionPresentation(resolvedProblemAudit({
+      generated_sections: [
+        generatedSection('problem'),
+        generatedSection('solution', {
+          section_status: 'superseded',
+        }),
+      ],
+      module_chats: [completedModuleChat('problem')],
+    }));
+
+    expect(presentation.latestSolutionSection).toBeNull();
+    expect(presentation.phaseProgress.currentPhaseId).toBe('solution');
+    expect(presentation.phaseProgress.steps.find((step) => step.id === 'solution')).toMatchObject({
+      status: 'current',
+    });
+  });
+
+  it('maps failed module state to phase error', () => {
+    const failedChat: ModuleChat = {
+      ...awaitingModuleChat('solution', 'What failed?'),
+      chat_status: 'failed',
+      active_turn_id: undefined,
+      turns: [],
+    };
+
+    const presentation = deriveSessionPresentation(resolvedProblemAudit({
+      generated_sections: [generatedSection('problem')],
+      module_chats: [completedModuleChat('problem'), failedChat],
+    }));
+
+    expect(presentation.phaseProgress.currentPhaseId).toBe('solution');
+    expect(presentation.phaseProgress.steps.find((step) => step.id === 'solution')).toMatchObject({
+      status: 'error',
+      primaryAction: 'recover',
+    });
+  });
+
+  it('requires an explicit audited fact for medical-device not-applicable', () => {
+    const withoutExplicitFact = deriveSessionPresentation(resolvedProblemAudit({
+      generated_sections: [
+        generatedSection('problem'),
+        generatedSection('solution'),
+        generatedSection('data_ai_privacy'),
+      ],
+      module_chats: [
+        completedModuleChat('problem'),
+        completedModuleChat('solution'),
+        completedModuleChat('data_ai_privacy'),
+      ],
+    }));
+
+    expect(withoutExplicitFact.phaseProgress.steps.find((step) => step.id === 'medical_device_triage')).toMatchObject({
+      status: 'current',
+    });
+
+    const notApplicableRun: AgentRun = {
+      ...auditFixture.runs[1],
+      id: 'run-medical-device',
+      run_purpose: 'medical_device_triage',
+      validated_output_json: {
+        updated_medical_device_triage: {
+          triage_status: 'not_applicable',
+        },
+      },
+      status: 'completed',
+    };
+    const withExplicitFact = deriveSessionPresentation(resolvedProblemAudit({
+      generated_sections: [
+        generatedSection('problem'),
+        generatedSection('solution'),
+        generatedSection('data_ai_privacy'),
+      ],
+      module_chats: [
+        completedModuleChat('problem'),
+        completedModuleChat('solution'),
+        completedModuleChat('data_ai_privacy'),
+      ],
+      runs: [...auditFixture.runs, notApplicableRun],
+    }));
+
+    expect(withExplicitFact.phaseProgress.steps.find((step) => step.id === 'medical_device_triage')).toMatchObject({
+      status: 'not_applicable',
+    });
+    expect(withExplicitFact.phaseProgress.currentPhaseId).toBe('resources_pilot_viability');
+  });
+
+  it('counts open and resolved gaps by phase without counting not-applicable gaps', () => {
+    const gaps: AlphaGap[] = [
+      {
+        gap_id: 'gap-open',
+        proposal_id: 'session-1',
+        module: 'solution',
+        gap_kind: 'missing_information',
+        gap_status: 'open',
+        origin: 'system_rule',
+        field: 'workflow_change',
+        description: 'Falta explicar el cambio de flujo.',
+        absence: {
+          is_absent: true,
+          checked_fields: ['workflow_change'],
+          reason: 'No aparece en la sección.',
+        },
+        source_refs: [],
+        audit_refs: [],
+        warnings: [],
+        created_at: '2026-05-24T14:00:00.000Z',
+        updated_at: '2026-05-24T14:00:00.000Z',
+      },
+      {
+        gap_id: 'gap-resolved',
+        proposal_id: 'session-1',
+        module: 'solution',
+        gap_kind: 'missing_information',
+        gap_status: 'resolved',
+        origin: 'system_rule',
+        field: 'target_user',
+        description: 'Usuario aclarado.',
+        absence: {
+          is_absent: false,
+          checked_fields: ['target_user'],
+          reason: 'Resuelto por turno.',
+        },
+        source_refs: [],
+        audit_refs: [],
+        warnings: [],
+        created_at: '2026-05-24T14:00:00.000Z',
+        updated_at: '2026-05-24T14:00:00.000Z',
+      },
+      {
+        gap_id: 'gap-na',
+        proposal_id: 'session-1',
+        module: 'solution',
+        gap_kind: 'missing_information',
+        gap_status: 'not_applicable',
+        origin: 'system_rule',
+        field: 'scope_limits',
+        description: 'No aplica.',
+        absence: {
+          is_absent: false,
+          checked_fields: ['scope_limits'],
+          reason: 'No aplica.',
+        },
+        source_refs: [],
+        audit_refs: [],
+        warnings: [],
+        created_at: '2026-05-24T14:00:00.000Z',
+        updated_at: '2026-05-24T14:00:00.000Z',
+      },
+    ];
+
+    const presentation = deriveSessionPresentation(resolvedProblemAudit({
+      gaps,
+      generated_sections: [generatedSection('problem')],
+      module_chats: [completedModuleChat('problem')],
+    }));
+
+    expect(presentation.phaseProgress.steps.find((step) => step.id === 'solution')).toMatchObject({
+      openGapsCount: 1,
+      resolvedGapsCount: 1,
     });
   });
 });
