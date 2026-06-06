@@ -898,6 +898,54 @@ describe('deriveSessionPresentation', () => {
     });
   });
 
+  it('keeps the last known phase marked as recovering during request recovery', () => {
+    const presentation = deriveSessionPresentation(auditWithAllSections(), {
+      isRecovering: true,
+      lastKnownPhaseId: 'data_ai_privacy',
+    });
+
+    expect(presentation.phaseProgress.currentPhaseId).toBe('data_ai_privacy');
+    expect(presentation.phaseProgress.steps.find((step) => step.id === 'data_ai_privacy')).toMatchObject({
+      status: 'recovering',
+      primaryAction: 'recover',
+    });
+  });
+
+  it('maps failed report composition to a recoverable report phase error', () => {
+    const failedReportRun: AgentRun = {
+      ...auditFixture.runs[1],
+      id: 'run-report',
+      run_purpose: 'basic_report_compose',
+      status: 'model_failed',
+    };
+
+    const presentation = deriveSessionPresentation(auditWithAllSections({
+      runs: [...auditFixture.runs, failedReportRun],
+    }));
+
+    expect(presentation.phaseProgress.currentPhaseId).toBe('report');
+    expect(presentation.phaseProgress.steps.find((step) => step.id === 'report')).toMatchObject({
+      status: 'error',
+      primaryAction: 'recover',
+    });
+  });
+
+  it('locks PDF export for reports that need revision', () => {
+    const presentation = deriveSessionPresentation(auditWithAllSections(), {
+      report: reportFixture({ report_status: 'needs_revision' }),
+    });
+
+    expect(presentation.phaseProgress.currentPhaseId).toBe('report');
+    expect(presentation.phaseProgress.steps.find((step) => step.id === 'report')).toMatchObject({
+      status: 'error',
+      primaryAction: 'recover',
+    });
+    expect(presentation.phaseProgress.steps.find((step) => step.id === 'pdf_export')).toMatchObject({
+      status: 'locked',
+      primaryAction: 'none',
+    });
+  });
+
   it('marks PDF export complete only from transient frontend success state', () => {
     const presentation = deriveSessionPresentation(auditWithAllSections(), {
       report: reportFixture(),

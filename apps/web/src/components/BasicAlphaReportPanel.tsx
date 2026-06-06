@@ -5,6 +5,7 @@ import { StatusBadge } from './StatusBadge';
 
 interface BasicAlphaReportPanelProps {
   report: BasicAlphaReport;
+  canDownloadPdf: boolean;
   isDownloadingPdf: boolean;
   onDownloadPdf: () => Promise<void>;
 }
@@ -56,6 +57,7 @@ function SourceList({ sources }: { sources: ProposalSource[] }) {
 
 export function BasicAlphaReportPanel({
   report,
+  canDownloadPdf,
   isDownloadingPdf,
   onDownloadPdf,
 }: BasicAlphaReportPanelProps) {
@@ -83,7 +85,7 @@ export function BasicAlphaReportPanel({
             className="button button--secondary basic-report__download"
             type="button"
             onClick={() => void onDownloadPdf()}
-            disabled={isDownloadingPdf}
+            disabled={!canDownloadPdf || isDownloadingPdf}
           >
             {isDownloadingPdf ? 'Descargando...' : 'Download PDF'}
           </button>

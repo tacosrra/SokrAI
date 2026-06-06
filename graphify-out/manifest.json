@@ -250,9 +250,9 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/BasicAlphaReportPanel.tsx": {
-    "mtime": 1780778008.7354722,
-    "ast_hash": "f5db1df14a14828442894fb32210e3f7",
-    "semantic_hash": "f5db1df14a14828442894fb32210e3f7"
+    "mtime": 1780781090.7037215,
+    "ast_hash": "d730658004efb1e48cf39874989e31c9",
+    "semantic_hash": ""
   },
   "apps/web/src/components/ContinueSessionPanel.tsx": {
     "mtime": 1780778008.7354722,
@@ -275,8 +275,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/SessionWorkspace.tsx": {
-    "mtime": 1780779376.9823053,
-    "ast_hash": "23cb7cd0f813e53fd8dd2b86cabbf9ca",
+    "mtime": 1780781099.1359353,
+    "ast_hash": "4b68d9e9c8ee5822a883477091eae1c7",
     "semantic_hash": ""
   },
   "apps/web/src/components/StatusBadge.tsx": {
@@ -290,8 +290,8 @@
     "semantic_hash": "cd447418cbd7c6113ca129ef266cfcfb"
   },
   "apps/web/src/components/local-demo-safety-notice.test.ts": {
-    "mtime": 1780779481.753775,
-    "ast_hash": "51f9fab8621135f87f221221184a9cf6",
+    "mtime": 1780781175.6927087,
+    "ast_hash": "672944c2575e14a62c9997095a3105ee",
     "semantic_hash": ""
   },
   "apps/web/src/domain/contracts.ts": {
@@ -360,8 +360,8 @@
     "semantic_hash": "7f95fe25ff2c6989270db0b1b2840c23"
   },
   "apps/web/src/lib/session-view.test.ts": {
-    "mtime": 1780779235.4600112,
-    "ast_hash": "26bab6418cc7362f04ea72b8e0ee69a9",
+    "mtime": 1780781172.505884,
+    "ast_hash": "ae0f1f83a1efc37583e7c7652f2f6c0a",
     "semantic_hash": ""
   },
   "apps/web/src/lib/session-view.ts": {

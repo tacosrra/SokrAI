@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { App } from '../App';
-import type { BasicAlphaReport, SessionAuditView } from '../domain/contracts';
+import type { AgentRun, BasicAlphaReport, SessionAuditView } from '../domain/contracts';
 import { deriveSessionPresentation } from '../lib/session-view';
 import { BasicAlphaReportPanel } from './BasicAlphaReportPanel';
 import { LocalDemoSafetyNotice } from './LocalDemoSafetyNotice';
@@ -250,6 +250,7 @@ describe('BasicAlphaReportPanel', () => {
     const html = renderToStaticMarkup(
       h(BasicAlphaReportPanel, {
         report,
+        canDownloadPdf: true,
         isDownloadingPdf: false,
         onDownloadPdf: async () => undefined,
       }),
@@ -261,6 +262,20 @@ describe('BasicAlphaReportPanel', () => {
     expect(html).toContain('Download PDF');
     expect(html).toContain('This Alpha report is not a dictamen');
     expect(html).toContain('No introduzcas datos reales de pacientes');
+  });
+
+  it('disables the PDF action when the phase model does not allow export', () => {
+    const html = renderToStaticMarkup(
+      h(BasicAlphaReportPanel, {
+        report: { ...report, report_status: 'needs_revision' },
+        canDownloadPdf: false,
+        isDownloadingPdf: false,
+        onDownloadPdf: async () => undefined,
+      }),
+    );
+
+    expect(html).toContain('Download PDF');
+    expect(html).toContain('disabled=""');
   });
 });
 
@@ -291,5 +306,81 @@ describe('SessionWorkspace', () => {
     expect(html).toContain('Informe Alpha');
     expect(html).toContain('Preparar informe');
     expect(html).toContain('Prepara el resumen estructurado');
+  });
+
+  it('renders a retry action when report composition is recoverable', () => {
+    const failedReportRun: AgentRun = {
+      id: 'run-report',
+      session_id: 'session-1',
+      turn_seq: null,
+      request_id: 'req-report',
+      run_purpose: 'basic_report_compose',
+      agent_name: 'basic_report_composer',
+      prompt_name: 'basic-alpha-report',
+      prompt_version: 'v1',
+      prompt_sha256: 'hash-report',
+      model_provider: 'ollama',
+      model_name: 'qwen2.5:7b-instruct',
+      model_params_json: {},
+      raw_model_output: '{}',
+      validated_output_json: {},
+      status: 'model_failed',
+    };
+    const auditWithFailedReport = {
+      ...workspaceAudit,
+      runs: [failedReportRun],
+    };
+    const html = renderToStaticMarkup(
+      h(SessionWorkspace, {
+        audit: auditWithFailedReport,
+        report: null,
+        isReplying: false,
+        isComposingReport: false,
+        isDownloadingReportPdf: false,
+        onReply: async () => undefined,
+        onComposeReport: async () => undefined,
+        onDownloadReportPdf: async () => undefined,
+        onSolutionReply: async () => undefined,
+        onDataAiPrivacyReply: async () => undefined,
+        onMedicalDeviceTriageReply: async () => undefined,
+        onResourcesPilotViabilityReply: async () => undefined,
+        onStartSolution: async () => undefined,
+        onStartDataAiPrivacy: async () => undefined,
+        onStartMedicalDeviceTriage: async () => undefined,
+        onStartResourcesPilotViability: async () => undefined,
+        presentation: deriveSessionPresentation(auditWithFailedReport),
+      }),
+    );
+
+    expect(html).toContain('Informe Alpha');
+    expect(html).toContain('Reintentar informe');
+  });
+
+  it('passes the PDF phase lock through to an existing report panel', () => {
+    const reportNeedingRevision: BasicAlphaReport = { ...report, report_status: 'needs_revision' };
+    const html = renderToStaticMarkup(
+      h(SessionWorkspace, {
+        audit: workspaceAudit,
+        report: reportNeedingRevision,
+        isReplying: false,
+        isComposingReport: false,
+        isDownloadingReportPdf: false,
+        onReply: async () => undefined,
+        onComposeReport: async () => undefined,
+        onDownloadReportPdf: async () => undefined,
+        onSolutionReply: async () => undefined,
+        onDataAiPrivacyReply: async () => undefined,
+        onMedicalDeviceTriageReply: async () => undefined,
+        onResourcesPilotViabilityReply: async () => undefined,
+        onStartSolution: async () => undefined,
+        onStartDataAiPrivacy: async () => undefined,
+        onStartMedicalDeviceTriage: async () => undefined,
+        onStartResourcesPilotViability: async () => undefined,
+        presentation: deriveSessionPresentation(workspaceAudit, { report: reportNeedingRevision }),
+      }),
+    );
+
+    expect(html).toContain('Download PDF');
+    expect(html).toContain('disabled=""');
   });
 });

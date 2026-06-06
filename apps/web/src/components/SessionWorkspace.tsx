@@ -125,6 +125,8 @@ export function SessionWorkspace({
     step.id === presentation.phaseProgress.currentPhaseId,
   ) ?? presentation.phaseProgress.steps[0];
   const reportPhase = presentation.phaseProgress.steps.find((step) => step.id === 'report');
+  const pdfPhase = presentation.phaseProgress.steps.find((step) => step.id === 'pdf_export');
+  const canDownloadPdf = pdfPhase?.primaryAction === 'download_pdf';
   const canStartSolution = Boolean(
     presentation.latestProblemSection &&
       !canSolutionReply &&
@@ -156,8 +158,10 @@ export function SessionWorkspace({
   const canComposeReport = Boolean(
     !report &&
       reportPhase &&
-      (reportPhase.status === 'current' || reportPhase.status === 'ready') &&
-      reportPhase.primaryAction === 'prepare_report',
+      (
+        reportPhase.primaryAction === 'prepare_report' ||
+        reportPhase.primaryAction === 'recover'
+      ),
   );
   const resolvedTurns = audit.turns.filter((turn) => Boolean(turn.answer_text?.trim())).length;
 
@@ -357,6 +361,7 @@ export function SessionWorkspace({
       {report ? (
         <BasicAlphaReportPanel
           report={report}
+          canDownloadPdf={canDownloadPdf}
           isDownloadingPdf={isDownloadingReportPdf}
           onDownloadPdf={() => onDownloadReportPdf(audit.session.id)}
         />
@@ -372,7 +377,11 @@ export function SessionWorkspace({
               onClick={() => void onComposeReport(audit.session.id)}
               disabled={isComposingReport}
             >
-              {isComposingReport ? 'Preparando informe…' : 'Preparar informe'}
+              {isComposingReport
+                ? 'Preparando informe…'
+                : reportPhase.primaryAction === 'recover'
+                  ? 'Reintentar informe'
+                  : 'Preparar informe'}
             </button>
           ) : null}
 
