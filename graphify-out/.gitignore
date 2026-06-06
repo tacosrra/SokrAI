@@ -1,0 +1,8 @@
+# Ignore heavy/generated Graphify artifacts by default
+*
+
+# Keep portable graph context for Archon/Codex
+!graph.json
+!GRAPH_REPORT.md
+!manifest.json
+!.gitignore
