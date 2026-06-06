@@ -409,7 +409,9 @@ Expected result:
 
 ### 10. PDF export
 
-Click "Download PDF" in the Basic Alpha Report area.
+If the Basic Alpha Report card is not visible yet, click "Preparar informe" in
+the workspace first. Once the report is present, click "Download PDF" in the
+Basic Alpha Report area.
 
 Expected result:
 

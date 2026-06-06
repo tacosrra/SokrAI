@@ -86,6 +86,30 @@ describe('basic report flow integration', () => {
     expect(persisted.rows[0]).toEqual({ count: '1' });
   });
 
+  it('composes a report through the public session route without requiring an internal secret', async () => {
+    ({ app } = await buildTestApp(await createReportFlowModel()));
+
+    const sessionId = await completeAlphaFlow(app);
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/v1/sessions/${sessionId}/report`,
+      headers: {
+        'x-request-id': 'req-report-compose-public',
+      },
+    });
+    const persisted = await app.services.database.query<{ count: string }>(
+      'SELECT COUNT(*)::text AS count FROM basic_reports WHERE proposal_id = $1',
+      [sessionId],
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      proposal_id: sessionId,
+      report_status: 'ready',
+    });
+    expect(persisted.rows[0]).toEqual({ count: '1' });
+  });
+
   it('returns the same report for concurrent compose retries', async () => {
     ({ app } = await buildTestApp(await createReportFlowModel()));
 
@@ -117,10 +141,21 @@ describe('basic report flow integration', () => {
       method: 'GET',
       url: `/api/v1/sessions/${start.body.session_id}/report`,
     });
+    const publicComposeBeforeSolution = await app.inject({
+      method: 'POST',
+      url: `/api/v1/sessions/${start.body.session_id}/report`,
+      headers: {
+        'x-request-id': 'req-report-compose-public-not-ready',
+      },
+    });
     const composeBeforeSolution = await composeReport(app, 'req-report-compose-not-ready', start.body.session_id);
 
     expect(getBeforeCompose.statusCode).toBe(404);
     expect(getBeforeCompose.json()).toMatchObject({ error_code: 'report_not_found' });
+    expect(publicComposeBeforeSolution.statusCode).toBe(409);
+    expect(publicComposeBeforeSolution.json()).toMatchObject({
+      error_code: 'solution_section_required_for_report',
+    });
     expect(composeBeforeSolution.statusCode).toBe(409);
     expect(composeBeforeSolution.body).toMatchObject({
       error_code: 'solution_section_required_for_report',

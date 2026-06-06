@@ -198,6 +198,22 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     return reply.send(report);
   });
 
+  app.post('/api/v1/sessions/:sessionId/report', async (request, reply) => {
+    const params = request.params as { sessionId: string };
+    const report = await assertBasicAlphaReportResponse(
+      () => basicReportService.composeForSession({
+        context: {
+          requestId: getRequestId(request),
+          workflowVersion: 'basic_alpha_report_public_v1',
+        },
+        sessionId: params.sessionId,
+      }),
+      params.sessionId,
+    );
+
+    return reply.send(report);
+  });
+
   app.get('/api/v1/sessions/:sessionId/report.pdf', async (request, reply) => {
     const params = request.params as { sessionId: string };
     const exportResult = await assertBasicAlphaReportPdfExportResponse(

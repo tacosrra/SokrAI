@@ -490,6 +490,23 @@ export async function fetchBasicAlphaReport(sessionId: string): Promise<BasicAlp
   });
 }
 
+export async function composeBasicAlphaReport(
+  sessionId: string,
+  requestId?: string,
+): Promise<BasicAlphaReport> {
+  return requestJson({
+    url: joinUrl(API_BASE_URL, `/api/v1/sessions/${encodeURIComponent(sessionId)}/report`),
+    method: 'POST',
+    headers: requestId
+      ? {
+          'x-request-id': requestId,
+        }
+      : undefined,
+    timeoutMs: SESSION_AUDIT_TIMEOUT_MS,
+    parse: parseBasicAlphaReport,
+  });
+}
+
 export async function downloadBasicAlphaReportPdf(sessionId: string): Promise<BasicAlphaReportPdfDownload> {
   const result = await requestBlob({
     url: joinUrl(API_BASE_URL, `/api/v1/sessions/${encodeURIComponent(sessionId)}/report.pdf`),

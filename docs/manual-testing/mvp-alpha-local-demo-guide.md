@@ -736,7 +736,10 @@ Expected response:
 
 ### Step 8: View Basic Alpha Report in the app
 
-After composing the report, reload the browser tab or use `Abrir otra sesion` with the same `Session ID`.
+When the problem and solution sections already exist, the app now tries to
+compose the report automatically on reload/open. If the report card still does
+not appear, click `Preparar informe` in the workspace and then reload/open the
+same `Session ID` if needed.
 
 Expected behavior:
 
@@ -747,7 +750,8 @@ Expected behavior:
 
 ### Step 8b: Download the Basic Alpha Report PDF
 
-After composing the report, click `Download PDF` in the Basic Alpha Report panel.
+After the report has been prepared, click `Download PDF` in the Basic Alpha
+Report panel.
 
 Expected behavior:
 

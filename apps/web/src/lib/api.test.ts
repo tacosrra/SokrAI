@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  composeBasicAlphaReport,
   downloadBasicAlphaReportPdf,
   fetchBasicAlphaReport,
   recoverRequestExecution,
@@ -650,6 +651,28 @@ describe('requestJson transport options', () => {
 
     expect(url).toBe('/api/v1/sessions/session-1/report');
     expect(init.method).toBe('GET');
+    expect(result.report_id).toBe('report-1');
+  });
+
+  it('composes a Basic Alpha report through the public session route', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(BASIC_ALPHA_REPORT_RESPONSE), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      }),
+    );
+    stubGlobal('fetch', fetchMock);
+
+    const result = await composeBasicAlphaReport('session-1', 'web-report-compose-1');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+
+    expect(url).toBe('/api/v1/sessions/session-1/report');
+    expect(init.method).toBe('POST');
+    expect(init.headers).toEqual({
+      'x-request-id': 'web-report-compose-1',
+    });
     expect(result.report_id).toBe('report-1');
   });
 

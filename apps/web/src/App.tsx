@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import type { BasicAlphaReport, ProposalStartRequest, RecentSession, SessionAuditView } from './domain/contracts';
 import {
   ApiError,
+  composeBasicAlphaReport,
   downloadBasicAlphaReportPdf,
   fetchBasicAlphaReport,
   fetchRequestExecution,
@@ -93,9 +94,16 @@ function createClientRequestId(
     | 'medical-device-triage-start'
     | 'medical-device-triage-reply'
     | 'resources-pilot-viability-start'
-    | 'resources-pilot-viability-reply',
+    | 'resources-pilot-viability-reply'
+    | 'report-compose',
 ): string {
   return `web-${prefix}-${crypto.randomUUID()}`;
+}
+
+function canComposeReportFromAudit(audit: SessionAuditView): boolean {
+  const presentation = deriveSessionPresentation(audit);
+
+  return Boolean(presentation.latestProblemSection && presentation.latestSolutionSection);
 }
 
 function isRecoverableWorkflowDeliveryError(error: unknown): error is ApiError {
@@ -289,6 +297,7 @@ export function App() {
   const [isSubmittingStart, setIsSubmittingStart] = useState(false);
   const [isLoadingSession, setIsLoadingSession] = useState(false);
   const [isReplying, setIsReplying] = useState(false);
+  const [isComposingReport, setIsComposingReport] = useState(false);
   const [isDownloadingReportPdf, setIsDownloadingReportPdf] = useState(false);
   const [banner, setBanner] = useState<BannerState | null>(null);
 
@@ -332,7 +341,7 @@ export function App() {
       writeSessionToUrl(audit.session.id);
 
       try {
-        setActiveReport(await loadReportIfAvailable(audit.session.id));
+        setActiveReport(await loadReportIfAvailable(audit.session.id, audit));
       } catch {
         setActiveReport(null);
       }
@@ -360,15 +369,60 @@ export function App() {
     }
   }
 
-  async function loadReportIfAvailable(sessionId: string): Promise<BasicAlphaReport | null> {
+  async function loadReportIfAvailable(
+    sessionId: string,
+    audit?: SessionAuditView,
+  ): Promise<BasicAlphaReport | null> {
     try {
       return await fetchBasicAlphaReport(sessionId);
     } catch (error) {
       if (error instanceof ApiError && error.errorCode === 'report_not_found') {
+        if (audit && canComposeReportFromAudit(audit)) {
+          try {
+            return await composeBasicAlphaReport(sessionId, createClientRequestId('report-compose'));
+          } catch (composeError) {
+            if (
+              composeError instanceof ApiError &&
+              (
+                composeError.errorCode === 'problem_section_required_for_report' ||
+                composeError.errorCode === 'solution_section_required_for_report'
+              )
+            ) {
+              return null;
+            }
+
+            throw composeError;
+          }
+        }
+
         return null;
       }
 
       throw error;
+    }
+  }
+
+  async function handleComposeReport(sessionId: string): Promise<void> {
+    setIsComposingReport(true);
+    setBanner({
+      tone: 'info',
+      text: 'Componiendo el informe Alpha para habilitar la descarga PDF…',
+    });
+
+    try {
+      const report = await composeBasicAlphaReport(sessionId, createClientRequestId('report-compose'));
+      setActiveReport(report);
+      setBanner({
+        tone: 'success',
+        text: 'Informe Alpha preparado. Ya puedes descargar el PDF.',
+      });
+    } catch (error) {
+      setBanner({
+        tone: 'error',
+        text: mapApiError(error),
+      });
+    } finally {
+      setIsComposingReport(false);
     }
   }
 
@@ -1333,8 +1387,10 @@ export function App() {
               audit={activeAudit}
               report={activeReport}
               isReplying={isReplying}
+              isComposingReport={isComposingReport}
               isDownloadingReportPdf={isDownloadingReportPdf}
               onReply={handleReply}
+              onComposeReport={handleComposeReport}
               onDownloadReportPdf={handleDownloadReportPdf}
               onSolutionReply={handleSolutionReply}
               onDataAiPrivacyReply={handleDataAiPrivacyReply}

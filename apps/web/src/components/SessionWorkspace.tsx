@@ -10,8 +10,10 @@ interface SessionWorkspaceProps {
   audit: SessionAuditView;
   report: BasicAlphaReport | null;
   isReplying: boolean;
+  isComposingReport: boolean;
   isDownloadingReportPdf: boolean;
   onReply: (answer: string) => Promise<void>;
+  onComposeReport: (sessionId: string) => Promise<void>;
   onDownloadReportPdf: (sessionId: string) => Promise<void>;
   onSolutionReply: (answer: string) => Promise<void>;
   onDataAiPrivacyReply: (answer: string) => Promise<void>;
@@ -28,8 +30,10 @@ export function SessionWorkspace({
   audit,
   report,
   isReplying,
+  isComposingReport,
   isDownloadingReportPdf,
   onReply,
+  onComposeReport,
   onDownloadReportPdf,
   onSolutionReply,
   onDataAiPrivacyReply,
@@ -141,6 +145,7 @@ export function SessionWorkspace({
       presentation.resourcesPilotViabilityModuleChat?.chat_status !== 'completed' &&
       presentation.resourcesPilotViabilityModuleChat?.chat_status !== 'waiting_for_user',
   );
+  const canComposeReport = Boolean(!report && presentation.latestProblemSection && presentation.latestSolutionSection);
   const resolvedTurns = audit.turns.filter((turn) => Boolean(turn.answer_text?.trim())).length;
 
   return (
@@ -351,6 +356,19 @@ export function SessionWorkspace({
         <section className="question-callout question-callout--muted">
           <span className="question-callout__label">Informe Alpha</span>
           <p>El informe estructurado todavía no está compuesto para esta sesión.</p>
+
+          {canComposeReport ? (
+            <button
+              className="button button--secondary"
+              type="button"
+              onClick={() => void onComposeReport(audit.session.id)}
+              disabled={isComposingReport}
+            >
+              {isComposingReport ? 'Preparando informe…' : 'Preparar informe'}
+            </button>
+          ) : null}
+
+          <LocalDemoSafetyNotice compact context="report" />
         </section>
       ) : null}
 

@@ -494,9 +494,15 @@ El flujo normal Alpha es:
 4. repetir hasta `agent_status = "done"`
 5. iniciar `solution_start_v1`
 6. responder con `solution_reply_v1` hasta `agent_status = "done"`
-7. componer el informe con `POST /internal/reports/basic-alpha/compose`
+7. componer el informe con `POST /api/v1/sessions/:sessionId/report`
 8. leerlo con `GET /api/v1/sessions/:sessionId/report`
 9. descargar el PDF con `GET /api/v1/sessions/:sessionId/report.pdf`
+
+La UI local intenta componer el `Basic Alpha Report` automaticamente cuando la
+sesion ya tiene seccion de problema y seccion de solucion. Si aun no aparece,
+el workspace muestra el boton `Preparar informe`. El endpoint interno
+`POST /internal/reports/basic-alpha/compose` se mantiene para automatizaciones y
+smoke/manual tests existentes.
 
 La extension Clinic Pilot, despues de cerrar la solucion, es:
 
