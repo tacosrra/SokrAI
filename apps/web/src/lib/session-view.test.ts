@@ -319,6 +319,21 @@ describe('deriveSessionPresentation', () => {
     ]);
   });
 
+  it('always exposes all eight proposal phases in order', () => {
+    const presentation = deriveSessionPresentation(auditFixture);
+
+    expect(presentation.phaseProgress.steps.map((step) => step.id)).toEqual([
+      'intake',
+      'problem',
+      'solution',
+      'data_ai_privacy',
+      'medical_device_triage',
+      'resources_pilot_viability',
+      'report',
+      'pdf_export',
+    ]);
+  });
+
   it('marks the flow as complete when the session is closed and fields are defined', () => {
     const completedAudit: SessionAuditView = {
       ...auditFixture,
@@ -705,8 +720,7 @@ describe('deriveSessionPresentation', () => {
   });
 
   it('maps the PR9 start-ready state after solution completion', () => {
-    const auditReadyForClinicPilot: SessionAuditView = {
-      ...auditFixture,
+    const auditReadyForClinicPilot = resolvedProblemAudit({
       module_chats: [],
       generated_sections: [
         {
@@ -723,7 +737,7 @@ describe('deriveSessionPresentation', () => {
           created_at: '2026-05-24T14:35:00.000Z',
         },
       ],
-    };
+    });
 
     const presentation = deriveSessionPresentation(auditReadyForClinicPilot);
 
@@ -731,6 +745,50 @@ describe('deriveSessionPresentation', () => {
     expect(presentation.dataAiPrivacyModuleChat).toBeNull();
     expect(presentation.currentDataAiPrivacyQuestion).toBe('');
     expect(presentation.latestDataAiPrivacySection).toBeNull();
+    expect(presentation.phaseProgress.currentPhaseId).toBe('data_ai_privacy');
+    expect(presentation.phaseProgress.steps.find((step) => step.id === 'data_ai_privacy')).toMatchObject({
+      status: 'current',
+      primaryAction: 'start_data_ai_privacy',
+    });
+    expect(presentation.phaseProgress.steps.find((step) => step.id === 'resources_pilot_viability')).toMatchObject({
+      status: 'locked',
+      lockedReason: 'Completa datos/IA/privacidad y el triaje medical-device antes de recursos/piloto.',
+      primaryAction: 'none',
+    });
+  });
+
+  it('prefers the active module chat over an older completed chat for the same module', () => {
+    const olderCompletedDataChat: ModuleChat = {
+      ...completedModuleChat('data_ai_privacy'),
+      chat_id: 'chat-data-completed',
+      started_at: '2026-05-24T14:00:00.000Z',
+      completed_at: '2026-05-24T14:10:00.000Z',
+    };
+    const newerWaitingDataChat: ModuleChat = {
+      ...awaitingModuleChat('data_ai_privacy', 'Que dato sensible falta validar?'),
+      chat_id: 'chat-data-waiting',
+      started_at: '2026-05-24T14:40:00.000Z',
+    };
+    const presentation = deriveSessionPresentation(resolvedProblemAudit({
+      generated_sections: [
+        generatedSection('problem'),
+        generatedSection('solution'),
+      ],
+      module_chats: [
+        completedModuleChat('problem'),
+        completedModuleChat('solution'),
+        olderCompletedDataChat,
+        newerWaitingDataChat,
+      ],
+    }));
+
+    expect(presentation.dataAiPrivacyModuleChat?.chat_id).toBe('chat-data-waiting');
+    expect(presentation.currentDataAiPrivacyQuestion).toBe('Que dato sensible falta validar?');
+    expect(presentation.phaseProgress.currentPhaseId).toBe('data_ai_privacy');
+    expect(presentation.phaseProgress.steps.find((step) => step.id === 'data_ai_privacy')).toMatchObject({
+      status: 'current',
+      primaryAction: 'answer_question',
+    });
   });
 
   it('prioritizes active resources pilot viability questions and maps PR11 section state', () => {

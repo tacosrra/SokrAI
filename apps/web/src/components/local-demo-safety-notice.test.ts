@@ -1,14 +1,22 @@
+// @vitest-environment jsdom
+
 import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../App';
-import type { AgentRun, BasicAlphaReport, SessionAuditView } from '../domain/contracts';
+import type { AgentRun, BasicAlphaReport, ModuleChat, SessionAuditView } from '../domain/contracts';
 import { deriveSessionPresentation } from '../lib/session-view';
 import { BasicAlphaReportPanel } from './BasicAlphaReportPanel';
 import { LocalDemoSafetyNotice } from './LocalDemoSafetyNotice';
 import { SessionStatePanel } from './SessionStatePanel';
 import { SessionWorkspace } from './SessionWorkspace';
+
+afterEach(() => {
+  cleanup();
+});
 
 const createdAt = '2026-06-05T10:00:00.000Z';
 
@@ -223,6 +231,42 @@ const workspaceAudit: SessionAuditView = {
   events: [],
 };
 
+function renderWorkspaceHtml(
+  audit: SessionAuditView,
+  options: {
+    report?: BasicAlphaReport | null;
+    reportLoadError?: string | null;
+  } = {},
+): string {
+  const currentReport = options.report ?? null;
+
+  return renderToStaticMarkup(
+    h(SessionWorkspace, {
+      audit,
+      report: currentReport,
+      reportLoadError: options.reportLoadError,
+      isReplying: false,
+      isComposingReport: false,
+      isDownloadingReportPdf: false,
+      onReply: async () => undefined,
+      onComposeReport: async () => undefined,
+      onDownloadReportPdf: async () => undefined,
+      onSolutionReply: async () => undefined,
+      onDataAiPrivacyReply: async () => undefined,
+      onMedicalDeviceTriageReply: async () => undefined,
+      onResourcesPilotViabilityReply: async () => undefined,
+      onStartSolution: async () => undefined,
+      onStartDataAiPrivacy: async () => undefined,
+      onStartMedicalDeviceTriage: async () => undefined,
+      onStartResourcesPilotViability: async () => undefined,
+      presentation: deriveSessionPresentation(
+        audit,
+        currentReport ? { report: currentReport } : {},
+      ),
+    }),
+  );
+}
+
 describe('LocalDemoSafetyNotice', () => {
   it.each([
     ['intake', 'Usa solo informacion ficticia o anonimizada'],
@@ -312,6 +356,172 @@ describe('SessionWorkspace', () => {
 
     expect(html).toContain('Fase actual: Solución');
     expect(html).toContain('Iniciar solución');
+    expect(html).not.toContain('Preparar informe');
+  });
+
+  it('renders all eight phases in the canonical navigator', () => {
+    const html = renderWorkspaceHtml(workspaceAudit);
+
+    expect(html).toContain('aria-label="Camino de fases de la propuesta"');
+    expect((html.match(/aria-current="step"/g) ?? [])).toHaveLength(1);
+    expect(html).toContain('Intake / propuesta');
+    expect(html).toContain('Problema');
+    expect(html).toContain('Solución');
+    expect(html).toContain('Datos / IA / privacidad');
+    expect(html).toContain('Medical-device triage');
+    expect(html).toContain('Recursos / piloto / viabilidad');
+    expect(html).toContain('Informe');
+    expect(html).toContain('PDF / export');
+    expect(html).toContain('Completada');
+    expect(html).toContain('Actual');
+    expect(html).toContain('Bloqueada');
+    expect((html.match(/Acción actual/g) ?? [])).toHaveLength(1);
+  });
+
+  it('keeps report load failures out of unrelated current phase guidance', () => {
+    const auditReadyForSolution: SessionAuditView = {
+      ...workspaceAudit,
+      module_chats: [workspaceAudit.module_chats[0]!],
+      generated_sections: [report.problem_section],
+      runs: [],
+    };
+    const html = renderWorkspaceHtml(auditReadyForSolution, {
+      reportLoadError: 'Sesión session-1 cargada, pero no se pudo recuperar el informe Alpha.',
+    });
+
+    expect(html).toContain('Fase actual: Solución');
+    expect(html).toContain('Describe qué cambiaría, quién la usaría, cómo funcionaría y sus límites.');
+    expect(html).not.toContain('Sesión session-1 cargada, pero no se pudo recuperar el informe Alpha.');
+  });
+
+  it('exposes only the current phase start action when solution is ready', () => {
+    const auditReadyForSolution: SessionAuditView = {
+      ...workspaceAudit,
+      module_chats: [workspaceAudit.module_chats[0]!],
+      generated_sections: [report.problem_section],
+      runs: [],
+    };
+    const html = renderWorkspaceHtml(auditReadyForSolution);
+
+    expect(html).toContain('Iniciar solución');
+    expect(html).toContain('Completa la fase de solución antes de revisar datos, IA y privacidad.');
+    expect(html).not.toContain('Iniciar datos/IA/privacidad');
+    expect(html).not.toContain('Iniciar medical-device triage');
+    expect(html).not.toContain('Iniciar recursos/piloto');
+    expect(html).not.toContain('Preparar informe');
+    expect(html).not.toContain('Exportar PDF');
+  });
+
+  it('keeps resources locked after solution instead of rendering a parallel action', () => {
+    const auditAfterSolution: SessionAuditView = {
+      ...workspaceAudit,
+      module_chats: [
+        workspaceAudit.module_chats[0]!,
+        workspaceAudit.module_chats[1]!,
+      ],
+      generated_sections: [
+        report.problem_section,
+        report.solution_section,
+      ],
+      runs: [],
+    };
+    const html = renderWorkspaceHtml(auditAfterSolution);
+
+    expect(html).toContain('Fase actual: Datos / IA / privacidad');
+    expect(html).toContain('Iniciar datos/IA/privacidad');
+    expect(html).toContain('Completa datos/IA/privacidad y el triaje medical-device antes de recursos/piloto.');
+    expect(html).toContain('Faltan fases previas: Datos / IA / privacidad, Medical-device triage, Recursos / piloto / viabilidad.');
+    expect(html).not.toContain('Iniciar recursos/piloto');
+    expect(html).not.toContain('Preparar informe');
+  });
+
+  it('starts only the current data/IA/privacy phase when its primary action is clicked', async () => {
+    const auditAfterSolution: SessionAuditView = {
+      ...workspaceAudit,
+      module_chats: [
+        workspaceAudit.module_chats[0]!,
+        workspaceAudit.module_chats[1]!,
+      ],
+      generated_sections: [
+        report.problem_section,
+        report.solution_section,
+      ],
+      runs: [],
+    };
+    const onStartDataAiPrivacy = vi.fn(async () => undefined);
+    const onStartResourcesPilotViability = vi.fn(async () => undefined);
+
+    render(
+      h(SessionWorkspace, {
+        audit: auditAfterSolution,
+        report: null,
+        isReplying: false,
+        isComposingReport: false,
+        isDownloadingReportPdf: false,
+        onReply: async () => undefined,
+        onComposeReport: async () => undefined,
+        onDownloadReportPdf: async () => undefined,
+        onSolutionReply: async () => undefined,
+        onDataAiPrivacyReply: async () => undefined,
+        onMedicalDeviceTriageReply: async () => undefined,
+        onResourcesPilotViabilityReply: async () => undefined,
+        onStartSolution: async () => undefined,
+        onStartDataAiPrivacy,
+        onStartMedicalDeviceTriage: async () => undefined,
+        onStartResourcesPilotViability,
+        presentation: deriveSessionPresentation(auditAfterSolution),
+      }),
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Iniciar datos/IA/privacidad' }));
+
+    expect(onStartDataAiPrivacy).toHaveBeenCalledTimes(1);
+    expect(onStartResourcesPilotViability).not.toHaveBeenCalled();
+  });
+
+  it('shows medical-device not applicable and moves the next action to resources', () => {
+    const notApplicableRun: AgentRun = {
+      id: 'run-medical-device-not-applicable',
+      session_id: 'session-1',
+      turn_seq: null,
+      request_id: 'req-medical-device',
+      run_purpose: 'medical_device_triage',
+      agent_name: 'medical_device_triage_agent',
+      prompt_name: 'medical-device-triage',
+      prompt_version: 'v1',
+      prompt_sha256: 'hash-medical-device',
+      model_provider: 'ollama',
+      model_name: 'qwen2.5:7b-instruct',
+      model_params_json: {},
+      raw_model_output: '{}',
+      validated_output_json: {
+        updated_medical_device_triage: {
+          triage_status: 'not_applicable',
+        },
+      },
+      status: 'completed',
+    };
+    const auditWithSkippedMedicalDevice: SessionAuditView = {
+      ...workspaceAudit,
+      module_chats: [
+        workspaceAudit.module_chats[0]!,
+        workspaceAudit.module_chats[1]!,
+        workspaceAudit.module_chats[2]!,
+      ],
+      generated_sections: [
+        report.problem_section,
+        report.solution_section,
+        workspaceAudit.generated_sections[2]!,
+      ],
+      runs: [notApplicableRun],
+    };
+    const html = renderWorkspaceHtml(auditWithSkippedMedicalDevice);
+
+    expect(html).toContain('Fase actual: Recursos / piloto / viabilidad');
+    expect(html).toContain('Medical-device triage');
+    expect(html).toContain('No aplica');
+    expect(html).toContain('Iniciar recursos/piloto');
+    expect(html).not.toContain('Iniciar medical-device triage');
     expect(html).not.toContain('Preparar informe');
   });
 
@@ -419,6 +629,31 @@ describe('SessionWorkspace', () => {
     expect(html).toContain('Reintentar informe');
   });
 
+  it('does not mark unsupported non-report recovery as an actionable rail step', () => {
+    const failedSolutionChat: ModuleChat = {
+      ...workspaceAudit.module_chats[1]!,
+      chat_status: 'failed',
+      active_turn_id: undefined,
+      turns: [],
+    };
+    const auditWithFailedSolution: SessionAuditView = {
+      ...workspaceAudit,
+      module_chats: [
+        workspaceAudit.module_chats[0]!,
+        failedSolutionChat,
+      ],
+      generated_sections: [report.problem_section],
+      runs: [],
+    };
+    const html = renderWorkspaceHtml(auditWithFailedSolution);
+
+    expect(html).toContain('Fase actual: Solución');
+    expect(html).toContain('La fase necesita revisión o recuperación antes de continuar.');
+    expect(html).toContain('Esta fase necesita recuperación, pero esta pantalla solo permite reintentar el informe Alpha.');
+    expect(html).not.toContain('Acción actual');
+    expect(html).not.toContain('Reintentar informe');
+  });
+
   it('passes the PDF phase lock through to an existing report panel', () => {
     const reportNeedingRevision: BasicAlphaReport = { ...report, report_status: 'needs_revision' };
     const html = renderToStaticMarkup(
@@ -445,6 +680,77 @@ describe('SessionWorkspace', () => {
 
     expect(html).toContain('Download PDF');
     expect(html).toContain('disabled=""');
+  });
+
+  it('renders PDF export as the final phase action when the report is ready', () => {
+    const html = renderWorkspaceHtml(workspaceAudit, { report });
+
+    expect(html).toContain('Fase actual: PDF / export');
+    expect(html).toContain('Exportar PDF');
+    expect((html.match(/class="button button--primary"/g) ?? [])).toHaveLength(1);
+    expect(html).toMatch(
+      /<button[^>]*class="button button--secondary basic-report__download"[^>]*disabled=""[^>]*>Download PDF<\/button>/,
+    );
+    expect(html).not.toContain('Preparar informe');
+    expect(html).not.toContain('Iniciar recursos/piloto');
+  });
+
+  it('passes the session id to report and PDF primary actions', async () => {
+    const onComposeReport = vi.fn(async () => undefined);
+    const onDownloadReportPdf = vi.fn(async () => undefined);
+
+    const { unmount } = render(
+      h(SessionWorkspace, {
+        audit: workspaceAudit,
+        report: null,
+        isReplying: false,
+        isComposingReport: false,
+        isDownloadingReportPdf: false,
+        onReply: async () => undefined,
+        onComposeReport,
+        onDownloadReportPdf,
+        onSolutionReply: async () => undefined,
+        onDataAiPrivacyReply: async () => undefined,
+        onMedicalDeviceTriageReply: async () => undefined,
+        onResourcesPilotViabilityReply: async () => undefined,
+        onStartSolution: async () => undefined,
+        onStartDataAiPrivacy: async () => undefined,
+        onStartMedicalDeviceTriage: async () => undefined,
+        onStartResourcesPilotViability: async () => undefined,
+        presentation: deriveSessionPresentation(workspaceAudit),
+      }),
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Preparar informe' }));
+    expect(onComposeReport).toHaveBeenCalledWith('session-1');
+
+    unmount();
+
+    render(
+      h(SessionWorkspace, {
+        audit: workspaceAudit,
+        report,
+        isReplying: false,
+        isComposingReport: false,
+        isDownloadingReportPdf: false,
+        onReply: async () => undefined,
+        onComposeReport,
+        onDownloadReportPdf,
+        onSolutionReply: async () => undefined,
+        onDataAiPrivacyReply: async () => undefined,
+        onMedicalDeviceTriageReply: async () => undefined,
+        onResourcesPilotViabilityReply: async () => undefined,
+        onStartSolution: async () => undefined,
+        onStartDataAiPrivacy: async () => undefined,
+        onStartMedicalDeviceTriage: async () => undefined,
+        onStartResourcesPilotViability: async () => undefined,
+        presentation: deriveSessionPresentation(workspaceAudit, { report }),
+      }),
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Exportar PDF' }));
+
+    expect(onDownloadReportPdf).toHaveBeenCalledWith('session-1');
   });
 });
 

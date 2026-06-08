@@ -10,10 +10,10 @@ It covers only the implemented MVP/Clinic path:
 - deterministic initial gaps
 - problem chat and generated problem section
 - solution chat and generated solution section
-- Basic Alpha Report and local PDF export
 - data/AI/privacy lane
 - conditional medical-device triage lane
 - resources/pilot/viability lane
+- Basic Alpha Report and local PDF export
 - resume/reload and public audit redaction
 
 This is local demo guidance only. Do not use real patient data. Human review is
@@ -360,18 +360,7 @@ Expected result:
 - warnings remain bounded and review-oriented
 - no automatic transition into unrelated future agents
 
-### 6. Basic Alpha Report
-
-When problem and solution sections exist, compose/view the Basic Alpha Report.
-
-Expected result:
-
-- report shows brief, current gaps, problem section, solution section, sources,
-  audit refs, schema version, and fixed no-decision warnings
-- report does not include raw model output, prompts, model params, scoring,
-  ranking, or approval/rejection
-
-### 7. Data/AI/privacy
+### 6. Data/AI/privacy
 
 Start the data/AI/privacy lane after the solution section exists. Answer with
 fake details about data categories, sources, AI role, validation evidence,
@@ -384,7 +373,7 @@ Expected result:
 - `requires competent human review` warning is present where applicable
 - no compliance/non-compliance or privacy dictamen is emitted
 
-### 8. Medical-device triage
+### 7. Medical-device triage
 
 Start medical-device triage after data/AI/privacy completion.
 
@@ -396,22 +385,35 @@ Expected result:
 - output remains gaps/questions/uncertainty only
 - no definitive medical-device classification or MDR class is emitted
 
-### 9. Resources/pilot/viability
+### 8. Resources/pilot/viability
 
-Start resources/pilot/viability after the solution section exists. Answer with
-fake details about resources, pilot environment, dependencies, metrics,
-constraints, and risks.
+Start resources/pilot/viability after data/AI/privacy is complete and
+medical-device triage is complete or marked not applicable. Answer with fake
+details about resources, pilot environment, dependencies, metrics, constraints,
+and risks.
 
 Expected result:
 
 - output captures operational gaps and assumptions
 - no viability score, approval, ranking, or financial model is emitted
 
+### 9. Basic Alpha Report
+
+When the required prior phases are complete or skipped, click "Preparar
+informe" in the workspace to compose/view the Basic Alpha Report.
+
+Expected result:
+
+- report shows brief, current gaps, problem section, solution section, sources,
+  audit refs, schema version, and fixed no-decision warnings
+- report does not include raw model output, prompts, model params, scoring,
+  ranking, or approval/rejection
+
 ### 10. PDF export
 
-If the Basic Alpha Report card is not visible yet, click "Preparar informe" in
-the workspace first. Once the report is present, click "Download PDF" in the
-Basic Alpha Report area.
+Once the report is present and ready, the phase navigator exposes the final
+PDF/export action. Click "Exportar PDF" in the phase action panel; the embedded
+report PDF button may remain disabled while the final action owns the export.
 
 Expected result:
 
@@ -555,8 +557,9 @@ WSL-specific issues:
   pass or blockers are documented.
 - `smoke-core` and `smoke-clinic-demo` pass when local services are available.
 - Manual browser flow completed for proposal, document intake, brief, gaps,
-  problem, solution, Basic Alpha Report, data/AI/privacy, medical-device triage,
-  resources/pilot/viability, PDF export, resume/reload, audit, and warnings.
+  problem, solution, data/AI/privacy, medical-device triage,
+  resources/pilot/viability, Basic Alpha Report, PDF export, resume/reload,
+  audit, and warnings.
 - PDF downloaded successfully.
 - Safety warnings are visible.
 - No real patient data was used.
