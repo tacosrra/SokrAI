@@ -723,6 +723,18 @@ The internal report compose endpoint remains available for automation and
 targeted checks, but the workspace should not present `Preparar informe` until
 the required prior browser phases are complete or skipped.
 
+UX2 responsive/manual QA record:
+
+- Desktop viewport: phase navigator shows the canonical order, exactly one
+  current action marker, locked phases explain prerequisites, and safety
+  warnings remain visible while moving from data/AI/privacy through PDF/export.
+- Mobile viewport: the same phase order stacks in one column, current action
+  remains visible, report/PDF controls do not duplicate the final export action,
+  and safety warnings remain visible.
+- Future work: add Playwright/browser visual regression coverage for the phase
+  navigator and current action panel, tracked in #40. This PR intentionally
+  keeps browser infrastructure out of scope.
+
 ### Optional internal check: Compose the Basic Alpha Report
 
 The browser-guided path reaches the Basic Alpha Report after data/AI/privacy,

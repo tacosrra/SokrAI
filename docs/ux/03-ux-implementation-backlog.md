@@ -65,6 +65,8 @@ The user should always understand current phase, completed phases, locked future
 
 ## UX2 Sequential phase gating/navigation
 
+Status note: Implemented in PR #39 for the frontend UX2 path. Manual desktop/mobile QA is recorded in `docs/manual-testing/mvp-alpha-local-demo-guide.md`; browser visual regression coverage remains future work tracked in #40.
+
 ### Objective
 
 Make the UI communicate and enforce the desired sequential flow. Later modules should not feel parallel unless the product explicitly decides they are parallel.
@@ -356,4 +358,3 @@ Make the redesigned UI feel calm, high-end, healthcare-appropriate, and usable a
 - RAG/auth/remote AI.
 - Legal, cost, scoring, or broad multi-agent orchestration.
 - Safety warning requirements.
-

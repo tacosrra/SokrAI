@@ -7,7 +7,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../App';
-import type { AgentRun, BasicAlphaReport, SessionAuditView } from '../domain/contracts';
+import type { AgentRun, BasicAlphaReport, ModuleChat, SessionAuditView } from '../domain/contracts';
 import { deriveSessionPresentation } from '../lib/session-view';
 import { BasicAlphaReportPanel } from './BasicAlphaReportPanel';
 import { LocalDemoSafetyNotice } from './LocalDemoSafetyNotice';
@@ -372,9 +372,26 @@ describe('SessionWorkspace', () => {
     expect(html).toContain('Recursos / piloto / viabilidad');
     expect(html).toContain('Informe');
     expect(html).toContain('PDF / export');
+    expect(html).toContain('Completada');
     expect(html).toContain('Actual');
     expect(html).toContain('Bloqueada');
-    expect(html).toContain('Acción actual');
+    expect((html.match(/Acción actual/g) ?? [])).toHaveLength(1);
+  });
+
+  it('keeps report load failures out of unrelated current phase guidance', () => {
+    const auditReadyForSolution: SessionAuditView = {
+      ...workspaceAudit,
+      module_chats: [workspaceAudit.module_chats[0]!],
+      generated_sections: [report.problem_section],
+      runs: [],
+    };
+    const html = renderWorkspaceHtml(auditReadyForSolution, {
+      reportLoadError: 'Sesión session-1 cargada, pero no se pudo recuperar el informe Alpha.',
+    });
+
+    expect(html).toContain('Fase actual: Solución');
+    expect(html).toContain('Describe qué cambiaría, quién la usaría, cómo funcionaría y sus límites.');
+    expect(html).not.toContain('Sesión session-1 cargada, pero no se pudo recuperar el informe Alpha.');
   });
 
   it('exposes only the current phase start action when solution is ready', () => {
@@ -612,6 +629,31 @@ describe('SessionWorkspace', () => {
     expect(html).toContain('Reintentar informe');
   });
 
+  it('does not mark unsupported non-report recovery as an actionable rail step', () => {
+    const failedSolutionChat: ModuleChat = {
+      ...workspaceAudit.module_chats[1]!,
+      chat_status: 'failed',
+      active_turn_id: undefined,
+      turns: [],
+    };
+    const auditWithFailedSolution: SessionAuditView = {
+      ...workspaceAudit,
+      module_chats: [
+        workspaceAudit.module_chats[0]!,
+        failedSolutionChat,
+      ],
+      generated_sections: [report.problem_section],
+      runs: [],
+    };
+    const html = renderWorkspaceHtml(auditWithFailedSolution);
+
+    expect(html).toContain('Fase actual: Solución');
+    expect(html).toContain('La fase necesita revisión o recuperación antes de continuar.');
+    expect(html).toContain('Esta fase necesita recuperación, pero esta pantalla solo permite reintentar el informe Alpha.');
+    expect(html).not.toContain('Acción actual');
+    expect(html).not.toContain('Reintentar informe');
+  });
+
   it('passes the PDF phase lock through to an existing report panel', () => {
     const reportNeedingRevision: BasicAlphaReport = { ...report, report_status: 'needs_revision' };
     const html = renderToStaticMarkup(
@@ -645,6 +687,7 @@ describe('SessionWorkspace', () => {
 
     expect(html).toContain('Fase actual: PDF / export');
     expect(html).toContain('Exportar PDF');
+    expect((html.match(/class="button button--primary"/g) ?? [])).toHaveLength(1);
     expect(html).toMatch(
       /<button[^>]*class="button button--secondary basic-report__download"[^>]*disabled=""[^>]*>Download PDF<\/button>/,
     );

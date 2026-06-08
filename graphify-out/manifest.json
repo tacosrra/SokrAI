@@ -275,8 +275,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/SessionWorkspace.tsx": {
-    "mtime": 1780949300.455755,
-    "ast_hash": "e0e061372d4e13ad0b53ebdccd1f5d23",
+    "mtime": 1780953126.020134,
+    "ast_hash": "86181e38947d279c2a5a46f3c0d9e4af",
     "semantic_hash": ""
   },
   "apps/web/src/components/StatusBadge.tsx": {
@@ -290,8 +290,8 @@
     "semantic_hash": "cd447418cbd7c6113ca129ef266cfcfb"
   },
   "apps/web/src/components/local-demo-safety-notice.test.ts": {
-    "mtime": 1780951254.3820746,
-    "ast_hash": "53a5623ed4e1bdef719694afc45e9eca",
+    "mtime": 1780953158.939763,
+    "ast_hash": "03f7ee66d8b7b15ae1fe9b286492d6bc",
     "semantic_hash": ""
   },
   "apps/web/src/domain/contracts.ts": {
@@ -1245,8 +1245,8 @@
     "semantic_hash": ""
   },
   "docs/manual-testing/mvp-alpha-local-demo-guide.md": {
-    "mtime": 1780951312.490348,
-    "ast_hash": "f393340cedc3ffccb28374f817e87c95",
+    "mtime": 1780953214.9435823,
+    "ast_hash": "026d66b486a36a99ab007b7de7736b1e",
     "semantic_hash": ""
   },
   "docs/mvp/01-mvp-scope.md": {
@@ -1330,8 +1330,8 @@
     "semantic_hash": ""
   },
   "docs/ux/03-ux-implementation-backlog.md": {
-    "mtime": 1780948093.7774436,
-    "ast_hash": "41d9a25aa9144f0ba24aaaf6ae64f4e6",
+    "mtime": 1780953210.4027822,
+    "ast_hash": "cace2d173af66210b2a61030b1a36e65",
     "semantic_hash": ""
   },
   "infra/n8n/README.md": {

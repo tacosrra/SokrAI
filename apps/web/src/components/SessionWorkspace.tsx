@@ -243,10 +243,18 @@ export function SessionWorkspace({
         return null;
     }
   })();
+  const unsupportedRecoverAction =
+    currentPhase.primaryAction === 'recover' &&
+    !(currentPhase.id === 'report' && !report);
+  const currentPhaseHasVisibleAction =
+    Boolean(primaryPhaseAction) ||
+    (currentPhase.primaryAction === 'answer_question' && canReply);
   const resolvedTurns = audit.turns.filter((turn) => Boolean(turn.answer_text?.trim())).length;
+  const currentPhaseReportLoadError =
+    currentPhase.id === 'report' ? reportLoadError : null;
   const actionPanelText =
     presentation.currentQuestion ||
-    reportLoadError ||
+    currentPhaseReportLoadError ||
     currentPhase.lockedReason ||
     currentPhase.explanation;
   const reportPanelCanDownloadPdf =
@@ -322,6 +330,11 @@ export function SessionWorkspace({
           </span>
           <h2>{currentPhase.label}</h2>
           <p>{actionPanelText}</p>
+          {unsupportedRecoverAction ? (
+            <div className="feedback feedback--error">
+              Esta fase necesita recuperación, pero esta pantalla solo permite reintentar el informe Alpha. Revisa el estado antes de continuar.
+            </div>
+          ) : null}
         </div>
 
         {primaryPhaseAction ? (
@@ -363,7 +376,7 @@ export function SessionWorkspace({
                 <p className="phase-step__reason">{step.lockedReason ?? step.explanation}</p>
               </div>
 
-              {step.id === currentPhase.id && step.primaryAction !== 'none' ? (
+              {step.id === currentPhase.id && currentPhaseHasVisibleAction ? (
                 <span className="phase-step__action">Acción actual</span>
               ) : null}
             </li>
