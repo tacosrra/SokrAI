@@ -9,6 +9,8 @@
 #   docs:
 #     path: docs
 assistants:
+  pi:
+    enableExtensions: true
   codex:
     codexBinaryPath: /home/tacosrra/.local/bin/codex-clean
     model: gpt-5.5
