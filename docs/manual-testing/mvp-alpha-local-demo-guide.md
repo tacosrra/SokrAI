@@ -4,7 +4,10 @@
 
 This guide lets a developer run and manually test the current SokrAI MVP Alpha end to end from the local repository. It is based on the current `package.json` scripts, Docker Compose files, `.env.example`, n8n workflow exports, Ollama adapter, API routes, frontend behavior, and test suite.
 
-Use it when you need to prove the PR8 / Basic Structured Alpha Report path manually, then exercise the Clinic Pilot browser extensions for data/AI/privacy gaps, conditional medical-device triage, and resources/pilot/viability:
+Use it when you need to prove the guided MVP/Clinic browser path, including
+data/AI/privacy gaps, conditional medical-device triage,
+resources/pilot/viability, and the final Basic Structured Alpha Report/PDF
+phases:
 
 1. Create a proposal.
 2. Add or paste documentation.
@@ -14,12 +17,13 @@ Use it when you need to prove the PR8 / Basic Structured Alpha Report path manua
 6. Generate the problem section.
 7. Complete the solution chat.
 8. Generate the solution section.
-9. Compose and view the Basic Alpha Report in the app.
-10. Start and complete the PR9 data/AI/privacy browser flow after the solution section exists.
-11. Start PR10 medical-device triage after the PR9 section exists.
-12. Verify applicable/uncertain cases ask bounded questions and no-signal cases are recorded as `not_applicable`.
-13. Start and complete the PR11 resources/pilot/viability flow after the solution section exists.
-14. Reload or resume the session and verify state persists.
+9. Start and complete the PR9 data/AI/privacy browser flow after the solution section exists.
+10. Start PR10 medical-device triage after the PR9 section exists.
+11. Verify applicable/uncertain cases ask bounded questions and no-signal cases are recorded as `not_applicable`.
+12. Start and complete the PR11 resources/pilot/viability flow after data/AI/privacy is complete and medical-device triage is complete or marked `not_applicable`.
+13. Compose and view the Basic Alpha Report in the app after the required prior browser phases are complete or skipped.
+14. Export the Basic Alpha Report PDF from the final PDF/export phase.
+15. Reload or resume the session and verify state persists.
 
 ## 2. Current Scope
 
@@ -39,7 +43,8 @@ This guide covers MVP Alpha plus the PR9, PR10, and PR11 Clinic Pilot extensions
 - PR9 `hospital_clinic_v1` data/AI/privacy gap flow after solution completion
 - PR10 conditional `medical_device_triage` flow after data/AI/privacy completion
 - PR10 generated section limited to gaps/questions/uncertainty and competent human review
-- PR11 `resources_pilot_viability` flow after solution completion
+- PR11 `resources_pilot_viability` flow after data/AI/privacy completion and
+  completed or not-applicable medical-device triage
 - PR13 local demo hardening: no-real-patient-data warnings, safe secrets, n8n retention defaults, public audit redaction, and redacted smoke diagnostics
 
 The canonical contracts live in `contracts/schemas`. The relevant public app surfaces are:
@@ -53,7 +58,7 @@ The canonical contracts live in `contracts/schemas`. The relevant public app sur
 
 ## 3. Intentionally Out of Scope
 
-Do not test or present these as implemented MVP Alpha, PR9, or PR10 capabilities:
+Do not test or present these as implemented MVP Alpha, PR9, PR10, or PR11 capabilities:
 
 - Clinic Pilot modules beyond `data_ai_privacy_gap_agent`, `medical_device_triage_agent`, and `resources_pilot_viability_agent`
 - definitive medical device determination
@@ -703,14 +708,34 @@ Expected completion behavior:
 - A generated solution section appears.
 - `GET /api/v1/sessions/:sessionId` includes `generated_sections` with `section_kind = "solution"`.
 
-### Step 7: Compose the Basic Alpha Report
+### Browser-guided phase order after solution
 
-The frontend displays a report that already exists, but it does not currently call the internal compose endpoint itself. After both `problem` and `solution` sections exist, compose the report from the terminal:
+After the solution section exists, follow the workspace phase navigator in this
+order:
+
+1. Data/AI/privacy
+2. Medical-device triage, or `not_applicable`
+3. Resources/pilot/viability
+4. Basic Alpha Report
+5. PDF/export
+
+The internal report compose endpoint remains available for automation and
+targeted checks, but the workspace should not present `Preparar informe` until
+the required prior browser phases are complete or skipped.
+
+### Optional internal check: Compose the Basic Alpha Report
+
+The browser-guided path reaches the Basic Alpha Report after data/AI/privacy,
+medical-device triage, and resources/pilot/viability. For targeted API
+verification, the internal compose endpoint remains callable once the problem
+and solution sections exist:
 
 ```bash
 SESSION_ID="replace-with-session-id"
 INTERNAL_SHARED_SECRET="$(awk -F= '$1=="INTERNAL_SHARED_SECRET"{print substr($0,index($0,"=")+1); exit}' .env)"
+```
 
+```bash
 curl -sS \
   -X POST \
   http://localhost:3001/internal/reports/basic-alpha/compose \
@@ -734,12 +759,11 @@ Expected response:
 - `warnings`
 - `generated_at`
 
-### Step 8: View Basic Alpha Report in the app
+### Browser step: View Basic Alpha Report in the app
 
-When the problem and solution sections already exist, the app now tries to
-compose the report automatically on reload/open. If the report card still does
-not appear, click `Preparar informe` in the workspace and then reload/open the
-same `Session ID` if needed.
+When the required prior browser phases are complete or skipped, click `Preparar
+informe` in the workspace. If a report already exists, reload/open the same
+`Session ID` and verify that the report card appears.
 
 Expected behavior:
 
@@ -748,10 +772,10 @@ Expected behavior:
 - The report shows brief fields, open gaps, problem section, solution section, gap states, internal sources, and warnings.
 - The report does not show raw model output, prompts, model parameters, or validated raw run payloads.
 
-### Step 8b: Download the Basic Alpha Report PDF
+### Browser step: Download the Basic Alpha Report PDF
 
-After the report has been prepared, click `Download PDF` in the Basic Alpha
-Report panel.
+After the report has been prepared and the phase navigator reaches PDF/export,
+click `Exportar PDF` in the phase action panel.
 
 Expected behavior:
 
@@ -827,9 +851,11 @@ Expected persisted artifacts from `GET /api/v1/sessions/:sessionId`:
 
 ### Step 11: Run PR11 Resources/Pilot/Viability in the Browser
 
-After the solution section exists, the workspace can start the PR11
-`resources_pilot_viability` flow. This module collects operational inputs for a
-future pilot; it does not score, rank, approve, reject, cost, or decide go/no-go.
+After data/AI/privacy is complete and medical-device triage is complete or
+marked `not_applicable`, the workspace can start the PR11
+`resources_pilot_viability` flow. This module collects operational inputs for
+a future pilot; it does not score, rank, approve, reject, cost, or decide
+go/no-go.
 
 Suggested answer:
 
@@ -1198,7 +1224,9 @@ Clear browser state if the web UI keeps showing old recent sessions:
 - No OCR for scanned PDFs.
 - No remote or VPS AI provider.
 - No Clinic Pilot modules beyond the PR9 data/AI/privacy gap flow, PR10 conditional medical-device triage, and PR11 resources/pilot/viability.
-- Basic Alpha Report composition currently requires the internal compose API call after both generated sections exist; the app displays the report after it has been composed.
+- The internal Basic Alpha Report compose endpoint remains available for
+  automation and targeted checks, but the browser workspace presents report and
+  PDF actions only after the guided prior phases are complete or skipped.
 
 ## 20. Final Checklist
 

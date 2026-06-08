@@ -1,6 +1,10 @@
+// @vitest-environment jsdom
+
 import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { App } from '../App';
 import type { AgentRun, BasicAlphaReport, SessionAuditView } from '../domain/contracts';
@@ -9,6 +13,10 @@ import { BasicAlphaReportPanel } from './BasicAlphaReportPanel';
 import { LocalDemoSafetyNotice } from './LocalDemoSafetyNotice';
 import { SessionStatePanel } from './SessionStatePanel';
 import { SessionWorkspace } from './SessionWorkspace';
+
+afterEach(() => {
+  cleanup();
+});
 
 const createdAt = '2026-06-05T10:00:00.000Z';
 
@@ -354,6 +362,8 @@ describe('SessionWorkspace', () => {
   it('renders all eight phases in the canonical navigator', () => {
     const html = renderWorkspaceHtml(workspaceAudit);
 
+    expect(html).toContain('aria-label="Camino de fases de la propuesta"');
+    expect((html.match(/aria-current="step"/g) ?? [])).toHaveLength(1);
     expect(html).toContain('Intake / propuesta');
     expect(html).toContain('Problema');
     expect(html).toContain('Solución');
@@ -362,6 +372,9 @@ describe('SessionWorkspace', () => {
     expect(html).toContain('Recursos / piloto / viabilidad');
     expect(html).toContain('Informe');
     expect(html).toContain('PDF / export');
+    expect(html).toContain('Actual');
+    expect(html).toContain('Bloqueada');
+    expect(html).toContain('Acción actual');
   });
 
   it('exposes only the current phase start action when solution is ready', () => {
@@ -403,6 +416,50 @@ describe('SessionWorkspace', () => {
     expect(html).toContain('Faltan fases previas: Datos / IA / privacidad, Medical-device triage, Recursos / piloto / viabilidad.');
     expect(html).not.toContain('Iniciar recursos/piloto');
     expect(html).not.toContain('Preparar informe');
+  });
+
+  it('starts only the current data/IA/privacy phase when its primary action is clicked', async () => {
+    const auditAfterSolution: SessionAuditView = {
+      ...workspaceAudit,
+      module_chats: [
+        workspaceAudit.module_chats[0]!,
+        workspaceAudit.module_chats[1]!,
+      ],
+      generated_sections: [
+        report.problem_section,
+        report.solution_section,
+      ],
+      runs: [],
+    };
+    const onStartDataAiPrivacy = vi.fn(async () => undefined);
+    const onStartResourcesPilotViability = vi.fn(async () => undefined);
+
+    render(
+      h(SessionWorkspace, {
+        audit: auditAfterSolution,
+        report: null,
+        isReplying: false,
+        isComposingReport: false,
+        isDownloadingReportPdf: false,
+        onReply: async () => undefined,
+        onComposeReport: async () => undefined,
+        onDownloadReportPdf: async () => undefined,
+        onSolutionReply: async () => undefined,
+        onDataAiPrivacyReply: async () => undefined,
+        onMedicalDeviceTriageReply: async () => undefined,
+        onResourcesPilotViabilityReply: async () => undefined,
+        onStartSolution: async () => undefined,
+        onStartDataAiPrivacy,
+        onStartMedicalDeviceTriage: async () => undefined,
+        onStartResourcesPilotViability,
+        presentation: deriveSessionPresentation(auditAfterSolution),
+      }),
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Iniciar datos/IA/privacidad' }));
+
+    expect(onStartDataAiPrivacy).toHaveBeenCalledTimes(1);
+    expect(onStartResourcesPilotViability).not.toHaveBeenCalled();
   });
 
   it('shows medical-device not applicable and moves the next action to resources', () => {
@@ -588,8 +645,69 @@ describe('SessionWorkspace', () => {
 
     expect(html).toContain('Fase actual: PDF / export');
     expect(html).toContain('Exportar PDF');
+    expect(html).toMatch(
+      /<button[^>]*class="button button--secondary basic-report__download"[^>]*disabled=""[^>]*>Download PDF<\/button>/,
+    );
     expect(html).not.toContain('Preparar informe');
     expect(html).not.toContain('Iniciar recursos/piloto');
+  });
+
+  it('passes the session id to report and PDF primary actions', async () => {
+    const onComposeReport = vi.fn(async () => undefined);
+    const onDownloadReportPdf = vi.fn(async () => undefined);
+
+    const { unmount } = render(
+      h(SessionWorkspace, {
+        audit: workspaceAudit,
+        report: null,
+        isReplying: false,
+        isComposingReport: false,
+        isDownloadingReportPdf: false,
+        onReply: async () => undefined,
+        onComposeReport,
+        onDownloadReportPdf,
+        onSolutionReply: async () => undefined,
+        onDataAiPrivacyReply: async () => undefined,
+        onMedicalDeviceTriageReply: async () => undefined,
+        onResourcesPilotViabilityReply: async () => undefined,
+        onStartSolution: async () => undefined,
+        onStartDataAiPrivacy: async () => undefined,
+        onStartMedicalDeviceTriage: async () => undefined,
+        onStartResourcesPilotViability: async () => undefined,
+        presentation: deriveSessionPresentation(workspaceAudit),
+      }),
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Preparar informe' }));
+    expect(onComposeReport).toHaveBeenCalledWith('session-1');
+
+    unmount();
+
+    render(
+      h(SessionWorkspace, {
+        audit: workspaceAudit,
+        report,
+        isReplying: false,
+        isComposingReport: false,
+        isDownloadingReportPdf: false,
+        onReply: async () => undefined,
+        onComposeReport,
+        onDownloadReportPdf,
+        onSolutionReply: async () => undefined,
+        onDataAiPrivacyReply: async () => undefined,
+        onMedicalDeviceTriageReply: async () => undefined,
+        onResourcesPilotViabilityReply: async () => undefined,
+        onStartSolution: async () => undefined,
+        onStartDataAiPrivacy: async () => undefined,
+        onStartMedicalDeviceTriage: async () => undefined,
+        onStartResourcesPilotViability: async () => undefined,
+        presentation: deriveSessionPresentation(workspaceAudit, { report }),
+      }),
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Exportar PDF' }));
+
+    expect(onDownloadReportPdf).toHaveBeenCalledWith('session-1');
   });
 });
 

@@ -240,9 +240,9 @@
     "semantic_hash": "f56b9e06dd11dbffe0c8bb6817c94ef7"
   },
   "apps/web/package.json": {
-    "mtime": 1780948093.7026436,
-    "ast_hash": "dae436855a113834f2671e106574ecd6",
-    "semantic_hash": "dae436855a113834f2671e106574ecd6"
+    "mtime": 1780951173.3515894,
+    "ast_hash": "b481a168897e0eb5d8fb54d70ab38eab",
+    "semantic_hash": ""
   },
   "apps/web/src/App.tsx": {
     "mtime": 1780948093.7026436,
@@ -290,8 +290,8 @@
     "semantic_hash": "cd447418cbd7c6113ca129ef266cfcfb"
   },
   "apps/web/src/components/local-demo-safety-notice.test.ts": {
-    "mtime": 1780949428.1018553,
-    "ast_hash": "2bc8be10795e14a4b4c686e8e6ee94fe",
+    "mtime": 1780951254.3820746,
+    "ast_hash": "53a5623ed4e1bdef719694afc45e9eca",
     "semantic_hash": ""
   },
   "apps/web/src/domain/contracts.ts": {
@@ -1235,8 +1235,8 @@
     "semantic_hash": ""
   },
   "docs/manual-testing/clinic-local-demo-full-guide.md": {
-    "mtime": 1780948093.7554436,
-    "ast_hash": "ea66ae86bd73a288d21471f07809ddd4",
+    "mtime": 1780951270.8896263,
+    "ast_hash": "4299d379df2fec89463297117aec991d",
     "semantic_hash": ""
   },
   "docs/manual-testing/clinic-local-demo-hardening.md": {
@@ -1245,8 +1245,8 @@
     "semantic_hash": ""
   },
   "docs/manual-testing/mvp-alpha-local-demo-guide.md": {
-    "mtime": 1780948093.7598436,
-    "ast_hash": "01728bfd42877798e0e1b0c9168ec935",
+    "mtime": 1780951312.490348,
+    "ast_hash": "f393340cedc3ffccb28374f817e87c95",
     "semantic_hash": ""
   },
   "docs/mvp/01-mvp-scope.md": {
