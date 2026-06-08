@@ -223,6 +223,42 @@ const workspaceAudit: SessionAuditView = {
   events: [],
 };
 
+function renderWorkspaceHtml(
+  audit: SessionAuditView,
+  options: {
+    report?: BasicAlphaReport | null;
+    reportLoadError?: string | null;
+  } = {},
+): string {
+  const currentReport = options.report ?? null;
+
+  return renderToStaticMarkup(
+    h(SessionWorkspace, {
+      audit,
+      report: currentReport,
+      reportLoadError: options.reportLoadError,
+      isReplying: false,
+      isComposingReport: false,
+      isDownloadingReportPdf: false,
+      onReply: async () => undefined,
+      onComposeReport: async () => undefined,
+      onDownloadReportPdf: async () => undefined,
+      onSolutionReply: async () => undefined,
+      onDataAiPrivacyReply: async () => undefined,
+      onMedicalDeviceTriageReply: async () => undefined,
+      onResourcesPilotViabilityReply: async () => undefined,
+      onStartSolution: async () => undefined,
+      onStartDataAiPrivacy: async () => undefined,
+      onStartMedicalDeviceTriage: async () => undefined,
+      onStartResourcesPilotViability: async () => undefined,
+      presentation: deriveSessionPresentation(
+        audit,
+        currentReport ? { report: currentReport } : {},
+      ),
+    }),
+  );
+}
+
 describe('LocalDemoSafetyNotice', () => {
   it.each([
     ['intake', 'Usa solo informacion ficticia o anonimizada'],
@@ -312,6 +348,106 @@ describe('SessionWorkspace', () => {
 
     expect(html).toContain('Fase actual: Solución');
     expect(html).toContain('Iniciar solución');
+    expect(html).not.toContain('Preparar informe');
+  });
+
+  it('renders all eight phases in the canonical navigator', () => {
+    const html = renderWorkspaceHtml(workspaceAudit);
+
+    expect(html).toContain('Intake / propuesta');
+    expect(html).toContain('Problema');
+    expect(html).toContain('Solución');
+    expect(html).toContain('Datos / IA / privacidad');
+    expect(html).toContain('Medical-device triage');
+    expect(html).toContain('Recursos / piloto / viabilidad');
+    expect(html).toContain('Informe');
+    expect(html).toContain('PDF / export');
+  });
+
+  it('exposes only the current phase start action when solution is ready', () => {
+    const auditReadyForSolution: SessionAuditView = {
+      ...workspaceAudit,
+      module_chats: [workspaceAudit.module_chats[0]!],
+      generated_sections: [report.problem_section],
+      runs: [],
+    };
+    const html = renderWorkspaceHtml(auditReadyForSolution);
+
+    expect(html).toContain('Iniciar solución');
+    expect(html).toContain('Completa la fase de solución antes de revisar datos, IA y privacidad.');
+    expect(html).not.toContain('Iniciar datos/IA/privacidad');
+    expect(html).not.toContain('Iniciar medical-device triage');
+    expect(html).not.toContain('Iniciar recursos/piloto');
+    expect(html).not.toContain('Preparar informe');
+    expect(html).not.toContain('Exportar PDF');
+  });
+
+  it('keeps resources locked after solution instead of rendering a parallel action', () => {
+    const auditAfterSolution: SessionAuditView = {
+      ...workspaceAudit,
+      module_chats: [
+        workspaceAudit.module_chats[0]!,
+        workspaceAudit.module_chats[1]!,
+      ],
+      generated_sections: [
+        report.problem_section,
+        report.solution_section,
+      ],
+      runs: [],
+    };
+    const html = renderWorkspaceHtml(auditAfterSolution);
+
+    expect(html).toContain('Fase actual: Datos / IA / privacidad');
+    expect(html).toContain('Iniciar datos/IA/privacidad');
+    expect(html).toContain('Completa datos/IA/privacidad y el triaje medical-device antes de recursos/piloto.');
+    expect(html).toContain('Faltan fases previas: Datos / IA / privacidad, Medical-device triage, Recursos / piloto / viabilidad.');
+    expect(html).not.toContain('Iniciar recursos/piloto');
+    expect(html).not.toContain('Preparar informe');
+  });
+
+  it('shows medical-device not applicable and moves the next action to resources', () => {
+    const notApplicableRun: AgentRun = {
+      id: 'run-medical-device-not-applicable',
+      session_id: 'session-1',
+      turn_seq: null,
+      request_id: 'req-medical-device',
+      run_purpose: 'medical_device_triage',
+      agent_name: 'medical_device_triage_agent',
+      prompt_name: 'medical-device-triage',
+      prompt_version: 'v1',
+      prompt_sha256: 'hash-medical-device',
+      model_provider: 'ollama',
+      model_name: 'qwen2.5:7b-instruct',
+      model_params_json: {},
+      raw_model_output: '{}',
+      validated_output_json: {
+        updated_medical_device_triage: {
+          triage_status: 'not_applicable',
+        },
+      },
+      status: 'completed',
+    };
+    const auditWithSkippedMedicalDevice: SessionAuditView = {
+      ...workspaceAudit,
+      module_chats: [
+        workspaceAudit.module_chats[0]!,
+        workspaceAudit.module_chats[1]!,
+        workspaceAudit.module_chats[2]!,
+      ],
+      generated_sections: [
+        report.problem_section,
+        report.solution_section,
+        workspaceAudit.generated_sections[2]!,
+      ],
+      runs: [notApplicableRun],
+    };
+    const html = renderWorkspaceHtml(auditWithSkippedMedicalDevice);
+
+    expect(html).toContain('Fase actual: Recursos / piloto / viabilidad');
+    expect(html).toContain('Medical-device triage');
+    expect(html).toContain('No aplica');
+    expect(html).toContain('Iniciar recursos/piloto');
+    expect(html).not.toContain('Iniciar medical-device triage');
     expect(html).not.toContain('Preparar informe');
   });
 
@@ -445,6 +581,15 @@ describe('SessionWorkspace', () => {
 
     expect(html).toContain('Download PDF');
     expect(html).toContain('disabled=""');
+  });
+
+  it('renders PDF export as the final phase action when the report is ready', () => {
+    const html = renderWorkspaceHtml(workspaceAudit, { report });
+
+    expect(html).toContain('Fase actual: PDF / export');
+    expect(html).toContain('Exportar PDF');
+    expect(html).not.toContain('Preparar informe');
+    expect(html).not.toContain('Iniciar recursos/piloto');
   });
 });
 

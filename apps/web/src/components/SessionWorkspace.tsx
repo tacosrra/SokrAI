@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import type { BasicAlphaReport, SessionAuditView } from '../domain/contracts';
-import type { SessionPresentation } from '../lib/session-view';
+import type { PhasePrimaryAction, PhaseStatus, PhaseStep, SessionPresentation } from '../lib/session-view';
 import { BasicAlphaReportPanel } from './BasicAlphaReportPanel';
 import { LocalDemoSafetyNotice } from './LocalDemoSafetyNotice';
 import { StatusBadge, agentTone, phaseTone, sessionTone } from './StatusBadge';
@@ -25,6 +25,40 @@ interface SessionWorkspaceProps {
   onStartMedicalDeviceTriage: () => Promise<void>;
   onStartResourcesPilotViability: () => Promise<void>;
   presentation: SessionPresentation;
+}
+
+interface PrimaryPhaseAction {
+  kind: PhasePrimaryAction;
+  label: string;
+  busyLabel: string;
+  isBusy: boolean;
+  onClick: () => void;
+}
+
+function phaseStatusLabel(status: PhaseStatus): string {
+  switch (status) {
+    case 'complete':
+      return 'Completada';
+    case 'current':
+      return 'Actual';
+    case 'ready':
+      return 'Lista';
+    case 'locked':
+      return 'Bloqueada';
+    case 'not_applicable':
+      return 'No aplica';
+    case 'recovering':
+      return 'Recuperando';
+    case 'error':
+      return 'Revisar';
+  }
+}
+
+function phaseStepClassName(step: PhaseStep): string {
+  return [
+    'phase-step',
+    `phase-step--${step.status}`,
+  ].join(' ');
 }
 
 export function SessionWorkspace({
@@ -133,43 +167,90 @@ export function SessionWorkspace({
   const reportPhase = presentation.phaseProgress.steps.find((step) => step.id === 'report');
   const pdfPhase = presentation.phaseProgress.steps.find((step) => step.id === 'pdf_export');
   const canDownloadPdf = pdfPhase?.primaryAction === 'download_pdf';
-  const canStartSolution = Boolean(
-    presentation.latestProblemSection &&
-      !canSolutionReply &&
-      presentation.solutionModuleChat?.chat_status !== 'completed' &&
-      presentation.solutionModuleChat?.chat_status !== 'waiting_for_user' &&
-      currentPhase.primaryAction === 'start_solution',
-  );
-  const canStartDataAiPrivacy = Boolean(
-    presentation.latestSolutionSection &&
-      !canDataAiPrivacyReply &&
-      presentation.dataAiPrivacyModuleChat?.chat_status !== 'completed' &&
-      presentation.dataAiPrivacyModuleChat?.chat_status !== 'waiting_for_user' &&
-      currentPhase.primaryAction === 'start_data_ai_privacy',
-  );
-  const canStartMedicalDeviceTriage = Boolean(
-    presentation.latestDataAiPrivacySection &&
-      !canMedicalDeviceTriageReply &&
-      presentation.medicalDeviceTriageModuleChat?.chat_status !== 'completed' &&
-      presentation.medicalDeviceTriageModuleChat?.chat_status !== 'waiting_for_user' &&
-      currentPhase.primaryAction === 'start_medical_device_triage',
-  );
-  const canStartResourcesPilotViability = Boolean(
-    presentation.latestSolutionSection &&
-      !canResourcesPilotViabilityReply &&
-      presentation.resourcesPilotViabilityModuleChat?.chat_status !== 'completed' &&
-      presentation.resourcesPilotViabilityModuleChat?.chat_status !== 'waiting_for_user' &&
-      currentPhase.primaryAction === 'start_resources_pilot_viability',
-  );
-  const canComposeReport = Boolean(
-    !report &&
-      reportPhase &&
-      (
-        reportPhase.primaryAction === 'prepare_report' ||
-        reportPhase.primaryAction === 'recover'
-      ),
-  );
+  const primaryPhaseAction: PrimaryPhaseAction | null = (() => {
+    switch (currentPhase.primaryAction) {
+      case 'start_solution':
+        return {
+          kind: currentPhase.primaryAction,
+          label: 'Iniciar solución',
+          busyLabel: 'Procesando…',
+          isBusy: isReplying,
+          onClick: () => void onStartSolution(),
+        };
+      case 'start_data_ai_privacy':
+        return {
+          kind: currentPhase.primaryAction,
+          label: 'Iniciar datos/IA/privacidad',
+          busyLabel: 'Procesando…',
+          isBusy: isReplying,
+          onClick: () => void onStartDataAiPrivacy(),
+        };
+      case 'start_medical_device_triage':
+        return {
+          kind: currentPhase.primaryAction,
+          label: 'Iniciar medical-device triage',
+          busyLabel: 'Procesando…',
+          isBusy: isReplying,
+          onClick: () => void onStartMedicalDeviceTriage(),
+        };
+      case 'start_resources_pilot_viability':
+        return {
+          kind: currentPhase.primaryAction,
+          label: 'Iniciar recursos/piloto',
+          busyLabel: 'Procesando…',
+          isBusy: isReplying,
+          onClick: () => void onStartResourcesPilotViability(),
+        };
+      case 'prepare_report':
+        if (report) {
+          return null;
+        }
+
+        return {
+          kind: currentPhase.primaryAction,
+          label: 'Preparar informe',
+          busyLabel: 'Preparando informe…',
+          isBusy: isComposingReport,
+          onClick: () => void onComposeReport(audit.session.id),
+        };
+      case 'download_pdf':
+        if (!report) {
+          return null;
+        }
+
+        return {
+          kind: currentPhase.primaryAction,
+          label: 'Exportar PDF',
+          busyLabel: 'Exportando PDF…',
+          isBusy: isDownloadingReportPdf,
+          onClick: () => void onDownloadReportPdf(audit.session.id),
+        };
+      case 'recover':
+        if (currentPhase.id !== 'report' || report) {
+          return null;
+        }
+
+        return {
+          kind: currentPhase.primaryAction,
+          label: 'Reintentar informe',
+          busyLabel: 'Preparando informe…',
+          isBusy: isComposingReport,
+          onClick: () => void onComposeReport(audit.session.id),
+        };
+      case 'answer_question':
+      case 'review_report':
+      case 'none':
+        return null;
+    }
+  })();
   const resolvedTurns = audit.turns.filter((turn) => Boolean(turn.answer_text?.trim())).length;
+  const actionPanelText =
+    presentation.currentQuestion ||
+    reportLoadError ||
+    currentPhase.lockedReason ||
+    currentPhase.explanation;
+  const reportPanelCanDownloadPdf =
+    canDownloadPdf && primaryPhaseAction?.kind !== 'download_pdf';
 
   return (
     <section className="conversation-shell">
@@ -232,18 +313,76 @@ export function SessionWorkspace({
 
       <LocalDemoSafetyNotice compact context="workspace" />
 
-      <section className="question-callout">
+      <section className="phase-action-panel">
+        <div className="phase-action-panel__main">
+          <span className="question-callout__label">
+            {presentation.currentQuestion
+              ? `Pregunta abierta: ${currentPhase.label}`
+              : `Fase actual: ${currentPhase.label}`}
+          </span>
+          <h2>{currentPhase.label}</h2>
+          <p>{actionPanelText}</p>
+        </div>
+
+        {primaryPhaseAction ? (
+          <button
+            className="button button--primary"
+            type="button"
+            onClick={primaryPhaseAction.onClick}
+            disabled={primaryPhaseAction.isBusy}
+          >
+            {primaryPhaseAction.isBusy ? primaryPhaseAction.busyLabel : primaryPhaseAction.label}
+          </button>
+        ) : null}
+      </section>
+
+      <nav className="phase-navigator" aria-label="Camino de fases de la propuesta">
+        <div className="phase-navigator__header">
+          <div>
+            <span className="panel__eyebrow">Camino guiado</span>
+            <h2>Fases de maduración</h2>
+          </div>
+          <strong>
+            {presentation.phaseProgress.completedPhases}/{presentation.phaseProgress.totalApplicablePhases}
+          </strong>
+        </div>
+
+        <ol className="phase-navigator__list">
+          {presentation.phaseProgress.steps.map((step, index) => (
+            <li
+              key={step.id}
+              className={phaseStepClassName(step)}
+              aria-current={step.id === currentPhase.id ? 'step' : undefined}
+            >
+              <span className="phase-step__index">{index + 1}</span>
+              <div className="phase-step__body">
+                <div className="phase-step__title">
+                  <strong>{step.label}</strong>
+                  <StatusBadge label={phaseStatusLabel(step.status)} tone={phaseTone(step.status)} />
+                </div>
+                <p className="phase-step__reason">{step.lockedReason ?? step.explanation}</p>
+              </div>
+
+              {step.id === currentPhase.id && step.primaryAction !== 'none' ? (
+                <span className="phase-step__action">Acción actual</span>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      </nav>
+
+      <section className="question-callout question-callout--muted">
         <span className="question-callout__label">
           {presentation.currentQuestion
             ? `Pregunta abierta: ${currentPhase.label}`
-            : `Fase actual: ${currentPhase.label}`}
+            : `Resumen de fase: ${currentPhase.label}`}
         </span>
         <p>{presentation.currentQuestion || 'La sesión no tiene una pregunta abierta en este momento.'}</p>
         {currentPhase.lockedReason ? <p>{currentPhase.lockedReason}</p> : null}
       </section>
 
       {presentation.latestProblemSection ? (
-        <section className="question-callout">
+        <section className="question-callout question-callout--muted">
           <span className="question-callout__label">Carril de solución</span>
           <p>
             {presentation.latestSolutionSection
@@ -252,22 +391,11 @@ export function SessionWorkspace({
                 ? `Estado: ${presentation.solutionModuleChat.chat_status.replaceAll('_', ' ')}.`
                 : 'El problema ya tiene sección generada y la solución puede iniciarse.'}
           </p>
-
-          {canStartSolution ? (
-            <button
-              className="button button--secondary"
-              type="button"
-              onClick={() => void onStartSolution()}
-              disabled={isReplying}
-            >
-              {isReplying ? 'Procesando…' : 'Iniciar solución'}
-            </button>
-          ) : null}
         </section>
       ) : null}
 
       {presentation.latestSolutionSection ? (
-        <section className="question-callout">
+        <section className="question-callout question-callout--muted">
           <span className="question-callout__label">Carril datos/IA/privacidad</span>
           <p>
             {presentation.latestDataAiPrivacySection
@@ -276,17 +404,6 @@ export function SessionWorkspace({
                 ? `Estado: ${presentation.dataAiPrivacyModuleChat.chat_status.replaceAll('_', ' ')}.`
                 : 'La solución ya tiene sección generada y el módulo de gaps sensibles puede iniciarse.'}
           </p>
-
-          {canStartDataAiPrivacy ? (
-            <button
-              className="button button--secondary"
-              type="button"
-              onClick={() => void onStartDataAiPrivacy()}
-              disabled={isReplying}
-            >
-              {isReplying ? 'Procesando…' : 'Iniciar datos/IA/privacidad'}
-            </button>
-          ) : null}
 
           <LocalDemoSafetyNotice compact context="clinic-module" />
         </section>
@@ -300,7 +417,7 @@ export function SessionWorkspace({
       ) : null}
 
       {presentation.latestDataAiPrivacySection ? (
-        <section className="question-callout">
+        <section className="question-callout question-callout--muted">
           <span className="question-callout__label">Medical-device triage</span>
           <p>
             {presentation.latestMedicalDeviceTriageSection
@@ -309,17 +426,6 @@ export function SessionWorkspace({
                 ? `Estado: ${presentation.medicalDeviceTriageModuleChat.chat_status.replaceAll('_', ' ')}.`
                 : 'El módulo registra gaps/questions/uncertainty cuando hay señales o incertidumbre y requiere competent human review cuando corresponde.'}
           </p>
-
-          {canStartMedicalDeviceTriage ? (
-            <button
-              className="button button--secondary"
-              type="button"
-              onClick={() => void onStartMedicalDeviceTriage()}
-              disabled={isReplying}
-            >
-              {isReplying ? 'Procesando…' : 'Iniciar medical-device triage'}
-            </button>
-          ) : null}
 
           <LocalDemoSafetyNotice compact context="clinic-module" />
         </section>
@@ -333,7 +439,7 @@ export function SessionWorkspace({
       ) : null}
 
       {presentation.latestSolutionSection ? (
-        <section className="question-callout">
+        <section className="question-callout question-callout--muted">
           <span className="question-callout__label">Recursos, piloto e insumos operativos</span>
           <p>
             {presentation.latestResourcesPilotViabilitySection
@@ -342,17 +448,6 @@ export function SessionWorkspace({
                 ? `Estado: ${presentation.resourcesPilotViabilityModuleChat.chat_status.replaceAll('_', ' ')}.`
                 : 'La solución ya tiene sección generada y el módulo puede recoger recursos, entorno, dependencias, métricas, restricciones y riesgos operativos.'}
           </p>
-
-          {canStartResourcesPilotViability ? (
-            <button
-              className="button button--secondary"
-              type="button"
-              onClick={() => void onStartResourcesPilotViability()}
-              disabled={isReplying}
-            >
-              {isReplying ? 'Procesando…' : 'Iniciar recursos/piloto'}
-            </button>
-          ) : null}
 
           <LocalDemoSafetyNotice compact context="clinic-module" />
         </section>
@@ -368,7 +463,7 @@ export function SessionWorkspace({
       {report ? (
         <BasicAlphaReportPanel
           report={report}
-          canDownloadPdf={canDownloadPdf}
+          canDownloadPdf={reportPanelCanDownloadPdf}
           isDownloadingPdf={isDownloadingReportPdf}
           onDownloadPdf={() => onDownloadReportPdf(audit.session.id)}
         />
@@ -376,21 +471,6 @@ export function SessionWorkspace({
         <section className="question-callout question-callout--muted">
           <span className="question-callout__label">Informe Alpha</span>
           <p>{reportLoadError ?? reportPhase.explanation}</p>
-
-          {canComposeReport ? (
-            <button
-              className="button button--secondary"
-              type="button"
-              onClick={() => void onComposeReport(audit.session.id)}
-              disabled={isComposingReport}
-            >
-              {isComposingReport
-                ? 'Preparando informe…'
-                : reportPhase.primaryAction === 'recover'
-                  ? 'Reintentar informe'
-                  : 'Preparar informe'}
-            </button>
-          ) : null}
 
           <LocalDemoSafetyNotice compact context="report" />
         </section>
