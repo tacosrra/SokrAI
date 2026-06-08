@@ -1,16 +1,16 @@
-# Graph Report - task-feat-ux-sequential-phase-navigation  (2026-06-08)
+# Graph Report - task-feat-ux-chat-first-app-shell  (2026-06-09)
 
 ## Corpus Check
-- 272 files · ~177,784 words
+- 275 files · ~177,758 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 4398 nodes · 8647 edges · 257 communities (240 shown, 17 thin omitted)
+- 4414 nodes · 8703 edges · 258 communities (243 shown, 15 thin omitted)
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS · INFERRED: 8 edges (avg confidence: 0.83)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `dd5673bf`
+- Built from commit: `7eaf9e06`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -256,6 +256,7 @@
 - [[_COMMUNITY_Community 254|Community 254]]
 - [[_COMMUNITY_Community 255|Community 255]]
 - [[_COMMUNITY_Community 256|Community 256]]
+- [[_COMMUNITY_Community 257|Community 257]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `GeneratedSection` - 66 edges
@@ -284,35 +285,35 @@
 ## Import Cycles
 - None detected.
 
-## Communities (257 total, 17 thin omitted)
+## Communities (258 total, 15 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.07
-Nodes (50): SolutionStartResponse, AlphaProposal, AuditRef, AuditRefKind, ChatTurn, DataAiPrivacyReplyRequest, DataAiPrivacyReplyResponse, DataAiPrivacyStartRequest (+42 more)
+Nodes (50): SolutionStartResponse, AlphaModule, AlphaProposal, AuditRef, AuditRefKind, ChatTurn, DataAiPrivacyReplyRequest, DataAiPrivacyReplyResponse (+42 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.07
-Nodes (55): common-beta.sh script, common-beta.sh script, common-beta.sh script, bootstrap_workflows(), detect_docker_desktop_installation(), docker_compose(), ensure_beta_env_file(), Ensure-BetaEnvFile() (+47 more)
+Nodes (56): common-beta.sh script, common-beta.sh script, common-beta.sh script, common-beta.sh script, bootstrap_workflows(), detect_docker_desktop_installation(), docker_compose(), ensure_beta_env_file() (+48 more)
 
 ### Community 2 - "Community 2"
 Cohesion: 0.09
-Nodes (37): DataAiPrivacyState, DataAiPrivacyTurn, buildDataAiPrivacyFallbackQuestion(), buildDataAiPrivacySectionSourceRefs(), classifyDataAiPrivacyGapStatuses(), computeDataAiPrivacyMissingInformation(), containsForbiddenDataAiPrivacyOutput(), DATA_AI_PRIVACY_FIELD_PRIORITY (+29 more)
+Nodes (38): DataAiPrivacyState, DataAiPrivacyTurn, buildDataAiPrivacyFallbackQuestion(), buildDataAiPrivacySectionSourceRefs(), classifyDataAiPrivacyGapStatuses(), computeDataAiPrivacyMissingInformation(), containsForbiddenDataAiPrivacyOutput(), DATA_AI_PRIVACY_FIELD_PRIORITY (+30 more)
 
 ### Community 3 - "Community 3"
 Cohesion: 0.09
-Nodes (39): enum, type, items, type, type, items, type, items (+31 more)
+Nodes (40): constraints_known, enum, type, items, type, type, items, type (+32 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.20
-Nodes (13): AuditRef, ChatTurnStatus, ReportStatus, AuditEventRecord, BasicReportRecord, ChatTurnRecord, getPgConstraint(), isPgConstraint() (+5 more)
+Cohesion: 0.22
+Nodes (15): Problem Definition Domain Logic, Problem Definition Service, schemaIds, ProblemDefinitionState, ProblemDefinitionTurn, ConversationTurn, Fix Problem Definition Stale Ambiguity Loop Prompt, ConversationTurnRecord (+7 more)
 
 ### Community 5 - "Community 5"
-Cohesion: 0.10
-Nodes (31): evaluateResourcesPilotViabilityCompletion(), FORBIDDEN_OUTPUT_PATTERNS, hasArrayContent(), hasEnoughText(), RESOURCES_PILOT_VIABILITY_FIELD_PRIORITY, ResourcesPilotViabilityGapStatusChange, ResourcesPilotViabilityGuardrailInterventionReason, agent_status (+23 more)
+Cohesion: 0.07
+Nodes (38): containsForbiddenResourcesPilotViabilityOutput(), dedupe(), evaluateResourcesPilotViabilityCompletion(), FORBIDDEN_OUTPUT_PATTERNS, hasArrayContent(), hasEnoughText(), hasForbiddenOutput(), normalizeForSensitiveSearch() (+30 more)
 
 ### Community 6 - "Community 6"
-Cohesion: 0.16
-Nodes (14): buildResourcesPilotViabilitySectionSourceRefs(), containsForbiddenResourcesPilotViabilityOutput(), dedupe(), emptyResourcesPilotViabilityState(), enforceResourcesPilotViabilityTurnGuardrails(), hasForbiddenOutput(), isAllowedResourcesPilotViabilitySource(), normalizeForSensitiveSearch() (+6 more)
+Cohesion: 0.18
+Nodes (17): ChatTurn, ResourcesPilotViabilityState, ResourcesPilotViabilityTurn, buildResourcesPilotViabilityFallbackQuestion(), buildResourcesPilotViabilitySectionSourceRefs(), classifyResourcesPilotViabilityGapStatuses(), computeResourcesPilotViabilityMissingInformation(), emptyResourcesPilotViabilityState() (+9 more)
 
 ### Community 7 - "Community 7"
 Cohesion: 0.07
@@ -323,44 +324,44 @@ Cohesion: 0.15
 Nodes (24): ACTIVE_GAP_STATUSES, ActiveGapStatus, BasicReportPdfExportMetadataInput, BasicReportPdfGap, BasicReportPdfModel, BasicReportPdfSource, collectPdfSections(), ensureSpace() (+16 more)
 
 ### Community 9 - "Community 9"
-Cohesion: 0.05
-Nodes (52): renderWorkspaceHtml(), AgentRun, AlphaModule, ProblemDefinitionState, SectionKind, Snapshot, Stage, StructuredBrief (+44 more)
+Cohesion: 0.04
+Nodes (81): BasicAlphaReportPanel(), BasicAlphaReportPanelProps, FieldValue(), GapList(), SourceList(), renderWorkspaceHtml(), report, workspaceAudit (+73 more)
 
 ### Community 10 - "Community 10"
 Cohesion: 0.05
 Nodes (42): 10. Piezas reutilizables, 11. Piezas peligrosas o mal planteadas, 12. Codigo duplicado o divergente, 13. Riesgos de merge, 14. Recomendacion de estrategia, 15. Backlog de rescate, 16. Preguntas abiertas, 1. Resumen ejecutivo (+34 more)
 
 ### Community 11 - "Community 11"
-Cohesion: 0.19
-Nodes (7): AlphaProposal, ProposalStatus, AlphaStore, mapGeneratedSection(), mapProposal(), ProposalRecord, SqlExecutor
+Cohesion: 0.11
+Nodes (26): AlphaProposal, BasicAlphaReport, ChatStatus, ModuleChat, ProposalSourceKind, ProposalStatus, SourceSpan, AlphaStore (+18 more)
 
 ### Community 12 - "Community 12"
 Cohesion: 0.12
-Nodes (43): ajv, assertAlphaGap(), assertAlphaProposal(), assertBasicReportComposeRequest(), assertChatTurn(), assertDataAiPrivacyReplyRequest(), assertDataAiPrivacyReplyResponse(), assertDataAiPrivacyStartRequest() (+35 more)
+Nodes (44): ajv, assertAlphaProposal(), assertBasicAlphaReport(), assertBasicReportComposeRequest(), assertChatTurn(), assertDataAiPrivacyReplyRequest(), assertDataAiPrivacyReplyResponse(), assertDataAiPrivacyStartRequest() (+36 more)
 
 ### Community 13 - "Community 13"
-Cohesion: 0.18
-Nodes (12): MedicalDeviceTriageTurn, medicalDeviceStateFromActivation(), MedicalDeviceTriageGuardrailIntervention, renderMedicalDeviceTriageSection(), getRegulatoryProfile(), isUniqueViolation(), isUniqueViolationForConstraint(), MedicalDeviceTriageService (+4 more)
+Cohesion: 0.21
+Nodes (9): MedicalDeviceTriageTurn, MedicalDeviceTriageGuardrailIntervention, SessionRecord, isUniqueViolation(), isUniqueViolationForConstraint(), MedicalDeviceTriageService, MedicalDeviceTriageReplyContextCommand, MedicalDeviceTriageRunResponse (+1 more)
 
 ### Community 14 - "Community 14"
-Cohesion: 0.11
-Nodes (33): buildMedicalDeviceFallbackQuestion(), buildMedicalDeviceSectionSourceRefs(), classifyMedicalDeviceGapStatuses(), CLINICAL_CONTEXT_TERMS, collectContextText(), computeMedicalDeviceMissingInformation(), containsAny(), containsForbiddenMedicalDeviceOutput() (+25 more)
+Cohesion: 0.10
+Nodes (35): buildMedicalDeviceFallbackQuestion(), buildMedicalDeviceSectionSourceRefs(), classifyMedicalDeviceGapStatuses(), CLINICAL_CONTEXT_TERMS, collectContextText(), computeMedicalDeviceMissingInformation(), containsAny(), containsForbiddenMedicalDeviceOutput() (+27 more)
 
 ### Community 15 - "Community 15"
 Cohesion: 0.05
-Nodes (50): ContinueSessionPanel(), ContinueSessionPanelProps, RecentSession, composeBasicAlphaReport(), downloadBasicAlphaReportPdf(), fetchBasicAlphaReport(), fetchRequestExecution(), fetchSessionAudit() (+42 more)
+Nodes (57): ContinueSessionPanel(), ContinueSessionPanelProps, SessionMenu(), SessionMenuProps, DataAiPrivacyStartResponse, RecentSession, composeBasicAlphaReport(), downloadBasicAlphaReportPdf() (+49 more)
 
 ### Community 16 - "Community 16"
-Cohesion: 0.09
-Nodes (41): ChatTurn, SolutionDefinitionState, SolutionDefinitionTurn, isVagueAnswer(), buildSolutionFallbackQuestion(), buildSolutionSectionSourceRefs(), classifySolutionGapStatuses(), computeSolutionMissingInformation() (+33 more)
+Cohesion: 0.11
+Nodes (25): isVagueAnswer(), buildSolutionSectionSourceRefs(), containsAny(), dedupe(), diagnosisRequestsSolutionClarification(), emptySolutionDefinition(), enforceSolutionTurnGuardrails(), evaluateSolutionCompletion() (+17 more)
 
 ### Community 17 - "Community 17"
-Cohesion: 0.11
-Nodes (18): AppConfig, QueryExecutor, BasicReportService, GapAnalysisService, PdfExportService, ProposalReplyService, BasicReportResponse, ComposeBasicReportCommand (+10 more)
+Cohesion: 0.18
+Nodes (10): AppConfig, Database, AiProviderPort, ProposalReplyService, SolutionReplyContextCommand, SolutionReplyService, BuildAppOptions, FastifyInstance (+2 more)
 
 ### Community 18 - "Community 18"
-Cohesion: 0.09
-Nodes (11): AgentRunStatusLookup, AlphaChatTurnStatusLookup, AuditTimelineEvent, buildAuditTimelineEvents(), compareAuditTimelineEvents(), getCreatedAtMillis(), RequestExecutionLookup, SessionStore (+3 more)
+Cohesion: 0.10
+Nodes (10): AgentRunStatusLookup, AlphaChatTurnStatusLookup, AuditTimelineEvent, buildAuditTimelineEvents(), compareAuditTimelineEvents(), getCreatedAtMillis(), RequestExecutionLookup, SessionStore (+2 more)
 
 ### Community 19 - "Community 19"
 Cohesion: 0.05
@@ -375,8 +376,8 @@ Cohesion: 0.06
 Nodes (31): dependencies, ajv, ajv-formats, dotenv, fastify, pdf-parse, pdfkit, pg (+23 more)
 
 ### Community 22 - "Community 22"
-Cohesion: 0.17
-Nodes (28): smoke-clinic-demo.sh script, smoke-clinic-demo.sh script, smoke-clinic-demo.sh script, assert_audit_redacted(), Assert-AuditRedacted(), Assert-Smoke(), build_reply_payload(), build_session_payload() (+20 more)
+Cohesion: 0.18
+Nodes (29): smoke-clinic-demo.sh script, smoke-clinic-demo.sh script, smoke-clinic-demo.sh script, smoke-clinic-demo.sh script, assert_audit_redacted(), Assert-AuditRedacted(), Assert-Smoke(), build_reply_payload() (+21 more)
 
 ### Community 23 - "Community 23"
 Cohesion: 0.05
@@ -387,24 +388,24 @@ Cohesion: 0.07
 Nodes (30): audit_refs, created_at, documents, gaps, generated_sections, goal, metadata, contract_only (+22 more)
 
 ### Community 25 - "Community 25"
-Cohesion: 0.16
-Nodes (14): getAiProvider(), getBoolean(), getNumber(), getString(), loadConfig(), applyMigrations(), buildTestApp(), truncateAll() (+6 more)
+Cohesion: 0.20
+Nodes (10): applyMigrations(), buildTestApp(), readTextFixture(), truncateAll(), structuredBriefWithGaps, installFailingSessionEventTrigger(), removeFailingSessionEventTrigger(), startProblem() (+2 more)
 
 ### Community 26 - "Community 26"
-Cohesion: 0.38
-Nodes (6): AlphaModule, ChatStatus, ModuleChat, mapModuleChat(), ModuleChatRecord, toIso()
+Cohesion: 0.20
+Nodes (12): SolutionDefinitionState, SolutionDefinitionTurn, SolutionReplyResponse, buildSolutionFallbackQuestion(), classifySolutionGapStatuses(), computeSolutionMissingInformation(), hasResolvedSolutionGapField(), renderSolutionSection() (+4 more)
 
 ### Community 27 - "Community 27"
-Cohesion: 0.23
-Nodes (11): ACTIVE_GAP_STATUSES, BASIC_ALPHA_REPORT_WARNINGS, buildBasicReportAuditRefs(), collectBasicReportSources(), composeBasicAlphaReport(), determineBasicReportStatus(), RAW_OR_MODEL_KEYS, gap (+3 more)
+Cohesion: 0.32
+Nodes (5): RunSolutionDefinitionCommand, SolutionDefinitionRunResponse, isUniqueViolation(), isUniqueViolationForConstraint(), SolutionDefinitionService
 
 ### Community 28 - "Community 28"
 Cohesion: 0.07
 Nodes (28): audit_refs, created_at, documents, gaps, generated_sections, goal, module_chats, pdf_url (+20 more)
 
 ### Community 29 - "Community 29"
-Cohesion: 0.09
-Nodes (47): Problem Definition Domain Logic, Problem Definition Service, ProblemDefinitionState, ProblemDefinitionTurn, ConversationTurn, applyTurnToBrief(), buildFallbackQuestion(), buildProblemSectionSourceRefs() (+39 more)
+Cohesion: 0.12
+Nodes (31): applyTurnToBrief(), buildFallbackQuestion(), buildProblemSectionSourceRefs(), classifyProblemGapStatuses(), computeMissingInformation(), containsAny(), countContainedTerms(), dedupe() (+23 more)
 
 ### Community 30 - "Community 30"
 Cohesion: 0.07
@@ -427,8 +428,8 @@ Cohesion: 0.06
 Nodes (48): additionalProperties, format, type, minLength, type, enum, type, minLength (+40 more)
 
 ### Community 35 - "Community 35"
-Cohesion: 0.12
-Nodes (23): analyzeInitialGapCandidates(), ARRAY_FIELD_RULES, buildGapQuestionHint(), dedupeGapCandidates(), detectAmbiguityGaps(), detectInitialGapCandidates(), DetectInitialGapCandidatesInput, detectMissingFieldGaps() (+15 more)
+Cohesion: 0.09
+Nodes (42): AlphaModule, AuditRef, AuditRefKind, ChatTurnStatus, GapAbsence, GapKind, GapOrigin, GapStatus (+34 more)
 
 ### Community 36 - "Community 36"
 Cohesion: 0.07
@@ -448,15 +449,15 @@ Nodes (42): additionalProperties, format, type, minLength, type, minimum, type, 
 
 ### Community 40 - "Community 40"
 Cohesion: 0.09
-Nodes (34): DataAiPrivacyReplyResponse, additionalProperties, enum, type, type, items, maxItems, type (+26 more)
+Nodes (35): DataAiPrivacyReplyResponse, additionalProperties, enum, type, type, items, maxItems, type (+27 more)
 
 ### Community 41 - "Community 41"
 Cohesion: 0.06
-Nodes (45): isInternalSource(), additionalProperties, items, type, items, type, format, type (+37 more)
+Nodes (46): collectBasicReportSources(), isInternalSource(), additionalProperties, items, type, items, type, format (+38 more)
 
 ### Community 42 - "Community 42"
 Cohesion: 0.06
-Nodes (53): SectionKind, SectionStatus, GeneratedSectionRecord, additionalProperties, minLength, type, format, type (+45 more)
+Nodes (48): additionalProperties, minLength, type, format, type, items, type, minLength (+40 more)
 
 ### Community 43 - "Community 43"
 Cohesion: 0.09
@@ -475,8 +476,8 @@ Cohesion: 0.07
 Nodes (42): additionalProperties, anyOf, minLength, type, minLength, type, additionalProperties, minLength (+34 more)
 
 ### Community 47 - "Community 47"
-Cohesion: 0.40
-Nodes (5): computedHash, source, sourceType, sourceType, nodejs-backend-patterns
+Cohesion: 0.50
+Nodes (4): computedHash, source, sourceType, nodejs-backend-patterns
 
 ### Community 48 - "Community 48"
 Cohesion: 0.08
@@ -491,8 +492,8 @@ Cohesion: 0.09
 Nodes (30): additionalProperties, enum, type, type, items, maxItems, type, $id (+22 more)
 
 ### Community 51 - "Community 51"
-Cohesion: 0.26
-Nodes (13): content_markdown, created_at, gap_refs, generated_by_run_id, proposal_id, section_id, section_kind, section_status (+5 more)
+Cohesion: 0.18
+Nodes (18): content_markdown, created_at, gap_refs, generated_by_run_id, proposal_id, section_id, section_kind, section_status (+10 more)
 
 ### Community 52 - "Community 52"
 Cohesion: 0.08
@@ -515,12 +516,12 @@ Cohesion: 0.15
 Nodes (16): FormState, initialState, NewProposalPanel(), NewProposalPanelProps, ProposalStartFile, ProposalStartRequest, goal, project_title (+8 more)
 
 ### Community 57 - "Community 57"
-Cohesion: 0.11
-Nodes (25): MedicalDeviceTriageReplyResponse, MedicalDeviceTriageState, MedicalDeviceActivationResult, additionalProperties, $id, enum, type, properties (+17 more)
+Cohesion: 0.13
+Nodes (23): MedicalDeviceTriageState, MedicalDeviceActivationResult, additionalProperties, $id, enum, type, properties, profile_id (+15 more)
 
 ### Community 58 - "Community 58"
-Cohesion: 0.15
-Nodes (21): DocumentStatus, ProposalDocument, ProposalDocumentSourceKind, ProposalSource, cleanWhitespace(), InputDocument, makeDocument(), makeSource() (+13 more)
+Cohesion: 0.14
+Nodes (20): DocumentStatus, ProposalDocument, ProposalDocumentSourceKind, cleanWhitespace(), InputDocument, InputSource, makeDocument(), makeSource() (+12 more)
 
 ### Community 59 - "Community 59"
 Cohesion: 0.10
@@ -531,20 +532,20 @@ Cohesion: 0.11
 Nodes (17): absence, checked_fields, is_absent, reason, audit_refs, created_at, description, field (+9 more)
 
 ### Community 61 - "Community 61"
-Cohesion: 0.25
-Nodes (13): smoke-core.sh script, smoke-core.sh script, smoke-core.sh script, build_recovery_payload(), build_reply_payload(), build_report_compose_payload(), build_start_payload(), http_json() (+5 more)
+Cohesion: 0.27
+Nodes (14): smoke-core.sh script, smoke-core.sh script, smoke-core.sh script, smoke-core.sh script, build_recovery_payload(), build_reply_payload(), build_report_compose_payload(), build_start_payload() (+6 more)
 
 ### Community 62 - "Community 62"
-Cohesion: 0.13
-Nodes (12): ResourcesPilotViabilityState, ResourcesPilotViabilityTurn, buildResourcesPilotViabilityFallbackQuestion(), classifyResourcesPilotViabilityGapStatuses(), computeResourcesPilotViabilityMissingInformation(), hasResolvedResourcesPilotViabilityGapField(), isBlank(), ResourcesPilotViabilityGuardrailIntervention (+4 more)
+Cohesion: 0.17
+Nodes (8): assertResourcesPilotViabilityStartRequest(), AgentRunRecord, isUniqueViolation(), isUniqueViolationForConstraint(), ResourcesPilotViabilityService, ResourcesPilotViabilityReplyContextCommand, ResourcesPilotViabilityRunResponse, RunResourcesPilotViabilityCommand
 
 ### Community 63 - "Community 63"
 Cohesion: 0.12
 Nodes (16): agent_status, answer_text, audit_refs, chat_id, completed_at, created_at, diagnosis, gap_refs (+8 more)
 
 ### Community 64 - "Community 64"
-Cohesion: 0.12
-Nodes (25): AuditRefKind, DataAiPrivacyStartResponse, MedicalDeviceTriageStartRequest, MedicalDeviceTriageStartResponse, ProposalReplyRequest, ProposalStartFile, ProposalStartRequest, RegulatoryFamily (+17 more)
+Cohesion: 0.13
+Nodes (19): MedicalDeviceTriageStartRequest, MedicalDeviceTriageStartResponse, ProposalReplyRequest, ProposalStartRequest, ResourcesPilotViabilityReplyRequest, ResourcesPilotViabilityReplyResponse, ResourcesPilotViabilityStartRequest, ResourcesPilotViabilityStartResponse (+11 more)
 
 ### Community 65 - "Community 65"
 Cohesion: 0.11
@@ -559,8 +560,8 @@ Cohesion: 0.12
 Nodes (16): agent_status, completion_reason, diagnosis, next_question, updated_data_ai_privacy, ai_system_role, assumptions, cybersecurity_controls (+8 more)
 
 ### Community 68 - "Community 68"
-Cohesion: 0.20
-Nodes (11): completeClinicFlow(), createApplicableMedicalDeviceBaseOutputs(), createMedicalDeviceGuardrailModel(), createMedicalDeviceRepairFailureModel(), createMedicalDeviceReplyRecoveryModel(), dataAiPrivacyReplyFlow(), dataAiPrivacyStartFlow(), replyFlow() (+3 more)
+Cohesion: 0.17
+Nodes (13): completeClinicFlow(), createApplicableMedicalDeviceBaseOutputs(), createDataAiPrivacyPrerequisiteMissingModel(), createMedicalDeviceApplicableModel(), createMedicalDeviceGuardrailModel(), createMedicalDeviceRepairFailureModel(), createMedicalDeviceReplyRecoveryModel(), dataAiPrivacyReplyFlow() (+5 more)
 
 ### Community 69 - "Community 69"
 Cohesion: 0.09
@@ -599,12 +600,16 @@ Cohesion: 0.13
 Nodes (14): agent_status, completion_reason, diagnosis, next_question, updated_medical_device_triage, activation_signals, clinical_decision_role, evidence_needed (+6 more)
 
 ### Community 78 - "Community 78"
-Cohesion: 0.09
-Nodes (30): additionalProperties, enum, type, type, items, maxItems, type, $id (+22 more)
+Cohesion: 0.11
+Nodes (25): enum, type, type, items, maxItems, type, type, type (+17 more)
 
 ### Community 79 - "Community 79"
-Cohesion: 0.09
-Nodes (30): additionalProperties, enum, type, type, items, maxItems, type, $id (+22 more)
+Cohesion: 0.11
+Nodes (25): enum, type, type, items, maxItems, type, type, type (+17 more)
+
+### Community 80 - "Community 80"
+Cohesion: 0.19
+Nodes (5): JsonLogger, Level, levelOrder, redactLogValue(), sensitiveKeys
 
 ### Community 81 - "Community 81"
 Cohesion: 0.14
@@ -615,8 +620,8 @@ Cohesion: 0.10
 Nodes (27): problem_section, content_markdown, created_at, gap_refs, generated_by_run_id, proposal_id, section_id, section_kind (+19 more)
 
 ### Community 83 - "Community 83"
-Cohesion: 0.18
-Nodes (16): schemaIds, MedicalDeviceTriageStatus, RegulatoryProfile, StructuredBrief, GenerationResult, LlmOrchestrator, mergeMetrics(), parseModelJson() (+8 more)
+Cohesion: 0.20
+Nodes (14): schemaDocuments, MedicalDeviceTriageStatus, RegulatoryProfile, StructuredBrief, SnapshotRecord, AiProviderName, GenerationResult, LlmOrchestrator (+6 more)
 
 ### Community 84 - "Community 84"
 Cohesion: 0.13
@@ -723,8 +728,8 @@ Cohesion: 0.18
 Nodes (10): created_at, document_id, label, metadata, input_channel, source_id, source_kind, span (+2 more)
 
 ### Community 110 - "Community 110"
-Cohesion: 0.20
-Nodes (12): readFixture(), completeAlphaFlow(), createDataAiPrivacyFlowModel(), createDataAiPrivacyGuardrailModel(), createProblemOnlyModel(), replyFlow(), solutionReplyFlow(), solutionStartFlow() (+4 more)
+Cohesion: 0.25
+Nodes (8): completeAlphaFlow(), createDataAiPrivacyFlowModel(), createDataAiPrivacyGuardrailModel(), createProblemOnlyModel(), replyFlow(), solutionReplyFlow(), solutionStartFlow(), startFlow()
 
 ### Community 111 - "Community 111"
 Cohesion: 0.19
@@ -739,12 +744,12 @@ Cohesion: 0.20
 Nodes (9): created_at, document_id, document_status, normalized_text, pasted_text, proposal_id, source_kind, source_refs (+1 more)
 
 ### Community 114 - "Community 114"
-Cohesion: 0.09
-Nodes (38): BasicAlphaReportPanel(), BasicAlphaReportPanelProps, FieldValue(), GapList(), SourceList(), report, workspaceAudit, contextText (+30 more)
+Cohesion: 0.29
+Nodes (8): GapStatus, BasicReportPresentation, deriveReportPresentation(), formatReportDate(), GAP_STATUS_ORDER, ReportGapGroup, ReportSectionMeta, report
 
 ### Community 115 - "Community 115"
-Cohesion: 0.13
-Nodes (14): agent_status, completion_reason, diagnosis, next_question, updated_resources_pilot_viability, assumptions, constraints, dependencies (+6 more)
+Cohesion: 0.20
+Nodes (10): updated_resources_pilot_viability, assumptions, constraints, dependencies, human_resources, indicators_metrics, operational_risks, pilot_environment (+2 more)
 
 ### Community 116 - "Community 116"
 Cohesion: 0.20
@@ -779,16 +784,16 @@ Cohesion: 0.33
 Nodes (6): MVP PRD Prompt, Technical Architecture Prompt, Implementation Backlog Prompt, Strategic Docs Adjustments Prompt, Data AI Privacy Gap Agent v1, Medical Device Triage Agent v1
 
 ### Community 124 - "Community 124"
-Cohesion: 0.14
-Nodes (22): MedicalDeviceTriageReplyRequest, additionalProperties, minLength, type, $id, properties, answer, request_id (+14 more)
+Cohesion: 0.12
+Nodes (24): MedicalDeviceTriageReplyRequest, MedicalDeviceTriageReplyResponse, additionalProperties, minLength, type, $id, properties, answer (+16 more)
 
 ### Community 125 - "Community 125"
 Cohesion: 0.15
 Nodes (16): additionalProperties, minLength, type, $id, properties, answer, request_id, session_id (+8 more)
 
 ### Community 126 - "Community 126"
-Cohesion: 0.38
-Nodes (8): GapAbsence, GapKind, GapOrigin, GapStatus, FilteredInitialGapCandidate, InitialGapCandidate, AlphaGapRecord, mapGap()
+Cohesion: 0.26
+Nodes (15): readFixture(), completeAlphaFlow(), createAlphaModelResponses(), createProblemOnlyModel(), createResourcesPilotRepairFailureModel(), createResourcesPilotReplyRecoveryModel(), createResourcesPilotStartRecoveryModel(), createResourcesPilotViabilityFlowModel() (+7 more)
 
 ### Community 127 - "Community 127"
 Cohesion: 0.38
@@ -823,16 +828,16 @@ Cohesion: 0.25
 Nodes (7): ADR-001: MVP Alpha vs Clinic Pilot, Definition of done, Delivery rules, graphify, Repository working agreements, Skill routing, V1 Implementation Plan
 
 ### Community 139 - "Community 139"
-Cohesion: 0.50
-Nodes (3): bootstrap-beta.sh script, bootstrap-beta.sh script, bootstrap-beta.sh script
+Cohesion: 0.40
+Nodes (4): bootstrap-beta.sh script, bootstrap-beta.sh script, bootstrap-beta.sh script, bootstrap-beta.sh script
 
 ### Community 140 - "Community 140"
-Cohesion: 0.50
-Nodes (3): start-beta.sh script, start-beta.sh script, start-beta.sh script
+Cohesion: 0.40
+Nodes (4): start-beta.sh script, start-beta.sh script, start-beta.sh script, start-beta.sh script
 
 ### Community 141 - "Community 141"
-Cohesion: 0.50
-Nodes (3): stop-beta.sh script, stop-beta.sh script, stop-beta.sh script
+Cohesion: 0.40
+Nodes (4): stop-beta.sh script, stop-beta.sh script, stop-beta.sh script, stop-beta.sh script
 
 ### Community 142 - "Community 142"
 Cohesion: 0.33
@@ -840,7 +845,7 @@ Nodes (5): Entry webhooks, Import, Internal workflow webhook, n8n workflows, Pro
 
 ### Community 149 - "Community 149"
 Cohesion: 0.10
-Nodes (32): constraints_known, items, type, items, type, items, type, type (+24 more)
+Nodes (31): items, type, items, type, items, type, type, type (+23 more)
 
 ### Community 160 - "Community 160"
 Cohesion: 0.07
@@ -859,12 +864,12 @@ Cohesion: 0.09
 Nodes (22): 10. Requisitos no funcionales, 11. Perfil regulatorio `hospital_clinic_v1`, 12. RAG y fuentes, 13. IA local y proveedor futuro, 14. n8n, 15. Autenticacion, 16. Criterios de aceptacion Alpha, 17. Criterios de aceptacion Clinic Pilot (+14 more)
 
 ### Community 164 - "Community 164"
-Cohesion: 0.19
-Nodes (20): assertBasicAlphaReport(), assertNoRawModelFields(), BasicReportPdfExport, BasicReportPdfExportCommand, buildReportPdfFileName(), collectCurrentGeneratedSections(), renderPdf(), SECTION_ORDER (+12 more)
+Cohesion: 0.10
+Nodes (32): ACTIVE_GAP_STATUSES, assertNoRawModelFields(), BASIC_ALPHA_REPORT_WARNINGS, buildBasicReportAuditRefs(), composeBasicAlphaReport(), determineBasicReportStatus(), RAW_OR_MODEL_KEYS, BasicReportService (+24 more)
 
 ### Community 165 - "Community 165"
-Cohesion: 0.20
-Nodes (14): createTestConfig(), AiCompletionResult, AiProviderError, AiProviderMetadata, AiProviderName, AiProviderPort, createAiProvider(), getConfiguredProvider() (+6 more)
+Cohesion: 0.15
+Nodes (15): QueueItem, createTestConfig(), AiCompletionResult, AiProviderError, AiProviderMetadata, createAiProvider(), getConfiguredProvider(), OllamaChatPayload (+7 more)
 
 ### Community 166 - "Community 166"
 Cohesion: 0.11
@@ -907,8 +912,8 @@ Cohesion: 0.19
 Nodes (13): items, type, items, type, minLength, $ref, type, audit_refs (+5 more)
 
 ### Community 176 - "Community 176"
-Cohesion: 0.11
-Nodes (21): AlphaGap, BriefExtractionInput, cleanWhitespace(), deriveDetectedGaps(), mergeSourceText(), NormalizedSourceText, prepareBriefExtractionInput(), toProblemDefinitionState() (+13 more)
+Cohesion: 0.21
+Nodes (12): PreparedProposalDocument, PreparedProposalSource, BriefExtractionInput, cleanWhitespace(), deriveDetectedGaps(), mergeSourceText(), NormalizedSourceText, prepareBriefExtractionInput() (+4 more)
 
 ### Community 177 - "Community 177"
 Cohesion: 0.15
@@ -1071,8 +1076,8 @@ Cohesion: 0.40
 Nodes (5): computedHash, skillPath, source, sourceType, design-taste-frontend
 
 ### Community 217 - "Community 217"
-Cohesion: 0.50
-Nodes (4): computedHash, source, sourceType, frontend-design
+Cohesion: 0.40
+Nodes (5): computedHash, source, sourceType, sourceType, frontend-design
 
 ### Community 218 - "Community 218"
 Cohesion: 0.40
@@ -1123,12 +1128,12 @@ Cohesion: 0.50
 Nodes (4): 9. n8n Setup, CLI import and publish, Webhooks to verify, Workflow files involved
 
 ### Community 230 - "Community 230"
-Cohesion: 0.29
-Nodes (6): computedHash, source, sourceType, skills, nodejs-best-practices, version
+Cohesion: 0.50
+Nodes (4): computedHash, source, sourceType, nodejs-best-practices
 
 ### Community 231 - "Community 231"
-Cohesion: 0.50
-Nodes (4): typescript-advanced-types, computedHash, source, sourceType
+Cohesion: 0.29
+Nodes (6): skills, typescript-advanced-types, computedHash, source, sourceType, version
 
 ### Community 232 - "Community 232"
 Cohesion: 0.50
@@ -1171,36 +1176,44 @@ Cohesion: 0.20
 Nodes (10): updated_solution_definition, ambiguities_remaining, assumptions, current_solutions, how_it_works, scope_limits, solution_summary, target_user (+2 more)
 
 ### Community 253 - "Community 253"
-Cohesion: 0.29
-Nodes (6): QueueItem, QueueLanguageModelClient, readTextFixture(), installFailingSessionEventTrigger(), removeFailingSessionEventTrigger(), AiGenerationParams
+Cohesion: 0.32
+Nodes (4): QueueLanguageModelClient, installFailingProposalTrigger(), removeFailingProposalTrigger(), AiGenerationParams
 
 ### Community 254 - "Community 254"
-Cohesion: 0.36
-Nodes (7): ProposalSourceKind, SourceSpan, InputSource, PreparedProposalSource, mapSource(), ProposalSourceRecord, ProposalSourceRecord
+Cohesion: 0.31
+Nodes (7): decodePdfPayload(), NOOP_LOGGER, PdfExtractionService, PdfParseMetadata, PdfParser, sanitizeParserErrorMessage(), sha256Buffer()
 
 ### Community 255 - "Community 255"
-Cohesion: 0.28
-Nodes (3): installFailingProposalTrigger(), removeFailingProposalTrigger(), Database
+Cohesion: 0.36
+Nodes (5): assertAlphaGap(), AlphaGap, QueryExecutor, CreateInitialGapsParams, GapAnalysisService
+
+### Community 256 - "Community 256"
+Cohesion: 0.46
+Nodes (6): getAiProvider(), getBoolean(), getNumber(), getString(), loadConfig(), originalEnv
+
+### Community 257 - "Community 257"
+Cohesion: 0.48
+Nodes (3): main(), fromRepoRoot(), getRepoRoot()
 
 ## Knowledge Gaps
-- **2034 isolated node(s):** `name`, `version`, `private`, `type`, `dev` (+2029 more)
+- **2038 isolated node(s):** `name`, `version`, `private`, `type`, `dev` (+2033 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **17 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **15 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `MedicalDeviceTriageState` connect `Community 57` to `Community 0`, `Community 64`, `Community 70`, `Community 7`, `Community 12`, `Community 13`, `Community 14`, `Community 15`, `Community 83`?**
+- **Why does `MedicalDeviceTriageState` connect `Community 57` to `Community 0`, `Community 64`, `Community 35`, `Community 70`, `Community 7`, `Community 12`, `Community 13`, `Community 14`, `Community 15`, `Community 83`, `Community 124`?**
   _High betweenness centrality (0.046) - this node is a cross-community bridge._
-- **Why does `MedicalDeviceTriageReplyRequest` connect `Community 124` to `Community 0`, `Community 64`, `Community 69`, `Community 12`, `Community 13`, `Community 15`, `Community 57`?**
-  _High betweenness centrality (0.021) - this node is a cross-community bridge._
-- **Why does `GeneratedSection` connect `Community 51` to `Community 0`, `Community 2`, `Community 4`, `Community 5`, `Community 8`, `Community 11`, `Community 12`, `Community 13`, `Community 14`, `Community 16`, `Community 17`, `Community 18`, `Community 27`, `Community 164`, `Community 37`, `Community 42`, `Community 58`, `Community 62`, `Community 64`, `Community 83`?**
-  _High betweenness centrality (0.020) - this node is a cross-community bridge._
+- **Why does `GeneratedSection` connect `Community 51` to `Community 0`, `Community 2`, `Community 35`, `Community 164`, `Community 37`, `Community 5`, `Community 6`, `Community 8`, `Community 11`, `Community 12`, `Community 13`, `Community 14`, `Community 16`, `Community 18`, `Community 83`, `Community 26`, `Community 27`, `Community 62`?**
+  _High betweenness centrality (0.023) - this node is a cross-community bridge._
+- **Why does `BasicAlphaReport` connect `Community 11` to `Community 0`, `Community 64`, `Community 35`, `Community 164`, `Community 8`, `Community 9`, `Community 12`, `Community 114`?**
+  _High betweenness centrality (0.022) - this node is a cross-community bridge._
 - **What connects `name`, `version`, `private` to the rest of the system?**
-  _2034 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _2038 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
-  _Cohesion score 0.07127882599580712 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07058001397624039 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
-  _Cohesion score 0.07226107226107226 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07055630936227951 - nodes in this community are weakly interconnected._
 - **Should `Community 2` be split into smaller, more focused modules?**
-  _Cohesion score 0.09435028248587571 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.09289617486338798 - nodes in this community are weakly interconnected._
