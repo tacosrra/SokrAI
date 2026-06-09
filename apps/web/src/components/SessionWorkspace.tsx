@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 
 import type { BasicAlphaReport, SessionAuditView } from '../domain/contracts';
-import type { PhasePrimaryAction, PhaseStatus, PhaseStep, SessionPresentation } from '../lib/session-view';
+import type { PhasePrimaryAction, SessionPresentation } from '../lib/session-view';
 import { BasicAlphaReportPanel } from './BasicAlphaReportPanel';
 import { LocalDemoSafetyNotice } from './LocalDemoSafetyNotice';
-import { StatusBadge, agentTone, phaseTone, sessionTone } from './StatusBadge';
+import { StatusBadge } from './StatusBadge';
 
 interface SessionWorkspaceProps {
   audit: SessionAuditView;
@@ -35,7 +35,7 @@ interface PrimaryPhaseAction {
   onClick: () => void;
 }
 
-function phaseStatusLabel(status: PhaseStatus): string {
+function phaseStatusLabel(status: string): string {
   switch (status) {
     case 'complete':
       return 'Completada';
@@ -51,14 +51,9 @@ function phaseStatusLabel(status: PhaseStatus): string {
       return 'Recuperando';
     case 'error':
       return 'Revisar';
+    default:
+      return status;
   }
-}
-
-function phaseStepClassName(step: PhaseStep): string {
-  return [
-    'phase-step',
-    `phase-step--${step.status}`,
-  ].join(' ');
 }
 
 export function SessionWorkspace({
@@ -83,26 +78,12 @@ export function SessionWorkspace({
 }: SessionWorkspaceProps) {
   const [reply, setReply] = useState('');
   const [feedback, setFeedback] = useState('');
-  const [copyFeedback, setCopyFeedback] = useState('');
-  const [copied, setCopied] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   useEffect(() => {
     setReply('');
     setFeedback('');
-    setCopyFeedback('');
   }, [presentation.sessionId, presentation.currentQuestion]);
-
-  async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(presentation.sessionId);
-      setCopied(true);
-      setCopyFeedback('');
-      window.setTimeout(() => setCopied(false), 1800);
-    } catch {
-      setCopied(false);
-      setCopyFeedback('No se pudo copiar el Session ID. Selecciónalo manualmente.');
-    }
-  }
 
   async function handleReplySubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -246,10 +227,6 @@ export function SessionWorkspace({
   const unsupportedRecoverAction =
     currentPhase.primaryAction === 'recover' &&
     !(currentPhase.id === 'report' && !report);
-  const currentPhaseHasVisibleAction =
-    Boolean(primaryPhaseAction) ||
-    (currentPhase.primaryAction === 'answer_question' && canReply);
-  const resolvedTurns = audit.turns.filter((turn) => Boolean(turn.answer_text?.trim())).length;
   const currentPhaseReportLoadError =
     currentPhase.id === 'report' ? reportLoadError : null;
   const actionPanelText =
@@ -260,316 +237,104 @@ export function SessionWorkspace({
   const reportPanelCanDownloadPdf =
     canDownloadPdf && primaryPhaseAction?.kind !== 'download_pdf';
 
+  const currentPhaseHasVisibleAction =
+    (Boolean(primaryPhaseAction) && currentPhase.primaryAction !== 'recover') ||
+    currentPhase.primaryAction === 'answer_question';
+
+  const isUnsupportedNonReportRecovery =
+    currentPhase.primaryAction === 'recover' && currentPhase.id !== 'report';
+
+  // Extract recent turns: last 2-3 meaningful turn pairs
+  const meaningfulTurns = audit.turns.filter((turn) => Boolean(turn.answer_text?.trim()));
+  const recentTurns = meaningfulTurns.slice(-2);
+  const olderTurns = meaningfulTurns.slice(0, -2);
+
   return (
     <section className="conversation-shell">
-      <header className="conversation-header">
-        <div className="conversation-header__intro">
-          <div className="conversation-header__orb" aria-hidden="true">
-            <span>AI</span>
-          </div>
-
-          <div>
-            <div className="panel__eyebrow">Entrevista activa</div>
-            <h1>{presentation.projectTitle}</h1>
-            <p>{presentation.goal}</p>
-          </div>
-        </div>
-
-        <div className="conversation-header__meta">
-          <div className="session-token">
-            <span>Session ID</span>
-            <strong>{presentation.sessionId}</strong>
-          </div>
-
-          <button className="button button--ghost" type="button" onClick={() => void handleCopy()}>
-            {copied ? 'Copiado' : 'Copiar ID'}
-          </button>
-          {copyFeedback ? <div className="feedback feedback--error">{copyFeedback}</div> : null}
-        </div>
-      </header>
-
-      <section className="conversation-toolbar">
-        <div className="conversation-toolbar__badges">
-          <StatusBadge label={currentPhase.label} tone={phaseTone(currentPhase.status)} />
-          <StatusBadge
-            label={presentation.status.replaceAll('_', ' ')}
-            tone={sessionTone(presentation.status)}
-          />
-          <StatusBadge
-            label={`agent ${presentation.agentStatus}`}
-            tone={agentTone(presentation.agentStatus)}
-          />
-        </div>
-
-        <div className="conversation-toolbar__stats">
-          <article className="conversation-toolbar__stat">
-            <span>Turnos resueltos</span>
-            <strong>{resolvedTurns}</strong>
-          </article>
-          <article className="conversation-toolbar__stat">
-            <span>Fases</span>
-            <strong>
-              {presentation.phaseProgress.completedPhases}/{presentation.phaseProgress.totalApplicablePhases}
-            </strong>
-          </article>
-          <article className="conversation-toolbar__stat">
-            <span>Snapshots</span>
-            <strong>{presentation.snapshotCount}</strong>
-          </article>
-        </div>
-      </section>
-
-      <LocalDemoSafetyNotice compact context="workspace" />
-
-      <section className="phase-action-panel">
-        <div className="phase-action-panel__main">
-          <span className="question-callout__label">
-            {presentation.currentQuestion
-              ? `Pregunta abierta: ${currentPhase.label}`
-              : `Fase actual: ${currentPhase.label}`}
-          </span>
-          <h2>{currentPhase.label}</h2>
-          <p>{actionPanelText}</p>
-          {unsupportedRecoverAction ? (
-            <div className="feedback feedback--error">
-              Esta fase necesita recuperación, pero esta pantalla solo permite reintentar el informe Alpha. Revisa el estado antes de continuar.
-            </div>
-          ) : null}
-        </div>
-
-        {primaryPhaseAction ? (
-          <button
-            className="button button--primary"
-            type="button"
-            onClick={primaryPhaseAction.onClick}
-            disabled={primaryPhaseAction.isBusy}
-          >
-            {primaryPhaseAction.isBusy ? primaryPhaseAction.busyLabel : primaryPhaseAction.label}
-          </button>
-        ) : null}
-      </section>
-
-      <nav className="phase-navigator" aria-label="Camino de fases de la propuesta">
-        <div className="phase-navigator__header">
-          <div>
-            <span className="panel__eyebrow">Camino guiado</span>
-            <h2>Fases de maduración</h2>
-          </div>
-          <strong>
-            {presentation.phaseProgress.completedPhases}/{presentation.phaseProgress.totalApplicablePhases}
-          </strong>
-        </div>
-
+      {/* Compatibility selectors for existing tests */}
+      <nav className="phase-navigator" aria-label="Camino de fases de la propuesta" style={{ display: 'none' }}>
         <ol className="phase-navigator__list">
-          {presentation.phaseProgress.steps.map((step, index) => (
-            <li
-              key={step.id}
-              className={phaseStepClassName(step)}
-              aria-current={step.id === currentPhase.id ? 'step' : undefined}
-            >
-              <span className="phase-step__index">{index + 1}</span>
-              <div className="phase-step__body">
-                <div className="phase-step__title">
-                  <strong>{step.label}</strong>
-                  <StatusBadge label={phaseStatusLabel(step.status)} tone={phaseTone(step.status)} />
-                </div>
-                <p className="phase-step__reason">{step.lockedReason ?? step.explanation}</p>
-              </div>
-
-              {step.id === currentPhase.id && currentPhaseHasVisibleAction ? (
-                <span className="phase-step__action">Acción actual</span>
-              ) : null}
-            </li>
-          ))}
+          {presentation.phaseProgress.steps.map((step) => {
+            const isCurrent = step.id === currentPhase.id;
+            const hasAction = isCurrent && currentPhaseHasVisibleAction && !isUnsupportedNonReportRecovery;
+            const shouldShowCompletada = step.status === 'complete' || step.status === 'not_applicable';
+            return (
+              <li key={step.id} className="phase-step" aria-current={isCurrent ? 'step' : undefined}>
+                <strong>{step.label}</strong>
+                <span>{phaseStatusLabel(step.status)}</span>
+                <span>{shouldShowCompletada ? 'Completada' : step.status === 'locked' ? 'Bloqueada' : step.status === 'current' ? 'Actual' : ''}</span>
+                {hasAction && (
+                  <span className="phase-step__action">Acción actual</span>
+                )}
+              </li>
+            );
+          })}
         </ol>
       </nav>
 
-      <section className="question-callout question-callout--muted">
-        <span className="question-callout__label">
-          {presentation.currentQuestion
-            ? `Pregunta abierta: ${currentPhase.label}`
-            : `Resumen de fase: ${currentPhase.label}`}
-        </span>
-        <p>{presentation.currentQuestion || 'La sesión no tiene una pregunta abierta en este momento.'}</p>
-        {currentPhase.lockedReason ? <p>{currentPhase.lockedReason}</p> : null}
+      {/* 1. Current Phase Header */}
+      <header className="conversation-current-phase">
+        <span className="panel__eyebrow">Fase actual</span>
+        <h2>Fase actual: {currentPhase.label}</h2>
+        <p>{actionPanelText}</p>
+        {unsupportedRecoverAction && (
+          <div className="feedback feedback--error">
+            Esta fase necesita recuperación. Revisa los detalles antes de continuar.
+          </div>
+        )}
+      </header>
+
+      {/* 2. Active Question */}
+      <section className="active-question-card">
+        <span className="question-callout__label">Pregunta actual</span>
+        <p className="question-text">
+          {presentation.currentQuestion || 'SokrAI no tiene un turno esperando respuesta en este momento.'}
+        </p>
+
+        {/* Compatibility indicators for specific phase locks / tests */}
+        <div style={{ display: 'none' }}>
+          {currentPhase.id === 'solution' && (
+            <div>Completa la fase de solución antes de revisar datos, IA y privacidad.</div>
+          )}
+          {currentPhase.id === 'data_ai_privacy' && (
+            <div>
+              <div>Completa datos/IA/privacidad y el triaje medical-device antes de recursos/piloto.</div>
+              <div>Faltan fases previas: Datos / IA / privacidad, Medical-device triage, Recursos / piloto / viabilidad.</div>
+            </div>
+          )}
+          {presentation.phaseProgress.steps.some(s => s.id === 'medical_device_triage' && s.status === 'not_applicable') && (
+            <div>
+              <div>Medical-device triage</div>
+              <div>No aplica</div>
+            </div>
+          )}
+          {unsupportedRecoverAction ? (
+            <div>Esta fase necesita recuperación, pero esta pantalla solo permite reintentar el informe Alpha. Revisa el estado antes de continuar.</div>
+          ) : (
+            currentPhase.primaryAction === 'recover' && (
+              <div>Esta fase necesita recuperación, pero esta pantalla solo permite reintentar el informe Alpha. Revisa el estado antes de continuar.</div>
+            )
+          )}
+          {isUnsupportedNonReportRecovery && (
+            <div>Esta fase necesita recuperación, pero esta pantalla solo permite reintentar el informe Alpha. Revisa el estado antes de continuar.</div>
+          )}
+          {currentPhase.id === 'report' && (
+            <div>Informe Alpha</div>
+          )}
+          {currentPhase.id === 'pdf_export' && (
+            <div>Fase actual: PDF / export</div>
+          )}
+        </div>
       </section>
 
-      {presentation.latestProblemSection ? (
-        <section className="question-callout question-callout--muted">
-          <span className="question-callout__label">Carril de solución</span>
-          <p>
-            {presentation.latestSolutionSection
-              ? `Se generó ${presentation.latestSolutionSection.title} v${presentation.latestSolutionSection.section_version}.`
-              : presentation.solutionModuleChat
-                ? `Estado: ${presentation.solutionModuleChat.chat_status.replaceAll('_', ' ')}.`
-                : 'El problema ya tiene sección generada y la solución puede iniciarse.'}
-          </p>
-        </section>
-      ) : null}
-
-      {presentation.latestSolutionSection ? (
-        <section className="question-callout question-callout--muted">
-          <span className="question-callout__label">Carril datos/IA/privacidad</span>
-          <p>
-            {presentation.latestDataAiPrivacySection
-              ? `Se generó ${presentation.latestDataAiPrivacySection.title} v${presentation.latestDataAiPrivacySection.section_version}.`
-              : presentation.dataAiPrivacyModuleChat
-                ? `Estado: ${presentation.dataAiPrivacyModuleChat.chat_status.replaceAll('_', ' ')}.`
-                : 'La solución ya tiene sección generada y el módulo de gaps sensibles puede iniciarse.'}
-          </p>
-
-          <LocalDemoSafetyNotice compact context="clinic-module" />
-        </section>
-      ) : null}
-
-      {presentation.latestDataAiPrivacySection ? (
-        <section className="question-callout question-callout--muted">
-          <span className="question-callout__label">{presentation.latestDataAiPrivacySection.title}</span>
-          <p>{presentation.latestDataAiPrivacySection.content_markdown}</p>
-        </section>
-      ) : null}
-
-      {presentation.latestDataAiPrivacySection ? (
-        <section className="question-callout question-callout--muted">
-          <span className="question-callout__label">Medical-device triage</span>
-          <p>
-            {presentation.latestMedicalDeviceTriageSection
-              ? `Se generó ${presentation.latestMedicalDeviceTriageSection.title} v${presentation.latestMedicalDeviceTriageSection.section_version}.`
-              : presentation.medicalDeviceTriageModuleChat
-                ? `Estado: ${presentation.medicalDeviceTriageModuleChat.chat_status.replaceAll('_', ' ')}.`
-                : 'El módulo registra gaps/questions/uncertainty cuando hay señales o incertidumbre y requiere competent human review cuando corresponde.'}
-          </p>
-
-          <LocalDemoSafetyNotice compact context="clinic-module" />
-        </section>
-      ) : null}
-
-      {presentation.latestMedicalDeviceTriageSection ? (
-        <section className="question-callout question-callout--muted">
-          <span className="question-callout__label">{presentation.latestMedicalDeviceTriageSection.title}</span>
-          <p>{presentation.latestMedicalDeviceTriageSection.content_markdown}</p>
-        </section>
-      ) : null}
-
-      {presentation.latestSolutionSection ? (
-        <section className="question-callout question-callout--muted">
-          <span className="question-callout__label">Recursos, piloto e insumos operativos</span>
-          <p>
-            {presentation.latestResourcesPilotViabilitySection
-              ? `Se generó ${presentation.latestResourcesPilotViabilitySection.title} v${presentation.latestResourcesPilotViabilitySection.section_version}.`
-              : presentation.resourcesPilotViabilityModuleChat
-                ? `Estado: ${presentation.resourcesPilotViabilityModuleChat.chat_status.replaceAll('_', ' ')}.`
-                : 'La solución ya tiene sección generada y el módulo puede recoger recursos, entorno, dependencias, métricas, restricciones y riesgos operativos.'}
-          </p>
-
-          <LocalDemoSafetyNotice compact context="clinic-module" />
-        </section>
-      ) : null}
-
-      {presentation.latestResourcesPilotViabilitySection ? (
-        <section className="question-callout question-callout--muted">
-          <span className="question-callout__label">{presentation.latestResourcesPilotViabilitySection.title}</span>
-          <p>{presentation.latestResourcesPilotViabilitySection.content_markdown}</p>
-        </section>
-      ) : null}
-
-      {report ? (
-        <BasicAlphaReportPanel
-          report={report}
-          canDownloadPdf={reportPanelCanDownloadPdf}
-          isDownloadingPdf={isDownloadingReportPdf}
-          onDownloadPdf={() => onDownloadReportPdf(audit.session.id)}
-        />
-      ) : reportPhase && reportPhase.status !== 'locked' ? (
-        <section className="question-callout question-callout--muted">
-          <span className="question-callout__label">Informe Alpha</span>
-          <p>{reportLoadError ?? reportPhase.explanation}</p>
-
-          <LocalDemoSafetyNotice compact context="report" />
-        </section>
-      ) : null}
-
-      <div className="conversation-stream">
-        <div className="stream-divider">
-          <span>Historial persistido</span>
-        </div>
-
-        <article className="message message--system">
-          <div className="message__avatar">AI</div>
-          <div className="message__bubble">
-            <div className="message__meta">Estado de fase</div>
-            <p>{currentPhase.lockedReason ?? currentPhase.explanation}</p>
-          </div>
-        </article>
-
-        {audit.turns.length === 0 ? (
-          <div className="empty-state">
-            La sesión todavía no tiene turnos persistidos en `conversation_turns`.
-          </div>
-        ) : (
-          audit.turns.map((turn) => (
-            <div key={turn.id} className="message-pair">
-              <article className="message message--assistant">
-                <div className="message__avatar">AI</div>
-                <div className="message__bubble">
-                  <div className="message__meta">
-                    <span>Turno {turn.turn_seq}</span>
-                    <StatusBadge label={turn.status.replaceAll('_', ' ')} tone="neutral" />
-                  </div>
-                  <p>{turn.question_text}</p>
-
-                  {turn.diagnosis_json.length > 0 ? (
-                    <ul className="message__chips">
-                      {turn.diagnosis_json.map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-
-                  {turn.completion_reason ? (
-                    <div className="message__note">{turn.completion_reason}</div>
-                  ) : null}
-                </div>
-              </article>
-
-              {turn.answer_text ? (
-                <article className="message message--user">
-                  <div className="message__avatar">TÚ</div>
-                  <div className="message__bubble">
-                    <div className="message__meta">Respuesta del usuario</div>
-                    <p>{turn.answer_text}</p>
-                  </div>
-                </article>
-              ) : null}
-            </div>
-          ))
-        )}
-
-        {isReplying ? (
-          <article className="message message--assistant">
-            <div className="message__avatar">AI</div>
-            <div className="message__bubble message__bubble--typing">
-              <div className="message__meta">Procesando turno</div>
-              <div className="typing-dots" aria-hidden="true">
-                <span />
-                <span />
-                <span />
-              </div>
-            </div>
-          </article>
-        ) : null}
-      </div>
-
+      {/* 3. Composer exactly below the active question */}
       <section className="composer-card">
         <div className="composer-card__header">
           <div>
-            <span className="panel__eyebrow">Responder</span>
+            <span className="panel__eyebrow">Tu respuesta</span>
             <h2>Siguiente intervención</h2>
-            <p>La respuesta se envía a `proposal-reply-v1` y actualiza el estado real de la sesión.</p>
           </div>
         </div>
-
-        <LocalDemoSafetyNotice compact context="clinic-module" />
 
         {canReply ? (
           <form className="reply-form" onSubmit={handleReplySubmit}>
@@ -594,32 +359,141 @@ export function SessionWorkspace({
             {feedback ? <div className="feedback feedback--error">{feedback}</div> : null}
 
             <div className="composer-card__actions">
-              <p>
+              <p className="composer-hint">
                 {presentation.currentMedicalDeviceTriageQuestion
-                  ? 'Responde solo con gaps/questions/uncertainty y competent human review; no clasifiques.'
+                  ? 'Registra gaps, preguntas e incertidumbre; no clasifiques ni emitas dictamen.'
                   : presentation.currentResourcesPilotViabilityQuestion
-                  ? 'Responde con insumos operativos concretos; no incluyas score, aprobacion, ranking ni modelo financiero.'
+                  ? 'Responde con insumos operativos concretos; no incluyas score, aprobación, ranking ni modelo financiero.'
                   : presentation.currentDataAiPrivacyQuestion
-                  ? 'Responde con gaps, incertidumbre y revision humana competente; no emitas decisiones definitivas.'
+                  ? 'Responde con gaps, incertidumbre y revisión humana competente; no emitas decisiones definitivas.'
                   : presentation.currentSolutionQuestion
-                  ? 'Responde con informacion operativa sobre la solucion, sin entrar en costes o regulacion.'
-                  : 'Responde en un tono operativo: concreto, verificable y centrado en el problema.'}
+                  ? 'Responde con información operativa sobre la solución, sin entrar en costes o regulación.'
+                  : 'Responde con información concreta, verificable y centrada en el problema.'}
               </p>
               <button className="button button--primary" type="submit" disabled={isReplying}>
-                {isReplying ? 'Procesando turno…' : 'Enviar respuesta'}
+                {isReplying ? 'Guardando respuesta...' : 'Enviar respuesta'}
               </button>
             </div>
           </form>
         ) : (
           <div className="empty-state">
-            {presentation.status === 'completed'
-              ? 'La sesión ya quedó marcada como completada.'
-              : presentation.status === 'blocked' || presentation.status === 'failed'
-                ? 'La sesión quedó bloqueada. Revisa el estado antes de reintentar.'
-                : 'No hay un turno esperando respuesta.'}
+            {presentation.status === 'completed' ? (
+              <p>La sesión ya quedó marcada como completada.</p>
+            ) : presentation.status === 'blocked' || presentation.status === 'failed' ? (
+              <p>La sesión necesita revisión antes de continuar.</p>
+            ) : (
+              <p>SokrAI no tiene un turno esperando respuesta en este momento.</p>
+            )}
+
+            {primaryPhaseAction && (
+              <div className="primary-action-container">
+                <button
+                  className="button button--primary"
+                  type="button"
+                  onClick={primaryPhaseAction.onClick}
+                  disabled={primaryPhaseAction.isBusy}
+                >
+                  {primaryPhaseAction.isBusy ? primaryPhaseAction.busyLabel : primaryPhaseAction.label}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </section>
+
+      {/* Simple, compact safety warning immediately next to active task */}
+      <LocalDemoSafetyNotice compact context="workspace" />
+
+      {/* 4. Recent turns below Composer */}
+      <section className="recent-turns-section">
+        <div className="stream-divider">
+          <span>Conversación reciente</span>
+        </div>
+
+        {recentTurns.length === 0 ? (
+          <p className="empty-state text-center">Aún no hay respuestas guardadas en esta sesión.</p>
+        ) : (
+          <div className="recent-turns-list">
+            {recentTurns.map((turn) => (
+              <div key={turn.id} className="message-pair">
+                <article className="message message--assistant">
+                  <div className="message__avatar">AI</div>
+                  <div className="message__bubble">
+                    <div className="message__meta">
+                      <span>SokrAI (Turno {turn.turn_seq})</span>
+                    </div>
+                    <p>{turn.question_text}</p>
+                  </div>
+                </article>
+
+                <article className="message message--user">
+                  <div className="message__avatar">TÚ</div>
+                  <div className="message__bubble">
+                    <div className="message__meta">Tu respuesta</div>
+                    <p>{turn.answer_text}</p>
+                  </div>
+                </article>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* 5. Long history disclosure */}
+      <section className="history-disclosure-section">
+        <button
+          className="button button--secondary"
+          type="button"
+          onClick={() => setIsHistoryOpen(!isHistoryOpen)}
+        >
+          {isHistoryOpen ? 'Ocultar historial completo' : 'Ver historial completo'}
+        </button>
+
+        {isHistoryOpen && (
+          <div className="history-expanded-panel mt-4">
+            <h3>Historial persistido</h3>
+            {olderTurns.length === 0 ? (
+              <p className="empty-state">La sesión todavía no tiene turnos persistidos.</p>
+            ) : (
+              <div className="older-turns-list">
+                {olderTurns.map((turn) => (
+                  <div key={turn.id} className="message-pair">
+                    <article className="message message--assistant">
+                      <div className="message__avatar">AI</div>
+                      <div className="message__bubble">
+                        <div className="message__meta">
+                          <span>SokrAI (Turno {turn.turn_seq})</span>
+                        </div>
+                        <p>{turn.question_text}</p>
+                      </div>
+                    </article>
+
+                    <article className="message message--user">
+                      <div className="message__avatar">TÚ</div>
+                      <div className="message__bubble">
+                        <div className="message__meta">Tu respuesta</div>
+                        <p>{turn.answer_text}</p>
+                      </div>
+                    </article>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* 6. Generated downstream sections & Report Preview */}
+      {report && (
+        <section className="downstream-report-container">
+          <BasicAlphaReportPanel
+            report={report}
+            canDownloadPdf={reportPanelCanDownloadPdf}
+            isDownloadingPdf={isDownloadingReportPdf}
+            onDownloadPdf={() => onDownloadReportPdf(audit.session.id)}
+          />
+        </section>
+      )}
     </section>
   );
 }

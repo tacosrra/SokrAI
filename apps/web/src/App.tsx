@@ -30,6 +30,9 @@ import { NewProposalPanel } from './components/NewProposalPanel';
 import { SessionStatePanel } from './components/SessionStatePanel';
 import { SessionWorkspace } from './components/SessionWorkspace';
 import { WorkflowLoadingPanel } from './components/WorkflowLoadingPanel';
+import { WorkspaceTopBar } from './components/WorkspaceTopBar';
+import { PhaseRail } from './components/PhaseRail';
+import { SessionMenu } from './components/SessionMenu';
 
 type BannerTone = 'info' | 'success' | 'error';
 type ModeView = 'start' | 'resume';
@@ -307,6 +310,7 @@ export function App() {
   const [isDownloadingReportPdf, setIsDownloadingReportPdf] = useState(false);
   const [lastPdfExportSessionId, setLastPdfExportSessionId] = useState<string | null>(null);
   const [banner, setBanner] = useState<BannerState | null>(null);
+  const [isSessionMenuOpen, setIsSessionMenuOpen] = useState(false);
 
   useEffect(() => {
     const recent = readRecentSessions();
@@ -1287,21 +1291,7 @@ export function App() {
     writeSessionToUrl('');
   }
 
-  async function handleLoadFromSidebar(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
 
-    const trimmedSessionId = sessionLookupId.trim();
-
-    if (!trimmedSessionId) {
-      setBanner({
-        tone: 'error',
-        text: 'Indica un `session_id` válido para reabrir una sesión.',
-      });
-      return;
-    }
-
-    await loadSession(trimmedSessionId);
-  }
 
   const presentation = activeAudit
     ? deriveSessionPresentation(activeAudit, {
@@ -1312,116 +1302,36 @@ export function App() {
     : null;
 
   if (presentation && activeAudit) {
-    const currentPhase = presentation.phaseProgress.steps.find((step) =>
-      step.id === presentation.phaseProgress.currentPhaseId,
-    ) ?? presentation.phaseProgress.steps[0];
-
     return (
       <div className="app-shell app-shell--workspace">
         <div className="app-shell__ambient" />
 
+        {/* 1. Row 1: Sticky Top Bar across the shell */}
+        <WorkspaceTopBar
+          presentation={presentation}
+          isLoadingSession={isLoadingSession}
+          isReplying={isReplying}
+          isComposingReport={isComposingReport}
+          isDownloadingReportPdf={isDownloadingReportPdf}
+          onChangeSessionClick={() => setIsSessionMenuOpen(true)}
+          onNewProposalClick={handleStartFreshSession}
+        />
+
         {banner ? <div className={`flash-banner flash-banner--${banner.tone}`}>{banner.text}</div> : null}
 
+        {/* Workspace Layout */}
         <main className="workspace-shell">
-          <aside className="workspace-rail">
-            <div className="workspace-rail__brand">
-                <div className="brand-mark">S</div>
-              <div className="brand-copy">
-                <span className="brand-copy__eyebrow">SokrAI v1</span>
-                <strong>Proposal maturation workspace</strong>
-                <span className="brand-copy__meta">{presentation.phaseProgress.currentPhaseLabel}</span>
-              </div>
-            </div>
+          {/* 2. Row 2: phase-navigation left, main-chat center, guidance-panel right */}
+          <section className="phase-navigation-column">
+            <PhaseRail
+              steps={presentation.phaseProgress.steps}
+              currentPhaseId={presentation.phaseProgress.currentPhaseId}
+              completedPhases={presentation.phaseProgress.completedPhases}
+              totalApplicablePhases={presentation.phaseProgress.totalApplicablePhases}
+            />
+          </section>
 
-            <section className="workspace-rail__section workspace-rail__section--hero">
-              <span className="panel__eyebrow">Sesión activa</span>
-              <h2>{presentation.projectTitle}</h2>
-              <p>{currentPhase.lockedReason ?? currentPhase.explanation}</p>
-
-              <LocalDemoSafetyNotice compact context="workspace" />
-
-              <div className="rail-kpis">
-                <article>
-                  <strong>{presentation.phaseProgress.percent}%</strong>
-                  <span>fases</span>
-                </article>
-                <article>
-                  <strong>
-                    {presentation.phaseProgress.completedPhases}/{presentation.phaseProgress.totalApplicablePhases}
-                  </strong>
-                  <span>completas</span>
-                </article>
-              </div>
-
-              <button className="button button--primary" type="button" onClick={handleStartFreshSession}>
-                Nueva propuesta
-              </button>
-            </section>
-
-            <section className="workspace-rail__section">
-              <div className="workspace-rail__heading">
-                <span className="panel__eyebrow">Acceso rápido</span>
-                <h3>Abrir otra sesión</h3>
-              </div>
-
-              <form className="workspace-rail__form" onSubmit={handleLoadFromSidebar}>
-                <label className="field">
-                  <span className="field__label">Session ID</span>
-                  <input
-                    className="field__control field__control--code"
-                    type="text"
-                    value={sessionLookupId}
-                    onChange={(event) => setSessionLookupId(event.target.value)}
-                    placeholder="85cf3299-4fc3-4770-9944-6049d97e7b59"
-                    disabled={isLoadingSession}
-                  />
-                </label>
-
-                <button className="button button--secondary" type="submit" disabled={isLoadingSession}>
-                  {isLoadingSession ? 'Consultando…' : 'Abrir sesión'}
-                </button>
-              </form>
-            </section>
-
-            <section className="workspace-rail__section workspace-rail__section--list">
-              <div className="workspace-rail__heading">
-                <span className="panel__eyebrow">Recientes</span>
-                <h3>{recentSessions.length} conversaciones</h3>
-              </div>
-
-              {recentSessions.length === 0 ? (
-                <div className="empty-state">
-                  Aún no hay sesiones recientes guardadas en este navegador.
-                </div>
-              ) : (
-                <div className="session-rail-list">
-                  {recentSessions.map((session) => (
-                    <button
-                      key={session.sessionId}
-                      className={`session-rail-item ${
-                        presentation.sessionId === session.sessionId ? 'session-rail-item--active' : ''
-                      }`}
-                      type="button"
-                      onClick={() => void loadSession(session.sessionId)}
-                      disabled={isLoadingSession}
-                    >
-                      <div className="session-rail-item__header">
-                        <strong>{session.projectTitle}</strong>
-                        <span>{formatSessionDate(session.updatedAt)}</span>
-                      </div>
-                      <p>{session.goal}</p>
-                      <div className="session-rail-item__meta">
-                        <span>{session.status.replaceAll('_', ' ')}</span>
-                        <span>{session.currentQuestion || 'Sin pregunta abierta'}</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </section>
-          </aside>
-
-          <section className="workspace-main">
+          <section className="workspace-main main-chat-column">
             <SessionWorkspace
               audit={activeAudit}
               report={activeReport}
@@ -1444,10 +1354,23 @@ export function App() {
             />
           </section>
 
-          <aside className="workspace-insights">
+          <aside className="workspace-insights guidance-panel-column">
             <SessionStatePanel audit={activeAudit} presentation={presentation} />
           </aside>
         </main>
+
+        {/* 3. Session Menu Drawer */}
+        <SessionMenu
+          isOpen={isSessionMenuOpen}
+          onClose={() => setIsSessionMenuOpen(false)}
+          sessionLookupId={sessionLookupId}
+          setSessionLookupId={setSessionLookupId}
+          recentSessions={recentSessions}
+          isLoadingSession={isLoadingSession}
+          onLoadSession={async (sessionId) => {
+            await loadSession(sessionId);
+          }}
+        />
       </div>
     );
   }
