@@ -422,13 +422,12 @@ a {
   place-items: center;
   width: 48px;
   height: 48px;
-  border-radius: 18px;
-  background: linear-gradient(145deg, var(--primary), #5fd2e9);
-  color: white;
-  font-size: 1.15rem;
-  font-weight: 800;
-  letter-spacing: -0.04em;
-  box-shadow: 0 18px 34px rgba(8, 145, 178, 0.24);
+  flex-shrink: 0;
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(8, 145, 178, 0.12);
+  box-shadow: 0 12px 24px rgba(8, 145, 178, 0.12);
 }
 
 .brand-copy {
@@ -561,10 +560,8 @@ a {
   background: linear-gradient(145deg, #ffffff, #dff6fb);
   border: 1px solid rgba(8, 145, 178, 0.24);
   box-shadow: 0 20px 40px rgba(8, 145, 178, 0.16);
-  color: var(--primary-dark);
-  font-size: 1rem;
-  font-weight: 800;
-  letter-spacing: 0.1em;
+  overflow: hidden;
+  padding: 10px;
 }
 
 .mode-hero__presence {
@@ -1648,6 +1645,14 @@ a {
   font-weight: 800;
   letter-spacing: 0.06em;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.message__avatar--assistant {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(8, 145, 178, 0.14);
+  box-shadow: 0 8px 18px rgba(8, 145, 178, 0.1);
+  padding: 6px;
 }
 
 .message--user .message__avatar {
@@ -1682,25 +1687,166 @@ a {
 .message__thinking {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  color: var(--muted-strong);
-  font-size: 0.95rem;
+  justify-content: center;
+  min-height: 28px;
+  padding: 2px 0;
 }
 
-.message__thinking-spinner {
-  width: 14px;
-  height: 14px;
+.thinking-dots {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 7px;
+  height: 22px;
+}
+
+.thinking-dots__dot {
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  border: 2px solid rgba(8, 145, 178, 0.18);
-  border-top-color: var(--primary);
-  animation: message-thinking-spin 800ms linear infinite;
+  background: linear-gradient(145deg, var(--primary), var(--secondary));
+  box-shadow: 0 4px 10px rgba(8, 145, 178, 0.22);
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+}
+
+.thinking-dots__dot:nth-child(1) {
+  animation: thinking-dot-seq-1 1.65s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+
+.thinking-dots__dot:nth-child(2) {
+  animation: thinking-dot-seq-2 1.65s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+
+.thinking-dots__dot:nth-child(3) {
+  animation: thinking-dot-seq-3 1.65s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+
+@keyframes thinking-dot-seq-1 {
+  0%,
+  5%,
+  24%,
+  30%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  10% {
+    transform: translate3d(0, -3px, 0);
+  }
+
+  15% {
+    transform: translate3d(0, -9px, 0);
+  }
+
+  20% {
+    transform: translate3d(0, -3px, 0);
+  }
+}
+
+@keyframes thinking-dot-seq-2 {
+  0%,
+  35%,
+  40%,
+  59%,
+  65%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  44% {
+    transform: translate3d(0, -3px, 0);
+  }
+
+  49% {
+    transform: translate3d(0, -9px, 0);
+  }
+
+  54% {
+    transform: translate3d(0, -3px, 0);
+  }
+}
+
+@keyframes thinking-dot-seq-3 {
+  0%,
+  68%,
+  73%,
+  92%,
+  98%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+
+  77% {
+    transform: translate3d(0, -3px, 0);
+  }
+
+  82% {
+    transform: translate3d(0, -9px, 0);
+  }
+
+  87% {
+    transform: translate3d(0, -3px, 0);
+  }
+}
+
+.sokrai-logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
   flex-shrink: 0;
 }
 
-@keyframes message-thinking-spin {
-  to {
-    transform: rotate(360deg);
+.sokrai-logo--animated {
+  animation: sokrai-logo-bounce 1.4s ease-in-out infinite;
+  transform-origin: center bottom;
+}
+
+.sokrai-logo--xs {
+  width: 28px;
+  height: 28px;
+}
+
+.sokrai-logo--sm {
+  width: 28px;
+  height: 28px;
+}
+
+.sokrai-logo--md {
+  width: 40px;
+  height: 40px;
+}
+
+.sokrai-logo--lg {
+  width: 56px;
+  height: 56px;
+}
+
+.sokrai-logo--xl {
+  width: 52px;
+  height: 52px;
+}
+
+@keyframes sokrai-logo-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
   }
+
+  50% {
+    transform: translateY(-7px);
+  }
+}
+
+.workflow-loading-panel__logo {
+  display: grid;
+  place-items: center;
+  min-height: 88px;
+  padding: 18px;
+  border-radius: 24px;
+  border: 1px solid rgba(8, 145, 178, 0.16);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 rgba(17, 50, 65, 0.03);
 }
 
 .message-pair--pending,

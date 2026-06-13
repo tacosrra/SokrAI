@@ -1,4 +1,5 @@
 import type { SessionPresentation } from '../lib/session-view';
+import { SokrAiLogo } from './SokrAiLogoLoader';
 
 interface WorkspaceTopBarProps {
   presentation: SessionPresentation | null;
@@ -33,7 +34,9 @@ export function WorkspaceTopBar({
   return (
     <header className="app-topbar workspace-topbar">
       <div className="workspace-topbar__brand">
-        <div className="brand-mark">S</div>
+        <div className="brand-mark">
+          <SokrAiLogo size="md" />
+        </div>
         <div className="brand-copy">
           <span className="brand-copy__eyebrow">SokrAI v1</span>
           <strong>SokrAI proposal interview</strong>

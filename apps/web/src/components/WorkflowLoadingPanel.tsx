@@ -2,6 +2,7 @@ import {
   getWorkflowLoadingCopy,
   type WorkflowOperationKind,
 } from '../lib/feedback';
+import { SokrAiLogoLoader } from './SokrAiLogoLoader';
 
 interface WorkflowLoadingPanelProps {
   kind: WorkflowOperationKind;
@@ -19,10 +20,8 @@ export function WorkflowLoadingPanel({ kind }: WorkflowLoadingPanelProps) {
           <p>{copy.description}</p>
         </div>
 
-        <div className="workflow-loading-panel__pulse" aria-hidden="true">
-          <span />
-          <span />
-          <span />
+        <div className="workflow-loading-panel__logo" aria-hidden="true">
+          <SokrAiLogoLoader size="lg" />
         </div>
       </div>
 

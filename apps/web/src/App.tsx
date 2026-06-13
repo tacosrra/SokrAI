@@ -32,6 +32,7 @@ import { WorkflowLoadingPanel } from './components/WorkflowLoadingPanel';
 import { WorkspaceTopBar } from './components/WorkspaceTopBar';
 import { PhaseRail } from './components/PhaseRail';
 import { SessionMenu } from './components/SessionMenu';
+import { SokrAiLogo } from './components/SokrAiLogoLoader';
 
 type BannerTone = 'info' | 'success' | 'error';
 type ModeView = 'start' | 'resume';
@@ -1287,6 +1288,22 @@ export function App() {
     setDefaultSessionId('');
     setSessionLookupId('');
     setSelectedMode('start');
+    setIsSessionMenuOpen(false);
+    writeSessionToUrl('');
+  }
+
+  function handleChangeSession() {
+    const currentSessionId = activeAudit?.session.id ?? sessionLookupId;
+
+    setActiveAudit(null);
+    setActiveReport(null);
+    setReportLoadError(null);
+    setLastPdfExportSessionId(null);
+    setBanner(null);
+    setSessionLookupId(currentSessionId);
+    setDefaultSessionId(currentSessionId);
+    setSelectedMode('resume');
+    setIsSessionMenuOpen(false);
     writeSessionToUrl('');
   }
 
@@ -1312,7 +1329,7 @@ export function App() {
           isReplying={isReplying}
           isComposingReport={isComposingReport}
           isDownloadingReportPdf={isDownloadingReportPdf}
-          onChangeSessionClick={() => setIsSessionMenuOpen(true)}
+          onChangeSessionClick={handleChangeSession}
           onNewProposalClick={handleStartFreshSession}
         />
 
@@ -1380,7 +1397,9 @@ export function App() {
 
       <header className="app-topbar">
         <div className="app-topbar__brand">
-          <div className="brand-mark">S</div>
+          <div className="brand-mark">
+            <SokrAiLogo size="md" />
+          </div>
           <div className="brand-copy">
             <span className="brand-copy__eyebrow">SokrAI v1</span>
             <strong>Problem Definition Console</strong>
@@ -1404,7 +1423,9 @@ export function App() {
         <section className="mode-hero">
           <div className="mode-hero__visual" aria-hidden="true">
             <div className="mode-hero__pulse" />
-            <div className="mode-hero__orb">AI</div>
+            <div className="mode-hero__orb">
+              <SokrAiLogo size="xl" />
+            </div>
             <div className="mode-hero__presence">
               <span />
             </div>

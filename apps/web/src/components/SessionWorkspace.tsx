@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 
+import { SokrAiLogo } from './SokrAiLogoLoader';
+import { ThinkingDots } from './ThinkingDots';
 import type { BasicAlphaReport, SessionAuditView } from '../domain/contracts';
 import type { PhasePrimaryAction, SessionPresentation } from '../lib/session-view';
 import { BasicAlphaReportPanel } from './BasicAlphaReportPanel';
@@ -315,10 +317,18 @@ export function SessionWorkspace({
   const hasHistoryContent =
     completedTurns.length > 0 || Boolean(optimisticReply) || showCurrentQuestionInHistory;
 
+  function renderAssistantAvatar() {
+    return (
+      <div className="message__avatar message__avatar--assistant" aria-hidden="true">
+        <SokrAiLogo size="xs" />
+      </div>
+    );
+  }
+
   function renderAssistantMessage(text: string, meta: string) {
     return (
       <article className="message message--assistant">
-        <div className="message__avatar">AI</div>
+        {renderAssistantAvatar()}
         <div className="message__bubble">
           <div className="message__meta">
             <span>{meta}</span>
@@ -344,11 +354,10 @@ export function SessionWorkspace({
   function renderThinkingMessage() {
     return (
       <article className="message message--assistant message--thinking" aria-live="polite" aria-busy="true">
-        <div className="message__avatar">AI</div>
+        {renderAssistantAvatar()}
         <div className="message__bubble">
           <div className="message__thinking">
-            <span className="message__thinking-spinner" aria-hidden="true" />
-            <span>pensando...</span>
+            <ThinkingDots />
           </div>
         </div>
       </article>
