@@ -3,7 +3,6 @@ import { useState, useEffect } from 'react';
 import type { BasicAlphaReport, SessionAuditView } from '../domain/contracts';
 import type { PhasePrimaryAction, SessionPresentation } from '../lib/session-view';
 import { BasicAlphaReportPanel } from './BasicAlphaReportPanel';
-import { LocalDemoSafetyNotice } from './LocalDemoSafetyNotice';
 import { StatusBadge } from './StatusBadge';
 
 interface SessionWorkspaceProps {
@@ -78,7 +77,6 @@ export function SessionWorkspace({
 }: SessionWorkspaceProps) {
   const [reply, setReply] = useState('');
   const [feedback, setFeedback] = useState('');
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   useEffect(() => {
     setReply('');
@@ -244,10 +242,33 @@ export function SessionWorkspace({
   const isUnsupportedNonReportRecovery =
     currentPhase.primaryAction === 'recover' && currentPhase.id !== 'report';
 
-  // Extract recent turns: last 2-3 meaningful turn pairs
-  const meaningfulTurns = audit.turns.filter((turn) => Boolean(turn.answer_text?.trim()));
-  const recentTurns = meaningfulTurns.slice(-2);
-  const olderTurns = meaningfulTurns.slice(0, -2);
+  const completedTurns = audit.turns
+    .filter((turn) => Boolean(turn.answer_text?.trim()))
+    .sort((left, right) => left.turn_seq - right.turn_seq);
+
+  function renderTurnPair(turn: SessionAuditView['turns'][number]) {
+    return (
+      <div key={turn.id} className="message-pair">
+        <article className="message message--assistant">
+          <div className="message__avatar">AI</div>
+          <div className="message__bubble">
+            <div className="message__meta">
+              <span>SokrAI (Turno {turn.turn_seq})</span>
+            </div>
+            <p>{turn.question_text}</p>
+          </div>
+        </article>
+
+        <article className="message message--user">
+          <div className="message__avatar">TÚ</div>
+          <div className="message__bubble">
+            <div className="message__meta">Tu respuesta</div>
+            <p>{turn.answer_text}</p>
+          </div>
+        </article>
+      </div>
+    );
+  }
 
   return (
     <section className="conversation-shell">
@@ -273,26 +294,40 @@ export function SessionWorkspace({
       </nav>
 
       {/* 1. Current Phase Header */}
-      <header className="conversation-current-phase">
-        <span className="panel__eyebrow">Fase actual</span>
-        <h2>Fase actual: {currentPhase.label}</h2>
-        <p>{actionPanelText}</p>
-        {unsupportedRecoverAction && (
-          <div className="feedback feedback--error">
-            Esta fase necesita recuperación. Revisa los detalles antes de continuar.
+      <section className="phase-action-panel" aria-label="Fase actual">
+        <div className="phase-action-panel__main">
+          <span className="panel__eyebrow">Fase actual</span>
+          <h2>Fase actual: {currentPhase.label}</h2>
+          <p>{actionPanelText}</p>
+          {unsupportedRecoverAction && (
+            <div className="feedback feedback--error">
+              Esta fase necesita recuperación. Revisa los detalles antes de continuar.
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="conversation-panel" aria-label="Conversación">
+        <div className="conversation-panel__history" aria-label="Historial de la conversación">
+          <div className="stream-divider">
+            <span>Conversación</span>
           </div>
-        )}
-      </header>
 
-      {/* 2. Active Question */}
-      <section className="active-question-card">
-        <span className="question-callout__label">Pregunta actual</span>
-        <p className="question-text">
-          {presentation.currentQuestion || 'SokrAI no tiene un turno esperando respuesta en este momento.'}
-        </p>
+          {completedTurns.length === 0 ? (
+            <p className="empty-state text-center">Aún no hay respuestas guardadas en esta sesión.</p>
+          ) : (
+            <div className="conversation-panel__messages">{completedTurns.map(renderTurnPair)}</div>
+          )}
+        </div>
 
-        {/* Compatibility indicators for specific phase locks / tests */}
-        <div style={{ display: 'none' }}>
+        <section className="question-callout" aria-label="Pregunta actual">
+          <span className="question-callout__label">Pregunta actual</span>
+          <p className="question-text">
+            {presentation.currentQuestion || 'SokrAI no tiene un turno esperando respuesta en este momento.'}
+          </p>
+
+          {/* Compatibility indicators for specific phase locks / tests */}
+          <div style={{ display: 'none' }}>
           {currentPhase.id === 'solution' && (
             <div>Completa la fase de solución antes de revisar datos, IA y privacidad.</div>
           )}
@@ -324,166 +359,83 @@ export function SessionWorkspace({
           {currentPhase.id === 'pdf_export' && (
             <div>Fase actual: PDF / export</div>
           )}
-        </div>
-      </section>
-
-      {/* 3. Composer exactly below the active question */}
-      <section className="composer-card">
-        <div className="composer-card__header">
-          <div>
-            <span className="panel__eyebrow">Tu respuesta</span>
-            <h2>Siguiente intervención</h2>
           </div>
-        </div>
+        </section>
 
-        {canReply ? (
-          <form className="reply-form" onSubmit={handleReplySubmit}>
-            <textarea
-              className="field__control field__control--large"
-              value={reply}
-              onChange={(event) => setReply(event.target.value)}
-              placeholder={
-                presentation.currentResourcesPilotViabilityQuestion
-                  ? 'Describe equipo, recursos tecnicos, entorno piloto, dependencias, metricas, restricciones y riesgos operativos.'
-                  : presentation.currentMedicalDeviceTriageQuestion
-                  ? 'Describe uso previsto, papel clinico, evidencia faltante, incertidumbre y revision humana competente.'
-                  : presentation.currentDataAiPrivacyQuestion
-                  ? 'Describe datos tratados, fuentes, rol de IA, controles, validacion y revision humana competente.'
-                  : presentation.currentSolutionQuestion
-                  ? 'Describe que hace la solucion, quien la usa, como funciona y que limites tiene.'
-                  : 'Describe quién vive el problema, la evidencia concreta, el alcance y las alternativas actuales.'
-              }
-              disabled={isReplying}
-            />
-
-            {feedback ? <div className="feedback feedback--error">{feedback}</div> : null}
-
-            <div className="composer-card__actions">
-              <p className="composer-hint">
-                {presentation.currentMedicalDeviceTriageQuestion
-                  ? 'Registra gaps, preguntas e incertidumbre; no clasifiques ni emitas dictamen.'
-                  : presentation.currentResourcesPilotViabilityQuestion
-                  ? 'Responde con insumos operativos concretos; no incluyas score, aprobación, ranking ni modelo financiero.'
-                  : presentation.currentDataAiPrivacyQuestion
-                  ? 'Responde con gaps, incertidumbre y revisión humana competente; no emitas decisiones definitivas.'
-                  : presentation.currentSolutionQuestion
-                  ? 'Responde con información operativa sobre la solución, sin entrar en costes o regulación.'
-                  : 'Responde con información concreta, verificable y centrada en el problema.'}
-              </p>
-              <button className="button button--primary" type="submit" disabled={isReplying}>
-                {isReplying ? 'Guardando respuesta...' : 'Enviar respuesta'}
-              </button>
+        <div className="conversation-panel__composer">
+          <div className="composer-card__header">
+            <div>
+              <span className="panel__eyebrow">Tu respuesta</span>
+              <h2>Siguiente intervención</h2>
             </div>
-          </form>
-        ) : (
-          <div className="empty-state">
-            {presentation.status === 'completed' ? (
-              <p>La sesión ya quedó marcada como completada.</p>
-            ) : presentation.status === 'blocked' || presentation.status === 'failed' ? (
-              <p>La sesión necesita revisión antes de continuar.</p>
-            ) : (
-              <p>SokrAI no tiene un turno esperando respuesta en este momento.</p>
-            )}
+          </div>
 
-            {primaryPhaseAction && (
-              <div className="primary-action-container">
-                <button
-                  className="button button--primary"
-                  type="button"
-                  onClick={primaryPhaseAction.onClick}
-                  disabled={primaryPhaseAction.isBusy}
-                >
-                  {primaryPhaseAction.isBusy ? primaryPhaseAction.busyLabel : primaryPhaseAction.label}
+          {canReply ? (
+            <form className="reply-form" onSubmit={handleReplySubmit}>
+              <textarea
+                className="field__control field__control--large"
+                value={reply}
+                onChange={(event) => setReply(event.target.value)}
+                placeholder={
+                  presentation.currentResourcesPilotViabilityQuestion
+                    ? 'Describe equipo, recursos tecnicos, entorno piloto, dependencias, metricas, restricciones y riesgos operativos.'
+                    : presentation.currentMedicalDeviceTriageQuestion
+                    ? 'Describe uso previsto, papel clinico, evidencia faltante, incertidumbre y revision humana competente.'
+                    : presentation.currentDataAiPrivacyQuestion
+                    ? 'Describe datos tratados, fuentes, rol de IA, controles, validacion y revision humana competente.'
+                    : presentation.currentSolutionQuestion
+                    ? 'Describe que hace la solucion, quien la usa, como funciona y que limites tiene.'
+                    : 'Describe quién vive el problema, la evidencia concreta, el alcance y las alternativas actuales.'
+                }
+                disabled={isReplying}
+              />
+
+              {feedback ? <div className="feedback feedback--error">{feedback}</div> : null}
+
+              <div className="composer-card__actions">
+                <p className="composer-hint">
+                  {presentation.currentMedicalDeviceTriageQuestion
+                    ? 'Registra gaps, preguntas e incertidumbre; no clasifiques ni emitas dictamen.'
+                    : presentation.currentResourcesPilotViabilityQuestion
+                    ? 'Responde con insumos operativos concretos; no incluyas score, aprobación, ranking ni modelo financiero.'
+                    : presentation.currentDataAiPrivacyQuestion
+                    ? 'Responde con gaps, incertidumbre y revisión humana competente; no emitas decisiones definitivas.'
+                    : presentation.currentSolutionQuestion
+                    ? 'Responde con información operativa sobre la solución, sin entrar en costes o regulación.'
+                    : 'Responde con información concreta, verificable y centrada en el problema.'}
+                </p>
+                <button className="button button--primary" type="submit" disabled={isReplying}>
+                  {isReplying ? 'Guardando respuesta...' : 'Enviar respuesta'}
                 </button>
               </div>
-            )}
-          </div>
-        )}
-      </section>
+            </form>
+          ) : (
+            <div className="empty-state">
+              {presentation.status === 'completed' ? (
+                <p>La sesión ya quedó marcada como completada.</p>
+              ) : presentation.status === 'blocked' || presentation.status === 'failed' ? (
+                <p>La sesión necesita revisión antes de continuar.</p>
+              ) : (
+                <p>SokrAI no tiene un turno esperando respuesta en este momento.</p>
+              )}
 
-      {/* Simple, compact safety warning immediately next to active task */}
-      <LocalDemoSafetyNotice compact context="workspace" />
-
-      {/* 4. Recent turns below Composer */}
-      <section className="recent-turns-section">
-        <div className="stream-divider">
-          <span>Conversación reciente</span>
+              {primaryPhaseAction && (
+                <div className="primary-action-container">
+                  <button
+                    className="button button--primary"
+                    type="button"
+                    onClick={primaryPhaseAction.onClick}
+                    disabled={primaryPhaseAction.isBusy}
+                  >
+                    {primaryPhaseAction.isBusy ? primaryPhaseAction.busyLabel : primaryPhaseAction.label}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-
-        {recentTurns.length === 0 ? (
-          <p className="empty-state text-center">Aún no hay respuestas guardadas en esta sesión.</p>
-        ) : (
-          <div className="recent-turns-list">
-            {recentTurns.map((turn) => (
-              <div key={turn.id} className="message-pair">
-                <article className="message message--assistant">
-                  <div className="message__avatar">AI</div>
-                  <div className="message__bubble">
-                    <div className="message__meta">
-                      <span>SokrAI (Turno {turn.turn_seq})</span>
-                    </div>
-                    <p>{turn.question_text}</p>
-                  </div>
-                </article>
-
-                <article className="message message--user">
-                  <div className="message__avatar">TÚ</div>
-                  <div className="message__bubble">
-                    <div className="message__meta">Tu respuesta</div>
-                    <p>{turn.answer_text}</p>
-                  </div>
-                </article>
-              </div>
-            ))}
-          </div>
-        )}
       </section>
 
-      {/* 5. Long history disclosure */}
-      <section className="history-disclosure-section">
-        <button
-          className="button button--secondary"
-          type="button"
-          onClick={() => setIsHistoryOpen(!isHistoryOpen)}
-        >
-          {isHistoryOpen ? 'Ocultar historial completo' : 'Ver historial completo'}
-        </button>
-
-        {isHistoryOpen && (
-          <div className="history-expanded-panel mt-4">
-            <h3>Historial persistido</h3>
-            {olderTurns.length === 0 ? (
-              <p className="empty-state">La sesión todavía no tiene turnos persistidos.</p>
-            ) : (
-              <div className="older-turns-list">
-                {olderTurns.map((turn) => (
-                  <div key={turn.id} className="message-pair">
-                    <article className="message message--assistant">
-                      <div className="message__avatar">AI</div>
-                      <div className="message__bubble">
-                        <div className="message__meta">
-                          <span>SokrAI (Turno {turn.turn_seq})</span>
-                        </div>
-                        <p>{turn.question_text}</p>
-                      </div>
-                    </article>
-
-                    <article className="message message--user">
-                      <div className="message__avatar">TÚ</div>
-                      <div className="message__bubble">
-                        <div className="message__meta">Tu respuesta</div>
-                        <p>{turn.answer_text}</p>
-                      </div>
-                    </article>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </section>
-
-      {/* 6. Generated downstream sections & Report Preview */}
       {report && (
         <section className="downstream-report-container">
           <BasicAlphaReportPanel

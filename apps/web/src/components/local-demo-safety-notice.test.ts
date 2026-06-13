@@ -6,11 +6,9 @@ import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { App } from '../App';
 import type { AgentRun, BasicAlphaReport, ModuleChat, SessionAuditView } from '../domain/contracts';
 import { deriveSessionPresentation } from '../lib/session-view';
 import { BasicAlphaReportPanel } from './BasicAlphaReportPanel';
-import { LocalDemoSafetyNotice } from './LocalDemoSafetyNotice';
 import { SessionStatePanel } from './SessionStatePanel';
 import { SessionWorkspace } from './SessionWorkspace';
 
@@ -267,29 +265,6 @@ function renderWorkspaceHtml(
   );
 }
 
-describe('LocalDemoSafetyNotice', () => {
-  it.each([
-    ['intake', 'Usa solo informacion ficticia o anonimizada'],
-    ['resume', 'session_id funciona como token de demo local'],
-    ['workspace', 'estado auditable para revision local'],
-    ['clinic-module', 'gaps, preguntas e incertidumbre'],
-    ['report', 'PDF son artefactos locales de demo'],
-  ] as const)('renders the %s context warning', (context, expectedCopy) => {
-    const html = renderToStaticMarkup(h(LocalDemoSafetyNotice, { context }));
-
-    expect(html).toContain('Demo local controlada');
-    expect(html).toContain('No introduzcas datos reales de pacientes');
-    expect(html).toContain(expectedCopy);
-  });
-
-  it('renders in the App start shell with no-real-patient-data copy', () => {
-    const html = renderToStaticMarkup(h(App));
-
-    expect(html).toContain('Demo local controlada');
-    expect(html).toContain('No introduzcas datos reales de pacientes');
-  });
-});
-
 describe('BasicAlphaReportPanel', () => {
   it('renders report sections, warnings, PDF action, and local demo safety copy', () => {
     const html = renderToStaticMarkup(
@@ -306,7 +281,6 @@ describe('BasicAlphaReportPanel', () => {
     expect(html).toContain('Solution definition');
     expect(html).toContain('Download PDF');
     expect(html).toContain('This Alpha report is not a dictamen');
-    expect(html).toContain('No introduzcas datos reales de pacientes');
   });
 
   it('disables the PDF action when the phase model does not allow export', () => {

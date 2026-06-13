@@ -25,7 +25,6 @@ import { mapApiError } from './lib/feedback';
 import { deriveSessionPresentation } from './lib/session-view';
 import { readLastSessionId, readRecentSessions, persistRecentSession } from './lib/storage';
 import { ContinueSessionPanel } from './components/ContinueSessionPanel';
-import { LocalDemoSafetyNotice } from './components/LocalDemoSafetyNotice';
 import { NewProposalPanel } from './components/NewProposalPanel';
 import { SessionStatePanel } from './components/SessionStatePanel';
 import { SessionWorkspace } from './components/SessionWorkspace';
@@ -1389,7 +1388,6 @@ export function App() {
           </div>
         </div>
 
-        <div className="topbar-chip">UI alineada con "Interview Mode Selection"</div>
       </header>
 
       {banner ? <div className={`flash-banner flash-banner--${banner.tone}`}>{banner.text}</div> : null}
@@ -1416,7 +1414,7 @@ export function App() {
           <h1>Selecciona cómo abrir la entrevista de maduración</h1>
           <p>
             La propuesta nueva crea la sesión y deja la primera pregunta lista. Si ya tienes
-            un `session_id`, puedes reabrir el chat, los snapshots y el estado persistido sin perder el contexto.
+            un `session_id`, puedes reabrir el chat sin perder el contexto.
           </p>
         </section>
 
@@ -1443,11 +1441,6 @@ export function App() {
         </section>
 
         <section className="detail-shell">
-          <LocalDemoSafetyNotice
-            compact
-            context={selectedMode === 'start' ? 'intake' : 'resume'}
-          />
-
           {isSubmittingStart ? (
             <WorkflowLoadingPanel kind="start" />
           ) : selectedMode === 'start' ? (
@@ -1463,11 +1456,6 @@ export function App() {
             />
           )}
         </section>
-
-        <div className="trust-note">
-          Todas las sesiones quedan auditadas por `session_id` y el flujo está pensado para trabajo operable:
-          estado claro, foco visible y reanudación rápida.
-        </div>
       </main>
     </div>
   );

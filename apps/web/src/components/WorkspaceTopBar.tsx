@@ -31,7 +31,7 @@ export function WorkspaceTopBar({
   const currentPhaseLabel = presentation?.phaseProgress?.currentPhaseLabel || '';
 
   return (
-    <header className="workspace-topbar">
+    <header className="app-topbar workspace-topbar">
       <div className="workspace-topbar__brand">
         <div className="brand-mark">S</div>
         <div className="brand-copy">
@@ -51,13 +51,8 @@ export function WorkspaceTopBar({
       )}
 
       <div className="workspace-topbar__actions">
-        <div className="sync-badge" aria-live="polite">
-          <span className={`sync-badge__dot ${isLoadingSession || isReplying || isComposingReport || isDownloadingReportPdf ? 'sync-badge__dot--busy' : 'sync-badge__dot--idle'}`} />
-          <span>{getSyncStatusText()}</span>
-        </div>
-
         <button
-          className="button button--secondary button--sm"
+          className="button button--secondary workspace-topbar__action"
           type="button"
           onClick={onChangeSessionClick}
         >
@@ -65,12 +60,17 @@ export function WorkspaceTopBar({
         </button>
 
         <button
-          className="button button--primary button--sm"
+          className="button button--primary workspace-topbar__action"
           type="button"
           onClick={onNewProposalClick}
         >
           Nueva propuesta
         </button>
+
+        <div className="workspace-topbar__action sync-badge" aria-live="polite">
+          <span className={`sync-badge__dot ${isLoadingSession || isReplying || isComposingReport || isDownloadingReportPdf ? 'sync-badge__dot--busy' : 'sync-badge__dot--idle'}`} />
+          <span>{getSyncStatusText()}</span>
+        </div>
       </div>
     </header>
   );

@@ -1,7 +1,5 @@
 import type { SessionAuditView } from '../domain/contracts';
 import type { SessionPresentation } from '../lib/session-view';
-import { LocalDemoSafetyNotice } from './LocalDemoSafetyNotice';
-
 interface SessionStatePanelProps {
   audit: SessionAuditView;
   presentation: SessionPresentation;
@@ -51,7 +49,7 @@ export function SessionStatePanel({
   };
 
   return (
-    <aside className="guidance-panel" aria-label="Guía de la sesión">
+    <aside className="panel guidance-panel" aria-label="Guía de la sesión">
       <header className="guidance-panel__header">
         <span className="panel__eyebrow">Guía de la sesión</span>
         <h2>Guía de esta fase</h2>

@@ -36,7 +36,7 @@ export function PhaseRail({
   totalApplicablePhases,
 }: PhaseRailProps) {
   return (
-    <nav className="phase-rail" aria-label="Fases de la propuesta">
+    <nav className="panel phase-rail" aria-label="Fases de la propuesta">
       <div className="phase-rail__header">
         <h3>Camino de maduración</h3>
         <span className="phase-rail__progress-summary">

@@ -104,7 +104,9 @@ a {
 .workspace-rail__section,
 .panel,
 .conversation-shell,
-.state-card {
+.state-card,
+.phase-rail,
+.guidance-panel {
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   background: var(--surface);
@@ -121,6 +123,291 @@ a {
   align-items: center;
   gap: 20px;
   padding: 16px 20px;
+}
+
+.workspace-topbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, max-content) minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.workspace-topbar__brand {
+  justify-self: start;
+  min-width: 0;
+}
+
+.workspace-topbar__project {
+  display: grid;
+  gap: 4px;
+  justify-self: center;
+  text-align: center;
+  max-width: min(100%, 440px);
+}
+
+.workspace-topbar__actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  justify-self: end;
+  width: min(100%, 360px);
+  margin-left: 0;
+}
+
+.workspace-topbar__actions .sync-badge {
+  grid-column: 1 / -1;
+  justify-self: center;
+  width: auto;
+  min-width: 188px;
+  max-width: 230px;
+  padding: 0 16px;
+}
+
+.workspace-topbar__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 16px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.workspace-topbar__actions .button {
+  min-height: 40px;
+  padding: 0 14px;
+  font-size: 0.82rem;
+}
+
+.project-eyebrow {
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-weight: 800;
+  color: var(--primary-dark);
+}
+
+.project-title-top {
+  margin: 0;
+  font-size: clamp(1.15rem, 2vw, 1.5rem);
+  letter-spacing: -0.03em;
+  text-transform: uppercase;
+}
+
+.sync-badge {
+  gap: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-muted);
+  color: var(--muted-strong);
+  font-weight: 800;
+}
+
+.sync-badge__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #059669;
+}
+
+.sync-badge__dot--busy {
+  background: #b7791f;
+  animation: workflow-pulse 1200ms ease-in-out infinite;
+}
+
+.button--sm {
+  min-height: 36px;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+}
+
+.phase-rail {
+  display: grid;
+  gap: 14px;
+}
+
+.phase-rail__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.phase-rail__header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  letter-spacing: -0.02em;
+}
+
+.phase-rail__progress-summary {
+  font-size: 0.78rem;
+  color: var(--muted-strong);
+  font-weight: 700;
+}
+
+.phase-rail__list {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.phase-rail__item {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--panel-muted);
+}
+
+.phase-rail__item--current {
+  border-color: rgba(8, 145, 178, 0.36);
+  background: rgba(236, 254, 255, 0.92);
+}
+
+.phase-rail__item--locked {
+  opacity: 0.72;
+}
+
+.phase-rail__item-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.phase-rail__item-index {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(8, 145, 178, 0.12);
+  color: var(--primary-dark);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.phase-rail__item-label {
+  font-weight: 650;
+}
+
+.phase-rail__item-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.current-action-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: var(--radius-pill);
+  background: rgba(8, 145, 178, 0.12);
+  color: var(--primary-dark);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.guidance-panel {
+  gap: 16px;
+}
+
+.guidance-panel__header {
+  display: grid;
+  gap: 8px;
+}
+
+.guidance-panel__header h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  letter-spacing: -0.03em;
+}
+
+.guidance-panel__section {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--panel-muted);
+}
+
+.guidance-panel__section h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.guidance-panel__section p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.gaps-count__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: var(--radius-pill);
+  background: rgba(183, 121, 31, 0.12);
+  color: #825312;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.advanced-details-disclosure {
+  padding: 14px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.advanced-details-disclosure summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--primary-dark);
+}
+
+.advanced-details-content {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.advanced-details-helper {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.tech-fields {
+  display: grid;
+  gap: 8px;
+}
+
+.tech-field {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.88rem;
+}
+
+.tech-field code {
+  font-family:
+    'SFMono-Regular',
+    'ui-monospace',
+    'Cascadia Code',
+    'Source Code Pro',
+    monospace;
+  word-break: break-all;
 }
 
 .app-topbar__brand,
@@ -464,7 +751,9 @@ a {
 
 .panel,
 .conversation-shell,
-.state-card {
+.state-card,
+.phase-rail,
+.guidance-panel {
   padding: 24px;
 }
 
@@ -622,41 +911,6 @@ a {
   background: rgba(183, 121, 31, 0.1);
   color: #825312;
   border: 1px solid rgba(183, 121, 31, 0.2);
-}
-
-.safety-notice {
-  display: grid;
-  gap: 6px;
-  padding: 14px 16px;
-  border: 1px solid rgba(183, 121, 31, 0.24);
-  border-radius: var(--radius-sm);
-  background: rgba(183, 121, 31, 0.08);
-  color: #784b10;
-}
-
-.safety-notice strong,
-.safety-notice p {
-  margin: 0;
-}
-
-.safety-notice strong {
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-}
-
-.safety-notice p {
-  font-size: 0.9rem;
-  line-height: 1.5;
-}
-
-.safety-notice--compact {
-  padding: 10px 12px;
-  border-radius: 12px;
-}
-
-.safety-notice--compact p {
-  font-size: 0.82rem;
 }
 
 .form-actions {
@@ -827,10 +1081,6 @@ a {
   align-items: start;
 }
 
-.workspace-main {
-  min-width: 0;
-}
-
 .workflow-loading-panel {
   display: grid;
   gap: 22px;
@@ -990,10 +1240,50 @@ a {
   font-weight: 700;
 }
 
+.workspace-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 148px);
+}
+
 .conversation-shell {
   display: grid;
   gap: 18px;
   padding: 24px;
+  flex: 1;
+  min-height: 0;
+}
+
+.conversation-panel {
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+  border-radius: 24px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  min-height: 0;
+}
+
+.conversation-panel__history {
+  display: grid;
+  gap: 18px;
+  min-height: 160px;
+  max-height: min(44vh, 440px);
+  overflow-y: auto;
+  padding-right: 4px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.conversation-panel__messages {
+  display: grid;
+  gap: 18px;
+}
+
+.conversation-panel__composer {
+  display: grid;
+  gap: 18px;
 }
 
 .conversation-header,
@@ -1293,15 +1583,17 @@ a {
   background: linear-gradient(180deg, rgba(236, 254, 255, 0.92), rgba(255, 255, 255, 0.96));
 }
 
-.question-callout p {
-  color: var(--text);
-  font-weight: 600;
+.conversation-panel .question-callout {
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
-.conversation-stream {
-  display: grid;
-  gap: 18px;
-  min-height: 320px;
+.conversation-panel .question-callout p {
+  color: var(--text);
+  font-weight: 600;
 }
 
 .stream-divider {
@@ -2019,6 +2311,21 @@ a {
     padding: 14px 16px;
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .workspace-topbar {
+    grid-template-columns: 1fr;
+    justify-items: stretch;
+  }
+
+  .workspace-topbar__brand,
+  .workspace-topbar__project,
+  .workspace-topbar__actions {
+    justify-self: stretch;
+  }
+
+  .workspace-topbar__actions {
+    width: 100%;
   }
 
   .brand-mark {

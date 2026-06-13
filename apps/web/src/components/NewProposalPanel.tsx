@@ -3,7 +3,6 @@ import { useState } from 'react';
 import type { ProposalStartRequest } from '../domain/contracts';
 import { toProposalStartFile } from '../lib/file';
 import { buildProposalStartPayload } from '../lib/proposal-start-payload';
-import { LocalDemoSafetyNotice } from './LocalDemoSafetyNotice';
 
 interface NewProposalPanelProps {
   isSubmitting: boolean;
@@ -15,8 +14,6 @@ interface FormState {
   goal: string;
   proposalText: string;
   documentText: string;
-  userId: string;
-  metadataText: string;
   file: ProposalStartRequest['file'];
   fileName: string;
 }
@@ -26,8 +23,6 @@ const initialState: FormState = {
   goal: '',
   proposalText: '',
   documentText: '',
-  userId: '',
-  metadataText: '',
   file: undefined,
   fileName: '',
 };
@@ -90,14 +85,11 @@ export function NewProposalPanel({
       <div className="panel__heading">
         <h2>Prepara el contexto antes del primer turno</h2>
         <p>
-          Resume el objetivo, el contexto y la evidencia disponible. La v1 convertirá esta entrada en un
-          <span> structured brief</span> y abrirá la siguiente pregunta del agente.
+          Resume el objetivo, el contexto y la evidencia disponible. Esta información se convertirá en un resumen estructurado y se usará para generar la primera pregunta del agente.
         </p>
       </div>
 
       <form className="proposal-form" onSubmit={handleSubmit}>
-        <LocalDemoSafetyNotice context="intake" />
-
         <label className="field">
           <span className="field__label">Título del proyecto</span>
           <input
@@ -167,31 +159,6 @@ export function NewProposalPanel({
           </div>
         </div>
 
-        <div className="field-grid">
-          <label className="field">
-            <span className="field__label">User ID opcional</span>
-            <input
-              className="field__control"
-              type="text"
-              value={form.userId}
-              onChange={(event) => updateField('userId', event.target.value)}
-              placeholder="eq-urgencias"
-              disabled={isSubmitting}
-            />
-          </label>
-
-          <label className="field">
-            <span className="field__label">Metadata JSON opcional</span>
-            <textarea
-              className="field__control field__control--medium field__control--code"
-              value={form.metadataText}
-              onChange={(event) => updateField('metadataText', event.target.value)}
-              placeholder='{"service":"urgencias","site":"hospital-norte"}'
-              disabled={isSubmitting}
-            />
-          </label>
-        </div>
-
         {error ? <div className="feedback feedback--error">{error}</div> : null}
 
         <div className="form-actions">
@@ -199,9 +166,6 @@ export function NewProposalPanel({
             {isSubmitting ? 'Cargando primer diagnóstico…' : 'Crear sesión de maduración'}
           </button>
           <p className="form-actions__hint">
-            {isSubmitting
-              ? 'La UI esperará a que n8n, la API y Ollama devuelvan el primer diagnóstico del lane.'
-              : 'El navegador solo captura la entrada. La ejecución real ocurre en los workflows existentes de `n8n`.'}
           </p>
         </div>
       </form>

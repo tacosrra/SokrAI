@@ -16,8 +16,6 @@ describe('buildProposalStartPayload', () => {
       goal: ' Definir el problema ',
       proposalText: ' Texto base ',
       documentText: '',
-      userId: '',
-      metadataText: '',
       file: pdfFile,
     });
 
@@ -29,8 +27,6 @@ describe('buildProposalStartPayload', () => {
         proposal_text: 'Texto base',
         document_text: undefined,
         file: pdfFile,
-        user_id: undefined,
-        metadata: undefined,
       },
     });
   });
@@ -41,8 +37,6 @@ describe('buildProposalStartPayload', () => {
       goal: 'Extract proposal context',
       proposalText: '',
       documentText: '',
-      userId: ' equipo-a ',
-      metadataText: '{"source":"demo"}',
       file: pdfFile,
     });
 
@@ -54,8 +48,6 @@ describe('buildProposalStartPayload', () => {
         proposal_text: undefined,
         document_text: undefined,
         file: pdfFile,
-        user_id: 'equipo-a',
-        metadata: { source: 'demo' },
       },
     });
   });

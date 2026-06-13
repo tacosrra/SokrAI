@@ -6,6 +6,9 @@ $ErrorActionPreference = 'Stop'
 Test-DockerAccess
 Ensure-BetaEnvFile
 
+Write-Step 'Building beta images'
+Invoke-DockerCompose build api web
+
 Write-Step 'Starting beta stack'
 Invoke-DockerCompose up -d postgres ollama api n8n web
 

@@ -12,6 +12,9 @@ require_command mktemp
 require_docker_access
 ensure_beta_env_file
 
+log_step "Building beta images"
+docker_compose build api web
+
 log_step "Starting beta stack"
 docker_compose up -d postgres ollama api n8n web
 
