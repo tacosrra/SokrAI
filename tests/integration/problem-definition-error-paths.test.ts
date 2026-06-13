@@ -524,6 +524,128 @@ describe('problem-definition invalid JSON handling', () => {
     expect(recoveryStatus.statusCode).toBe(200);
     expect(recoveryStatus.json().status).toBe('failed');
   });
+
+  it('reopens reply failures after ollama timeout so the user can answer again', async () => {
+    const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
+    const strongProposal = await readFixture('start', 'strong-proposal.json');
+    const strongAnswer = await readFixture('reply', 'strong-answer.json');
+    const startTurn = {
+      agent_status: 'continue',
+      diagnosis: ['Falta identificar con precision quien responde hoy por el problema'],
+      updated_problem_definition: {
+        problem_owner: '',
+        problem_statement: structuredBrief.problem_statement,
+        evidence_of_problem: structuredBrief.evidence_of_problem,
+        scope: structuredBrief.scope,
+        current_alternatives: structuredBrief.current_alternatives,
+        assumptions: structuredBrief.assumptions,
+        ambiguities_remaining: structuredBrief.ambiguities,
+      },
+      next_question: '¿Qué equipo o responsable responde hoy por este problema en urgencias?',
+      completion_reason: '',
+    };
+
+    ({ app } = await buildTestApp(
+      new QueueLanguageModelClient([
+        JSON.stringify(structuredBrief),
+        JSON.stringify(startTurn),
+        new AppError(504, 'ollama_timeout', 'The local model exceeded the configured timeout', true),
+      ]),
+    ));
+
+    const startContextResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/sessions/start-context',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        request_id: 'req-retry-start',
+        workflow_version: 'proposal_start_v1',
+        payload: strongProposal,
+      },
+    });
+    const sessionId = startContextResponse.json().session_id;
+
+    await app.inject({
+      method: 'POST',
+      url: '/internal/agents/problem-definition/run',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        request_id: 'req-retry-start',
+        workflow_version: 'agent_problem_definition_v1',
+        session_id: sessionId,
+        trigger: 'start',
+      },
+    });
+
+    await app.inject({
+      method: 'POST',
+      url: '/internal/sessions/append-reply',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        request_id: 'req-retry-reply',
+        workflow_version: 'proposal_reply_v1',
+        payload: {
+          session_id: sessionId,
+          answer: strongAnswer.answer,
+        },
+      },
+    });
+
+    const failedAgentResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/agents/problem-definition/run',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        request_id: 'req-retry-reply',
+        workflow_version: 'agent_problem_definition_v1',
+        session_id: sessionId,
+        trigger: 'reply',
+      },
+    });
+
+    expect(failedAgentResponse.statusCode).toBe(504);
+
+    const session = await app.services.database.query<{ status: string }>(
+      'SELECT status FROM proposal_sessions WHERE id = $1',
+      [sessionId],
+    );
+    const turn = await app.services.database.query<{ status: string; answer_text: string | null }>(
+      'SELECT status, answer_text FROM conversation_turns WHERE session_id = $1 ORDER BY turn_seq DESC LIMIT 1',
+      [sessionId],
+    );
+
+    expect(session.rows[0]?.status).toBe('waiting_for_user');
+    expect(turn.rows[0]).toMatchObject({
+      status: 'awaiting_user',
+      answer_text: strongAnswer.answer,
+    });
+
+    const retryAppendReplyResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/sessions/append-reply',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        request_id: 'req-retry-reply-2',
+        workflow_version: 'proposal_reply_v1',
+        payload: {
+          session_id: sessionId,
+          answer: strongAnswer.answer,
+        },
+      },
+    });
+
+    expect(retryAppendReplyResponse.statusCode).toBe(200);
+  });
 });
 
 async function installFailingSessionEventTrigger(database: FastifyInstance['services']['database']): Promise<void> {

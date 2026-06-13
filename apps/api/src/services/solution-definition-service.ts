@@ -30,6 +30,7 @@ import type {
   RunSolutionDefinitionCommand,
   SolutionDefinitionRunResponse,
 } from './service-types';
+import { revertModuleReplyFailureForUserRetry } from './module-reply-failure-recovery';
 
 export class SolutionDefinitionService {
   constructor(
@@ -768,40 +769,76 @@ export class SolutionDefinitionService {
           });
 
           if (activeTurn) {
-            await this.alphaStore.resolveChatTurn(client, {
-              turnId: activeTurn.turn_id,
-              turnStatus: 'failed',
-              agentStatus: 'blocked',
-              diagnosis: activeTurn.diagnosis,
-              sourceRefs: activeTurn.source_refs,
-              gapRefs: activeTurn.gap_refs,
-              auditRefs: [{ kind: 'agent_run', id: run.id }],
-              warnings: [error.safeMessage],
+            const reopenedForRetry = await revertModuleReplyFailureForUserRetry(
+              client,
+              this.alphaStore,
+              {
+                proposalId: lockedSession.id,
+                module: 'solution',
+                activeTurn,
+                trigger: command.trigger,
+                error,
+                runId: run.id,
+                requestId: command.context.requestId,
+                retryAuditEventType: 'solution_answer_retry_opened',
+                failureAuditEventType: 'solution_answer_failed',
+              },
+            );
+
+            if (!reopenedForRetry) {
+              await this.alphaStore.resolveChatTurn(client, {
+                turnId: activeTurn.turn_id,
+                turnStatus: 'failed',
+                agentStatus: 'blocked',
+                diagnosis: activeTurn.diagnosis,
+                sourceRefs: activeTurn.source_refs,
+                gapRefs: activeTurn.gap_refs,
+                auditRefs: [{ kind: 'agent_run', id: run.id }],
+                warnings: [error.safeMessage],
+              });
+
+              const chat = await this.alphaStore.findModuleChatByProposalAndModule(
+                lockedSession.id,
+                'solution',
+                client,
+              );
+              if (chat) {
+                await this.alphaStore.updateModuleChatStatus(client, {
+                  chatId: chat.chat_id,
+                  chatStatus: 'failed',
+                  activeTurnId: null,
+                });
+              }
+
+              await this.alphaStore.appendAuditEvent(client, {
+                proposalId: lockedSession.id,
+                sessionId: lockedSession.id,
+                runId: run.id,
+                turnId: activeTurn?.turn_id,
+                eventType: activeTurn ? 'solution_answer_failed' : 'solution_agent_failed',
+                actorType: 'system',
+                requestId: command.context.requestId,
+                payloadJson: {
+                  error_code: error.errorCode,
+                  reason: error.safeMessage,
+                },
+              });
+            }
+          } else {
+            await this.alphaStore.appendAuditEvent(client, {
+              proposalId: lockedSession.id,
+              sessionId: lockedSession.id,
+              runId: run.id,
+              turnId: undefined,
+              eventType: 'solution_agent_failed',
+              actorType: 'system',
+              requestId: command.context.requestId,
+              payloadJson: {
+                error_code: error.errorCode,
+                reason: error.safeMessage,
+              },
             });
           }
-
-          const chat = await this.alphaStore.findModuleChatByProposalAndModule(lockedSession.id, 'solution', client);
-          if (chat) {
-            await this.alphaStore.updateModuleChatStatus(client, {
-              chatId: chat.chat_id,
-              chatStatus: 'failed',
-              activeTurnId: null,
-            });
-          }
-
-          await this.alphaStore.appendAuditEvent(client, {
-            proposalId: lockedSession.id,
-            sessionId: lockedSession.id,
-            runId: run.id,
-            turnId: activeTurn?.turn_id,
-            eventType: activeTurn ? 'solution_answer_failed' : 'solution_agent_failed',
-            actorType: 'system',
-            requestId: command.context.requestId,
-            payloadJson: {
-              error_code: error.errorCode,
-              reason: error.safeMessage,
-            },
-          });
         });
     } catch (persistError) {
       if (!isUniqueViolationForConstraint(persistError, 'uq_agent_runs_request_purpose')) {

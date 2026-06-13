@@ -75,7 +75,7 @@ export function mapApiError(error: unknown): string {
     case 'request_not_found_after_recovery':
       return 'La API no encontró ningún rastro persistido para ese `request_id`, incluso tras la recuperación activa. Suele indicar que la petición nunca llegó correctamente al backend o al workflow.';
     case 'session_blocked':
-      return 'La sesión quedó bloqueada antes de devolver el turno esperado. Revisa la trazabilidad y los logs del backend.';
+      return 'La sesión quedó bloqueada por un límite del flujo. Si fue un fallo temporal del modelo, vuelve a enviar la respuesta; si persiste, revisa los logs del backend.';
     case 'reply_processing_failed':
       return 'La respuesta del usuario se guardó, pero el workflow falló antes de completar el siguiente turno.';
     case 'network_error':

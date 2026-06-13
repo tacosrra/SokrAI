@@ -687,6 +687,71 @@ export class AlphaStore {
     return mapChatTurn(turn);
   }
 
+  async revertChatTurnForUserRetry(
+    executor: SqlExecutor,
+    params: { turnId: string },
+  ): Promise<ChatTurn | null> {
+    const result = await runQuery<ChatTurnRecord>(
+      executor,
+      [
+        'UPDATE chat_turns',
+        'SET turn_status = \'awaiting_user\',',
+        '    agent_status = NULL,',
+        '    completed_at = NULL,',
+        '    answer_request_id = NULL',
+        'WHERE id = $1 AND turn_status IN (\'failed\', \'processing\')',
+        'RETURNING *',
+      ].join(' '),
+      [params.turnId],
+    );
+    const turn = result.rows[0];
+
+    return turn ? mapChatTurn(turn) : null;
+  }
+
+  async tryRestoreModuleChatForUserRetry(
+    executor: SqlExecutor,
+    params: { proposalId: string; module: AlphaModule },
+  ): Promise<{ chat: ModuleChat; turn: ChatTurn } | null> {
+    const chat = await this.findModuleChatByProposalAndModule(params.proposalId, params.module, executor);
+
+    if (!chat || chat.chat_status !== 'failed') {
+      return null;
+    }
+
+    const failedTurn = [...chat.turns]
+      .reverse()
+      .find((turn) => turn.turn_status === 'failed' && Boolean(turn.answer_text?.trim()));
+
+    if (!failedTurn) {
+      return null;
+    }
+
+    const revertedTurn = await this.revertChatTurnForUserRetry(executor, {
+      turnId: failedTurn.turn_id,
+    });
+
+    if (!revertedTurn) {
+      return null;
+    }
+
+    const updatedChat = await this.updateModuleChatStatus(executor, {
+      chatId: chat.chat_id,
+      chatStatus: 'waiting_for_user',
+      activeTurnId: revertedTurn.turn_id,
+    });
+
+    return {
+      chat: {
+        ...updatedChat,
+        turns: chat.turns.map((turn) =>
+          turn.turn_id === revertedTurn.turn_id ? revertedTurn : turn,
+        ),
+      },
+      turn: revertedTurn,
+    };
+  }
+
   async listChatTurns(chatId: string, executor?: SqlExecutor): Promise<ChatTurn[]> {
     const queryable = executor ?? this.database;
     const result = await runQuery<ChatTurnRecord>(

@@ -47,7 +47,11 @@ export class ProposalReplyService {
         }
 
         if (session.status === 'blocked') {
-          throw new AppError(409, 'session_blocked', 'The session is blocked and requires a manual rerun', true, payload.session_id);
+          const unblocked = await this.sessionStore.tryUnblockSessionForUserRetry(client, payload.session_id);
+
+          if (!unblocked) {
+            throw new AppError(409, 'session_blocked', 'The session is blocked and requires a manual rerun', true, payload.session_id);
+          }
         }
 
         const updatedTurn = await this.sessionStore.appendUserAnswer(client, {

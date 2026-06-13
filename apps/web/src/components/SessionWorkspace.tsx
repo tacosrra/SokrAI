@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 import type { BasicAlphaReport, SessionAuditView } from '../domain/contracts';
 import type { PhasePrimaryAction, SessionPresentation } from '../lib/session-view';
@@ -32,6 +32,12 @@ interface PrimaryPhaseAction {
   busyLabel: string;
   isBusy: boolean;
   onClick: () => void;
+}
+
+interface OptimisticReply {
+  questionText: string;
+  answerText: string;
+  turnSeq: number;
 }
 
 function phaseStatusLabel(status: string): string {
@@ -77,11 +83,50 @@ export function SessionWorkspace({
 }: SessionWorkspaceProps) {
   const [reply, setReply] = useState('');
   const [feedback, setFeedback] = useState('');
+  const [optimisticReply, setOptimisticReply] = useState<OptimisticReply | null>(null);
+  const historyRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setReply('');
     setFeedback('');
-  }, [presentation.sessionId, presentation.currentQuestion]);
+    setOptimisticReply(null);
+  }, [presentation.sessionId]);
+
+  useEffect(() => {
+    if (!isReplying && optimisticReply) {
+      const wasPersisted = audit.turns.some(
+        (turn) => turn.answer_text?.trim() === optimisticReply.answerText,
+      );
+
+      if (!wasPersisted) {
+        setReply(optimisticReply.answerText);
+      }
+
+      setOptimisticReply(null);
+    }
+  }, [isReplying, audit.turns, optimisticReply]);
+
+  useEffect(() => {
+    const history = historyRef.current;
+    if (!history) {
+      return;
+    }
+
+    history.scrollTo({
+      top: history.scrollHeight,
+      behavior: 'smooth',
+    });
+  }, [optimisticReply, isReplying, presentation.currentQuestion, audit.turns.length]);
+
+  function resolveCurrentQuestionText(): string {
+    return (
+      presentation.currentResourcesPilotViabilityQuestion ||
+      presentation.currentMedicalDeviceTriageQuestion ||
+      presentation.currentDataAiPrivacyQuestion ||
+      presentation.currentSolutionQuestion ||
+      presentation.currentQuestion
+    );
+  }
 
   async function handleReplySubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -92,27 +137,39 @@ export function SessionWorkspace({
       return;
     }
 
+    const submittedAnswer = reply.trim();
+    const questionText = resolveCurrentQuestionText();
+    const openTurnSeq = audit.turns.find((turn) => !turn.answer_text?.trim())?.turn_seq;
+    const turnSeq = openTurnSeq ?? audit.turns.filter((turn) => Boolean(turn.answer_text?.trim())).length + 1;
+
+    setOptimisticReply({
+      questionText,
+      answerText: submittedAnswer,
+      turnSeq,
+    });
+    setReply('');
+
     if (presentation.currentResourcesPilotViabilityQuestion) {
-      await onResourcesPilotViabilityReply(reply.trim());
+      await onResourcesPilotViabilityReply(submittedAnswer);
       return;
     }
 
     if (presentation.currentMedicalDeviceTriageQuestion) {
-      await onMedicalDeviceTriageReply(reply.trim());
+      await onMedicalDeviceTriageReply(submittedAnswer);
       return;
     }
 
     if (presentation.currentDataAiPrivacyQuestion) {
-      await onDataAiPrivacyReply(reply.trim());
+      await onDataAiPrivacyReply(submittedAnswer);
       return;
     }
 
     if (presentation.currentSolutionQuestion) {
-      await onSolutionReply(reply.trim());
+      await onSolutionReply(submittedAnswer);
       return;
     }
 
-    await onReply(reply.trim());
+    await onReply(submittedAnswer);
   }
 
   const canProblemReply =
@@ -243,29 +300,99 @@ export function SessionWorkspace({
     currentPhase.primaryAction === 'recover' && currentPhase.id !== 'report';
 
   const completedTurns = audit.turns
-    .filter((turn) => Boolean(turn.answer_text?.trim()))
+    .filter((turn) => turn.status === 'resolved' && Boolean(turn.answer_text?.trim()))
     .sort((left, right) => left.turn_seq - right.turn_seq);
+
+  const showCurrentQuestionInHistory =
+    completedTurns.length > 0 &&
+    Boolean(presentation.currentQuestion) &&
+    !isReplying &&
+    !optimisticReply;
+  const showQuestionCallout =
+    Boolean(presentation.currentQuestion) &&
+    !showCurrentQuestionInHistory &&
+    !(isReplying && optimisticReply);
+  const hasHistoryContent =
+    completedTurns.length > 0 || Boolean(optimisticReply) || showCurrentQuestionInHistory;
+
+  function renderAssistantMessage(text: string, meta: string) {
+    return (
+      <article className="message message--assistant">
+        <div className="message__avatar">AI</div>
+        <div className="message__bubble">
+          <div className="message__meta">
+            <span>{meta}</span>
+          </div>
+          <p>{text}</p>
+        </div>
+      </article>
+    );
+  }
+
+  function renderUserMessage(text: string) {
+    return (
+      <article className="message message--user">
+        <div className="message__avatar">TÚ</div>
+        <div className="message__bubble">
+          <div className="message__meta">Tu respuesta</div>
+          <p>{text}</p>
+        </div>
+      </article>
+    );
+  }
+
+  function renderThinkingMessage() {
+    return (
+      <article className="message message--assistant message--thinking" aria-live="polite" aria-busy="true">
+        <div className="message__avatar">AI</div>
+        <div className="message__bubble">
+          <div className="message__thinking">
+            <span className="message__thinking-spinner" aria-hidden="true" />
+            <span>pensando...</span>
+          </div>
+        </div>
+      </article>
+    );
+  }
 
   function renderTurnPair(turn: SessionAuditView['turns'][number]) {
     return (
       <div key={turn.id} className="message-pair">
-        <article className="message message--assistant">
-          <div className="message__avatar">AI</div>
-          <div className="message__bubble">
-            <div className="message__meta">
-              <span>SokrAI (Turno {turn.turn_seq})</span>
-            </div>
-            <p>{turn.question_text}</p>
-          </div>
-        </article>
+        {renderAssistantMessage(turn.question_text, `SokrAI (Turno ${turn.turn_seq})`)}
+        {renderUserMessage(turn.answer_text ?? '')}
+      </div>
+    );
+  }
 
-        <article className="message message--user">
-          <div className="message__avatar">TÚ</div>
-          <div className="message__bubble">
-            <div className="message__meta">Tu respuesta</div>
-            <p>{turn.answer_text}</p>
-          </div>
-        </article>
+  function renderPendingExchange() {
+    if (!optimisticReply) {
+      return null;
+    }
+
+    return (
+      <div className="message-pair message-pair--pending">
+        {renderAssistantMessage(
+          optimisticReply.questionText,
+          `SokrAI (Turno ${optimisticReply.turnSeq})`,
+        )}
+        {renderUserMessage(optimisticReply.answerText)}
+        {isReplying ? renderThinkingMessage() : null}
+      </div>
+    );
+  }
+
+  function renderCurrentQuestionMessage() {
+    if (!showCurrentQuestionInHistory) {
+      return null;
+    }
+
+    const openTurn = audit.turns.find((turn) => !turn.answer_text?.trim());
+    const turnSeq = openTurn?.turn_seq ?? completedTurns.length + 1;
+    const questionText = openTurn?.question_text ?? presentation.currentQuestion;
+
+    return (
+      <div className="message-pair message-pair--current">
+        {renderAssistantMessage(questionText, `SokrAI (Turno ${turnSeq})`)}
       </div>
     );
   }
@@ -308,26 +435,37 @@ export function SessionWorkspace({
       </section>
 
       <section className="conversation-panel" aria-label="Conversación">
-        <div className="conversation-panel__history" aria-label="Historial de la conversación">
+        <div
+          className="conversation-panel__history"
+          aria-label="Historial de la conversación"
+          ref={historyRef}
+        >
           <div className="stream-divider">
             <span>Conversación</span>
           </div>
 
-          {completedTurns.length === 0 ? (
+          {!hasHistoryContent ? (
             <p className="empty-state text-center">Aún no hay respuestas guardadas en esta sesión.</p>
           ) : (
-            <div className="conversation-panel__messages">{completedTurns.map(renderTurnPair)}</div>
+            <div className="conversation-panel__messages">
+              {completedTurns.map(renderTurnPair)}
+              {renderPendingExchange()}
+              {renderCurrentQuestionMessage()}
+            </div>
           )}
         </div>
 
+        {showQuestionCallout ? (
         <section className="question-callout" aria-label="Pregunta actual">
           <span className="question-callout__label">Pregunta actual</span>
           <p className="question-text">
             {presentation.currentQuestion || 'SokrAI no tiene un turno esperando respuesta en este momento.'}
           </p>
+        </section>
+        ) : null}
 
-          {/* Compatibility indicators for specific phase locks / tests */}
-          <div style={{ display: 'none' }}>
+        {/* Compatibility indicators for specific phase locks / tests */}
+        <div style={{ display: 'none' }}>
           {currentPhase.id === 'solution' && (
             <div>Completa la fase de solución antes de revisar datos, IA y privacidad.</div>
           )}
@@ -359,8 +497,7 @@ export function SessionWorkspace({
           {currentPhase.id === 'pdf_export' && (
             <div>Fase actual: PDF / export</div>
           )}
-          </div>
-        </section>
+        </div>
 
         <div className="conversation-panel__composer">
           <div className="composer-card__header">
@@ -405,7 +542,7 @@ export function SessionWorkspace({
                     : 'Responde con información concreta, verificable y centrada en el problema.'}
                 </p>
                 <button className="button button--primary" type="submit" disabled={isReplying}>
-                  {isReplying ? 'Guardando respuesta...' : 'Enviar respuesta'}
+                  {isReplying ? 'Enviando...' : 'Enviar respuesta'}
                 </button>
               </div>
             </form>
@@ -414,7 +551,7 @@ export function SessionWorkspace({
               {presentation.status === 'completed' ? (
                 <p>La sesión ya quedó marcada como completada.</p>
               ) : presentation.status === 'blocked' || presentation.status === 'failed' ? (
-                <p>La sesión necesita revisión antes de continuar.</p>
+                <p>La sesión necesita revisión manual. Si fue un timeout del modelo, recarga la sesión e inténtalo de nuevo.</p>
               ) : (
                 <p>SokrAI no tiene un turno esperando respuesta en este momento.</p>
               )}

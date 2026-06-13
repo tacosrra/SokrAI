@@ -45,10 +45,23 @@ export class SolutionReplyService {
         const session = await this.sessionStore.getSessionForUpdate(payload.session_id, client);
 
         if (session.status === 'blocked' || session.status === 'failed') {
-          throw new AppError(409, 'session_blocked', 'The session is blocked and requires a manual rerun', true, payload.session_id);
+          const unblocked = await this.sessionStore.tryUnblockSessionForUserRetry(client, payload.session_id);
+
+          if (!unblocked && session.status === 'blocked') {
+            throw new AppError(409, 'session_blocked', 'The session is blocked and requires a manual rerun', true, payload.session_id);
+          }
         }
 
-        const chat = await this.alphaStore.findModuleChatByProposalAndModule(session.id, 'solution', client);
+        let chat = await this.alphaStore.findModuleChatByProposalAndModule(session.id, 'solution', client);
+        if (!chat || !chat.active_turn_id) {
+          const restored = await this.alphaStore.tryRestoreModuleChatForUserRetry(client, {
+            proposalId: session.id,
+            module: 'solution',
+          });
+          if (restored) {
+            chat = restored.chat;
+          }
+        }
 
         if (!chat || !chat.active_turn_id) {
           throw new AppError(

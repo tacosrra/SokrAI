@@ -26,6 +26,7 @@ import type {
   SessionRecord,
   SessionStore,
 } from '../repositories/session-store';
+import { shouldRevertReplyFailureForUserRetry } from '../domain/session-retry';
 import { AppError, ModelOutputError } from '../utils/errors';
 import { sha256 } from '../utils/hash';
 import type { Logger } from '../utils/logger';
@@ -888,42 +889,91 @@ export class ProblemDefinitionService {
           });
 
           if (command.trigger === 'reply' && openTurn?.status === 'processing') {
-            await this.sessionStore.markTurnFailed(client, {
+            if (shouldRevertReplyFailureForUserRetry(command.trigger, error)) {
+              await this.sessionStore.revertTurnForUserRetry(client, {
+                sessionId: lockedSession.id,
+                turnSeq: openTurn.turn_seq,
+              });
+
+              await this.revertAlphaProblemTurnForRetry(client, {
+                session: lockedSession,
+                legacyTurn: openTurn,
+                runId: run.id,
+                requestId: command.context.requestId,
+                reason: error.safeMessage,
+                errorCode: error.errorCode,
+              });
+
+              await this.sessionStore.updateSessionHead(client, {
+                sessionId: lockedSession.id,
+                status: 'waiting_for_user',
+                currentTurnSeq: lockedSession.current_turn_seq,
+                stateVersion: lockedSession.state_version,
+                latestStructuredBrief: lockedSession.latest_structured_brief_json,
+                latestProblemDefinition: lockedSession.latest_problem_definition_json,
+                latestSnapshotId: lockedSession.latest_snapshot_id ?? undefined,
+                latestSuccessfulRunId: lockedSession.latest_successful_run_id ?? undefined,
+                completionReason: lockedSession.completion_reason ?? undefined,
+              });
+            } else {
+              await this.sessionStore.markTurnFailed(client, {
+                sessionId: lockedSession.id,
+                turnSeq: openTurn.turn_seq,
+                completionReason: error.safeMessage,
+              });
+
+              await this.failAlphaProblemTurn(client, {
+                session: lockedSession,
+                legacyTurn: openTurn,
+                runId: run.id,
+                requestId: command.context.requestId,
+                reason: error.safeMessage,
+                errorCode: error.errorCode,
+              });
+
+              await this.sessionStore.insertEvent(client, {
+                sessionId: lockedSession.id,
+                turnSeq: openTurn?.turn_seq,
+                runId: run.id,
+                eventType: 'session_blocked',
+                actorType: 'system',
+                requestId: command.context.requestId,
+              });
+
+              await this.sessionStore.updateSessionHead(client, {
+                sessionId: lockedSession.id,
+                status: 'blocked',
+                currentTurnSeq: lockedSession.current_turn_seq,
+                stateVersion: lockedSession.state_version,
+                latestStructuredBrief: lockedSession.latest_structured_brief_json,
+                latestProblemDefinition: lockedSession.latest_problem_definition_json,
+                latestSnapshotId: lockedSession.latest_snapshot_id ?? undefined,
+                latestSuccessfulRunId: lockedSession.latest_successful_run_id ?? undefined,
+                completionReason: lockedSession.completion_reason ?? undefined,
+              });
+            }
+          } else if (command.trigger === 'start') {
+            await this.sessionStore.insertEvent(client, {
               sessionId: lockedSession.id,
-              turnSeq: openTurn.turn_seq,
-              completionReason: error.safeMessage,
+              turnSeq: openTurn?.turn_seq,
+              runId: run.id,
+              eventType: 'session_blocked',
+              actorType: 'system',
+              requestId: command.context.requestId,
             });
 
-            await this.failAlphaProblemTurn(client, {
-              session: lockedSession,
-              legacyTurn: openTurn,
-              runId: run.id,
-              requestId: command.context.requestId,
-              reason: error.safeMessage,
-              errorCode: error.errorCode,
+            await this.sessionStore.updateSessionHead(client, {
+              sessionId: lockedSession.id,
+              status: 'blocked',
+              currentTurnSeq: lockedSession.current_turn_seq,
+              stateVersion: lockedSession.state_version,
+              latestStructuredBrief: lockedSession.latest_structured_brief_json,
+              latestProblemDefinition: lockedSession.latest_problem_definition_json,
+              latestSnapshotId: lockedSession.latest_snapshot_id ?? undefined,
+              latestSuccessfulRunId: lockedSession.latest_successful_run_id ?? undefined,
+              completionReason: lockedSession.completion_reason ?? undefined,
             });
           }
-
-          await this.sessionStore.insertEvent(client, {
-            sessionId: lockedSession.id,
-            turnSeq: openTurn?.turn_seq,
-            runId: run.id,
-            eventType: 'session_blocked',
-            actorType: 'system',
-            requestId: command.context.requestId,
-          });
-
-          await this.sessionStore.updateSessionHead(client, {
-            sessionId: lockedSession.id,
-            status: 'blocked',
-            currentTurnSeq: lockedSession.current_turn_seq,
-            stateVersion: lockedSession.state_version,
-            latestStructuredBrief: lockedSession.latest_structured_brief_json,
-            latestProblemDefinition: lockedSession.latest_problem_definition_json,
-            latestSnapshotId: lockedSession.latest_snapshot_id ?? undefined,
-            latestSuccessfulRunId: lockedSession.latest_successful_run_id ?? undefined,
-            completionReason: lockedSession.completion_reason ?? undefined,
-          });
         });
     } catch (persistError) {
       if (!isUniqueViolationForConstraint(persistError, 'uq_agent_runs_request_purpose')) {
@@ -936,6 +986,70 @@ export class ProblemDefinitionService {
       session_id: command.sessionId,
       error_code: error.errorCode,
       schema: schemaIds.problemDefinitionTurn,
+    });
+  }
+
+  private async revertAlphaProblemTurnForRetry(
+    client: PoolClient,
+    params: {
+      session: SessionRecord;
+      legacyTurn: ConversationTurnRecord;
+      runId: string;
+      requestId: string;
+      reason: string;
+      errorCode: string;
+    },
+  ): Promise<void> {
+    const chat = await this.alphaStore.findModuleChatByProposalAndModule(
+      params.session.id,
+      'problem',
+      client,
+    );
+
+    if (!chat) {
+      return;
+    }
+
+    const alphaTurn =
+      this.findActiveAlphaTurn(chat.turns, chat.active_turn_id, params.legacyTurn.turn_seq) ??
+      chat.turns.find(
+        (turn) =>
+          turn.turn_seq === params.legacyTurn.turn_seq &&
+          (turn.turn_status === 'failed' || turn.turn_status === 'processing'),
+      ) ??
+      null;
+
+    if (!alphaTurn) {
+      return;
+    }
+
+    const revertedTurn = await this.alphaStore.revertChatTurnForUserRetry(client, {
+      turnId: alphaTurn.turn_id,
+    });
+
+    if (!revertedTurn) {
+      return;
+    }
+
+    await this.alphaStore.updateModuleChatStatus(client, {
+      chatId: chat.chat_id,
+      chatStatus: 'waiting_for_user',
+      activeTurnId: revertedTurn.turn_id,
+    });
+
+    await this.alphaStore.appendAuditEvent(client, {
+      proposalId: params.session.id,
+      sessionId: params.session.id,
+      runId: params.runId,
+      turnId: revertedTurn.turn_id,
+      eventType: 'problem_answer_retry_opened',
+      actorType: 'system',
+      requestId: params.requestId,
+      payloadJson: {
+        error_code: params.errorCode,
+        reason: params.reason,
+        turn_seq: revertedTurn.turn_seq,
+      },
     });
   }
 

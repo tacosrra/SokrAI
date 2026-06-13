@@ -1674,6 +1674,41 @@ a {
   color: var(--text);
 }
 
+.message--thinking .message__bubble {
+  background: #f7fbfd;
+  border-top-left-radius: 10px;
+}
+
+.message__thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted-strong);
+  font-size: 0.95rem;
+}
+
+.message__thinking-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(8, 145, 178, 0.18);
+  border-top-color: var(--primary);
+  animation: message-thinking-spin 800ms linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes message-thinking-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.message-pair--pending,
+.message-pair--current {
+  display: grid;
+  gap: 12px;
+}
+
 .message--system .message__bubble {
   background: var(--panel-muted);
   color: var(--text);

@@ -396,11 +396,47 @@ function findLatestVisibleSection(
     ) ?? null;
 }
 
+function isRetryableFailedConversationTurn(
+  turn: SessionAuditView['turns'][number],
+): boolean {
+  return turn.status === 'failed' && Boolean(turn.answer_text?.trim());
+}
+
+function effectiveSessionStatus(audit: SessionAuditView): SessionStatus {
+  if (audit.session.status === 'blocked') {
+    const retryableTurn = audit.turns.find(isRetryableFailedConversationTurn);
+
+    if (retryableTurn) {
+      return 'waiting_for_user';
+    }
+  }
+
+  return audit.session.status;
+}
+
+function isRetryableFailedModuleTurn(turn: ModuleChat['turns'][number]): boolean {
+  return turn.turn_status === 'failed' && Boolean(turn.answer_text?.trim());
+}
+
 function findActiveModuleTurn(chat: ModuleChat | null) {
-  return chat?.turns.find((turn) =>
+  if (!chat) {
+    return null;
+  }
+
+  const activeTurn = chat.turns.find((turn) =>
     turn.turn_id === chat.active_turn_id &&
     (turn.turn_status === 'awaiting_user' || turn.turn_status === 'processing'),
-  ) ?? null;
+  );
+
+  if (activeTurn) {
+    return activeTurn;
+  }
+
+  if (chat.chat_status === 'failed') {
+    return [...chat.turns].reverse().find((turn) => isRetryableFailedModuleTurn(turn)) ?? null;
+  }
+
+  return null;
 }
 
 function moduleChatWeight(chat: ModuleChat): number {
@@ -553,10 +589,17 @@ function deriveModulePhaseStep(params: {
     });
   }
 
+  const hasRetryableFailedChat =
+    params.chat?.chat_status === 'failed' &&
+    params.chat.turns.some((turn) => isRetryableFailedModuleTurn(turn));
+
   if (
-    params.chat?.chat_status === 'blocked' ||
-    params.chat?.chat_status === 'failed' ||
-    params.section?.section_status === 'needs_revision'
+    !hasRetryableFailedChat &&
+    (
+      params.chat?.chat_status === 'blocked' ||
+      params.chat?.chat_status === 'failed' ||
+      params.section?.section_status === 'needs_revision'
+    )
   ) {
     return createPhaseStep(params.id, 'error', {
       ...gapCounts,
@@ -786,7 +829,10 @@ function derivePhaseProgress(input: {
       };
     }
 
-    if (input.audit.session.status === 'blocked' || input.audit.session.status === 'failed') {
+    if (
+      effectiveSessionStatus(input.audit) === 'blocked' ||
+      effectiveSessionStatus(input.audit) === 'failed'
+    ) {
       return {
         ...step,
         status: 'error',
@@ -829,12 +875,17 @@ export function deriveSessionPresentation(
 ): SessionPresentation {
   const latestSnapshot = audit.snapshots[audit.snapshots.length - 1] ?? null;
   const latestRun = audit.runs[audit.runs.length - 1] ?? null;
+  const sessionStatus = effectiveSessionStatus(audit);
   const latestResolvedTurn = [...audit.turns]
     .reverse()
     .find((turn) => turn.status === 'resolved' || turn.status === 'failed');
   const openTurn = [...audit.turns]
     .reverse()
-    .find((turn) => turn.status === 'awaiting_user' || turn.status === 'processing');
+    .find((turn) =>
+      turn.status === 'awaiting_user' ||
+      turn.status === 'processing' ||
+      isRetryableFailedConversationTurn(turn),
+    );
   const structuredBrief =
     latestSnapshot?.structured_brief_json ?? audit.session.latest_structured_brief_json;
   const problemDefinition =
@@ -861,7 +912,7 @@ export function deriveSessionPresentation(
   const currentDataAiPrivacyQuestion = activeDataAiPrivacyTurn?.question_text ?? '';
   const currentMedicalDeviceTriageQuestion = activeMedicalDeviceTriageTurn?.question_text ?? '';
   const currentResourcesPilotViabilityQuestion = activeResourcesPilotViabilityTurn?.question_text ?? '';
-  const problemProgress = deriveProblemProgress(checklist, audit.session.status);
+  const problemProgress = deriveProblemProgress(checklist, sessionStatus);
   const phaseProgress = derivePhaseProgress({
     audit,
     problemProgress,
@@ -896,8 +947,8 @@ export function deriveSessionPresentation(
     projectTitle: audit.session.project_title,
     goal: audit.session.goal,
     stage: audit.session.current_stage,
-    status: audit.session.status,
-    agentStatus: latestSnapshot?.agent_status ?? fallbackAgentStatus(audit.session.status),
+    status: sessionStatus,
+    agentStatus: latestSnapshot?.agent_status ?? fallbackAgentStatus(sessionStatus),
     structuredBrief,
     problemDefinition,
     gaps,

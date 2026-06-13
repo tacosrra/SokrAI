@@ -630,6 +630,80 @@ export class SessionStore {
     return turn;
   }
 
+  async revertTurnForUserRetry(
+    client: PoolClient,
+    params: {
+      sessionId: string;
+      turnSeq: number;
+    },
+  ): Promise<ConversationTurnRecord | null> {
+    const result = await client.query<ConversationTurnRecord>(
+      [
+        'UPDATE conversation_turns',
+        'SET status = \'awaiting_user\',',
+        '    agent_status = NULL,',
+        '    completion_reason = NULL,',
+        '    resolved_at = NULL,',
+        '    answer_request_id = NULL',
+        'WHERE session_id = $1 AND turn_seq = $2 AND status IN (\'failed\', \'processing\')',
+        'RETURNING *',
+      ].join(' '),
+      [params.sessionId, params.turnSeq],
+    );
+
+    return result.rows[0] ?? null;
+  }
+
+  async tryUnblockSessionForUserRetry(
+    client: PoolClient,
+    sessionId: string,
+  ): Promise<ConversationTurnRecord | null> {
+    const session = await this.getSessionForUpdate(sessionId, client);
+
+    if (session.status !== 'blocked') {
+      return null;
+    }
+
+    const failedTurn = await client.query<ConversationTurnRecord>(
+      [
+        'SELECT *',
+        'FROM conversation_turns',
+        'WHERE session_id = $1 AND status = \'failed\'',
+        'ORDER BY turn_seq DESC',
+        'LIMIT 1',
+      ].join(' '),
+      [sessionId],
+    );
+    const turn = failedTurn.rows[0];
+
+    if (!turn) {
+      return null;
+    }
+
+    const revertedTurn = await this.revertTurnForUserRetry(client, {
+      sessionId,
+      turnSeq: turn.turn_seq,
+    });
+
+    if (!revertedTurn) {
+      return null;
+    }
+
+    await this.updateSessionHead(client, {
+      sessionId,
+      status: 'waiting_for_user',
+      currentTurnSeq: session.current_turn_seq,
+      stateVersion: session.state_version,
+      latestStructuredBrief: session.latest_structured_brief_json,
+      latestProblemDefinition: session.latest_problem_definition_json,
+      latestSnapshotId: session.latest_snapshot_id ?? undefined,
+      latestSuccessfulRunId: session.latest_successful_run_id ?? undefined,
+      completionReason: session.completion_reason ?? undefined,
+    });
+
+    return revertedTurn;
+  }
+
   async updateSessionHead(
     client: PoolClient,
     params: {

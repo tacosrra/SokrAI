@@ -21,7 +21,7 @@ export function WorkspaceTopBar({
 }: WorkspaceTopBarProps) {
   const getSyncStatusText = () => {
     if (isLoadingSession) return 'Recuperando sesión...';
-    if (isReplying) return 'Guardando respuesta...';
+    if (isReplying) return 'Pensando...';
     if (isComposingReport) return 'Preparando informe...';
     if (isDownloadingReportPdf) return 'Exportando PDF...';
     return 'Sesión sincronizada';
