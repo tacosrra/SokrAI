@@ -19,6 +19,10 @@
     "test:integration": "pnpm --filter @sokrai/api test:integration",
     "test:smoke": "pnpm --filter @sokrai/api test:smoke",
     "type-check": "pnpm --filter @sokrai/api type-check && pnpm --filter @sokrai/web type-check",
-    "verify": "pnpm test:contracts && pnpm test:unit && pnpm test:integration && pnpm test:smoke && pnpm test:web"
+    "verify": "pnpm test:contracts && pnpm test:unit && pnpm test:integration && pnpm test:smoke && pnpm test:web",
+    "doctor": "npx react-doctor@latest"
+  },
+  "devDependencies": {
+    "react-doctor": "^0.5.4"
   }
 }

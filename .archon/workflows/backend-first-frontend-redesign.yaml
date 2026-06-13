@@ -1,0 +1,4519 @@
+name: backend-first-frontend-redesign
+description: |
+  Backend-first frontend redesign workflow.
+  Existing frontend implementations are contaminated context and must not
+  influence future UX/UI decisions.
+
+    The workflow can use Graphify as a repository navigation layer to reduce broad code scanning while preserving strict frontend isolation.
+provider: codex
+model: gpt-5.5
+modelReasoningEffort: medium
+interactive: true
+nodes:
+- id: discovery
+  name: Product & UX Discovery
+  loop:
+    prompt: |-
+      You are the discovery phase of a backend-first frontend design workflow.
+
+      You are running as an interactive loop. You must gather all required product,
+      user, business, UX and technical context before the workflow continues.
+
+      CURRENT USER FEEDBACK / ANSWERS FROM INTERACTIVE GATE:
+      $LOOP_USER_INPUT
+
+      PREVIOUS LOOP OUTPUT:
+      $LOOP_PREV_OUTPUT
+
+      IMPORTANT RULES:
+
+      - You are NOT allowed to inspect, analyze, critique, review or use any
+        existing frontend implementation.
+      - The future design must be created entirely from user answers, product goals,
+        backend architecture, target users and business requirements.
+      - Never make assumptions.
+      - If information is missing, ask.
+      - If something is ambiguous, clarify.
+      - If something could influence UX decisions, ask.
+      - Do not analyze backend yet.
+      - Do not design UX yet.
+      - Do not design UI yet.
+
+      INTERACTION PROTOCOL:
+
+      - If no useful user answers have been provided yet, ask a complete but concise
+        checklist of questions and do NOT output the completion promise.
+      - After each user response, identify remaining gaps.
+      - Continue asking follow-up questions only for gaps that are relevant.
+      - Stop only when all blocking unknowns are resolved or explicitly accepted as
+        unknown by the user.
+      - When the discovery is complete, output only the final discovery_report JSON
+        object followed by the completion promise: <promise>DISCOVERY_COMPLETE</promise>
+
+      Areas that must be covered:
+
+      1. Product vision and goals
+      2. User types and personas
+      3. User technical expertise
+      4. User pain points
+      5. Core workflows
+      6. Business objectives
+      7. Success metrics
+      8. Platforms and devices
+      9. Accessibility requirements
+      10. Visual preferences
+      11. Branding constraints
+      12. Data density expectations
+      13. Security considerations
+      14. Integrations
+      15. Performance expectations
+      16. Real-time requirements
+      17. Future scalability requirements
+
+      Final discovery_report JSON must include:
+
+      - product_summary
+      - target_users
+      - user_pain_points
+      - core_workflows
+      - required_screens
+      - critical_data
+      - ux_priorities
+      - visual_direction
+      - technical_constraints
+      - performance_expectations
+      - accessibility_requirements
+      - integrations
+      - blocking_unknowns
+      - non_blocking_unknowns
+      - explicit_user_preferences
+      - forbidden_assumptions
+      - readiness_score
+
+      If blocking unknowns remain, do not complete. Ask the next focused set of
+      questions instead.
+    until: DISCOVERY_COMPLETE
+    max_iterations: 6
+    fresh_context: true
+    interactive: true
+    gate_message: Answer the discovery questions above. If you believe all context is now complete, say so explicitly; otherwise provide the missing product, user, UX, technical and business details.
+- id: graphify-codebase-map
+  name: Graphify Codebase Map
+  depends_on:
+  - discovery
+  provider: codex
+  model: gpt-5.5
+  modelReasoningEffort: medium
+  context: fresh
+  prompt: |-
+    You are the Graphify codebase mapping phase of a backend-first frontend design workflow.
+
+    Your mission is to create or refresh a concise, queryable Graphify-based map of the repository before backend analysis and frontend implementation planning begin.
+
+    This node may create or refresh Graphify artifacts, but it must not modify application source code.
+
+    IMPORTANT RULES
+
+    - Do not design UX.
+    - Do not design UI.
+    - Do not implement frontend code.
+    - Do not modify application source files.
+    - Do not inspect old frontend UI, component, layout or style content for inspiration.
+    - Do not use existing frontend UX/UI as product context.
+    - Existing frontend implementation remains contaminated context.
+    - Use Graphify for repository navigation and technical orientation only.
+
+    INPUTS
+
+    Use:
+
+    - discovery_report:
+      $discovery.output
+    - current repository
+    - existing Graphify artifacts if present
+
+    GRAPHIFY AVAILABILITY CHECK
+
+    Determine whether Graphify is available in the repository.
+
+    Check safely for:
+
+    - Existing graphify output directories or files.
+    - Project scripts that run Graphify.
+    - Installed Graphify CLI or project dependency.
+    - Existing graph.html, GRAPH_REPORT.md, graph.json or equivalent artifacts.
+
+    Do not install new dependencies unless the repository already defines Graphify as a project dependency or script and the install/update is part of normal project setup.
+
+    GRAPHIFY EXECUTION RULE
+
+    If Graphify is available and safe to run:
+
+    - Refresh or create the Graphify graph.
+    - Prefer project-defined scripts over guessing commands.
+    - Keep generated artifacts in the repository's expected Graphify output location.
+    - Do not modify application source code.
+
+    If Graphify is not available or cannot run safely:
+
+    - Do not fail the workflow solely because Graphify is unavailable.
+    - Produce a best-effort codebase map using safe repository navigation.
+    - Mark graphify_available as false.
+    - Document limitations clearly.
+
+    FRONTEND CONTAMINATION CONTROL
+
+    Graphify may reveal frontend files in the repository graph.
+
+    You may use frontend-related graph information only to identify:
+
+    - Frontend technical entry points.
+    - Framework setup.
+    - Build configuration.
+    - Routing mechanics.
+    - Package/dependency boundaries.
+    - Files/directories that may need replacement later.
+
+    You must not use Graphify to learn from or preserve:
+
+    - Existing frontend UX decisions.
+    - Existing frontend UI decisions.
+    - Existing screen layouts.
+    - Existing component structure.
+    - Existing styling.
+    - Existing design system choices.
+    - Existing visual hierarchy.
+    - Existing navigation patterns, except where required by framework routing mechanics.
+
+    If Graphify exposes frontend design information accidentally, ignore it.
+
+    REPOSITORY MAP OBJECTIVES
+
+    Use Graphify artifacts and safe targeted inspection to identify:
+
+    - Backend entry points.
+    - API routes and controllers.
+    - Database/schema files.
+    - Domain entities.
+    - Service boundaries.
+    - Business logic modules.
+    - Auth/permission modules.
+    - Infrastructure/config files.
+    - Build/test/package commands.
+    - Dependency hotspots.
+    - Cross-cutting modules.
+    - Frontend technical entry points only.
+
+    GRAPHIFY OUTPUT SIZE CONTROL
+
+    Do not copy large graph.json contents into the final output.
+
+    Produce a concise map with references, paths and recommended queries.
+
+    Prefer:
+
+    - Important paths.
+    - Important modules.
+    - Important relationships.
+    - High-value Graphify queries for later nodes.
+    - Limitations and confidence notes.
+
+    Do not produce a huge raw graph dump.
+
+    LATER NODE HANDOFF
+
+    Prepare a map that helps later nodes inspect the repository efficiently without broad file scans.
+
+    For later nodes, recommend targeted Graphify-guided queries for:
+
+    - Backend/domain analysis.
+    - API and data contract analysis.
+    - Implementation planning.
+    - Frontend technical replacement boundaries.
+    - React component audit of the new implementation.
+    - Consolidated fix implementation.
+
+    FINAL OUTPUT
+
+    Must include:
+
+    - graphify_available
+    - graphify_graph_refreshed
+    - graphify_command_used
+    - graphify_artifacts_found
+    - graphify_artifacts_created
+    - graphify_artifact_paths
+    - backend_entry_points
+    - api_entry_points
+    - domain_model_candidates
+    - database_schema_candidates
+    - service_boundary_candidates
+    - auth_permission_candidates
+    - infrastructure_config_candidates
+    - build_test_commands_detected
+    - dependency_hotspots
+    - frontend_technical_entry_points_only
+    - frontend_contamination_risk_notes
+    - recommended_graphify_queries_for_later_nodes
+    - graphify_usage_rules_for_later_nodes
+    - graphify_limitations
+    - confidence_level
+
+    frontend_bias_check must contain:
+
+    - frontend_was_used_for_design
+    - frontend_ui_content_analyzed
+    - frontend_artifacts_used_only_for_technical_boundaries
+    - frontend_contamination_risk
+    - confidence_of_isolation
+
+    Produce a structured artifact named:
+
+    graphify_codebase_map
+  output_format:
+    type: object
+    additionalProperties: true
+- id: backend-blueprint
+  name: Backend UX Blueprint
+  depends_on:
+  - graphify-codebase-map
+  provider: codex
+  model: gpt-5.5
+  modelReasoningEffort: high
+  context: fresh
+  prompt: |2
+
+          GRAPHIFY USAGE RULE
+
+          Use graphify_codebase_map and available Graphify artifacts to navigate the
+          repository efficiently before reading files directly.
+
+          Prefer targeted inspection guided by the graph over broad repository scans.
+
+          Use Graphify for repository navigation, backend/domain understanding,
+          technical entry points, dependency relationships and implementation boundaries.
+
+          Do not use Graphify to learn from existing frontend UX, layout, styling,
+          component structure, navigation patterns or design decisions.
+
+          Existing frontend remains contaminated context.
+
+          UPSTREAM NODE OUTPUTS
+
+          The following upstream outputs are injected explicitly by Archon. Use these exact values as the source artifacts for this node:
+
+          discovery_report:
+          $discovery.output
+
+          graphify_codebase_map:
+          $graphify-codebase-map.output
+
+    You are the backend analysis phase of a backend-first frontend design workflow.
+
+    Your mission is to deeply understand the product exclusively through:
+    - discovery_report
+    - Backend source code
+    - APIs
+    - Database models
+    - Domain entities
+    - Business logic
+    - Permissions
+    - Infrastructure constraints
+
+    FRONTEND ISOLATION POLICY
+
+    The existing frontend is contaminated context.
+
+    You must not:
+    - Read frontend source code
+    - Read frontend components
+    - Read frontend pages
+    - Read frontend layouts
+    - Read frontend routes
+    - Read frontend styling
+    - Read frontend screenshots
+    - Read frontend design systems
+    - Read frontend documentation
+    - Read frontend tests
+    - Read frontend architecture documents
+
+    If frontend information is encountered accidentally, ignore it completely.
+
+    Assume the existing frontend does not exist.
+
+    Analyze:
+    - Domain model
+    - Entity relationships
+    - Entity lifecycles
+    - Business rules
+    - User roles
+    - Permissions
+    - Backend-supported workflows
+    - Critical user actions
+    - Important data surfaces
+    - State transitions
+    - Error states
+    - Real-time requirements
+    - Performance constraints
+    - Design implications
+
+    Do not propose visual solutions yet.
+    Do not design screens.
+    Do not design layouts.
+    Do not design components.
+    Do not design navigation.
+
+    Final output must include:
+    - domain_model
+    - entity_relationships
+    - entity_lifecycles
+    - business_rules
+    - user_roles
+    - permissions_matrix
+    - workflows
+    - critical_user_actions
+    - important_data_surfaces
+    - data_density_analysis
+    - state_transition_map
+    - error_state_catalog
+    - realtime_requirements
+    - performance_constraints
+    - design_implications
+    - frontend_design_recommendations
+    - frontend_bias_check
+
+    frontend_bias_check must contain:
+    - frontend_was_analyzed
+    - frontend_artifacts_used
+    - frontend_assumptions_made
+    - confidence_of_isolation
+
+    Produce a structured artifact named backend_ux_blueprint.
+  output_format:
+    type: object
+    additionalProperties: true
+- id: ux-strategy
+  name: UX Strategy & Information Architecture
+  depends_on:
+  - backend-blueprint
+  provider: codex
+  model: gpt-5.5
+  modelReasoningEffort: high
+  context: fresh
+  prompt: |2
+          UPSTREAM NODE OUTPUTS
+
+          The following upstream outputs are injected explicitly by Archon. Use these exact values as the source artifacts for this node:
+
+          discovery_report:
+          $discovery.output
+
+          backend_ux_blueprint:
+          $backend-blueprint.output
+
+    You are the UX strategy and information architecture phase of a
+    backend-first frontend design workflow.
+
+    Transform discovery_report and backend_ux_blueprint into a complete
+    UX strategy.
+
+    IMPORTANT RULES:
+    - Do not inspect the existing frontend.
+    - Do not reuse current UI patterns.
+    - Do not design visual style yet.
+    - Do not create final screens yet.
+    - Do not write frontend code yet.
+    - Do not invent unsupported features, screens or workflows.
+
+    Every UX decision must be traceable to:
+    - discovery_report
+    - backend_ux_blueprint
+    - explicit user goals
+    - backend-supported capabilities
+    - business requirements
+
+    Produce:
+    - User journeys
+    - Navigation model
+    - Information architecture
+    - Screen inventory
+    - Interaction strategy
+    - Dashboard strategy
+    - Empty/error/loading/permission state strategy
+    - UX prioritization
+    - Handoff to visual design
+
+    Final output must include:
+    - ux_strategy_summary
+    - user_journeys
+    - navigation_model
+    - information_architecture
+    - screen_inventory
+    - interaction_strategy
+    - dashboard_strategy
+    - empty_state_strategy
+    - error_state_strategy
+    - loading_state_strategy
+    - permission_state_strategy
+    - ux_priorities
+    - traceability_matrix
+    - confidence_by_decision
+    - speculative_items
+    - risks_and_tradeoffs
+    - visual_design_handoff
+    - open_questions_for_visual_design
+    - frontend_bias_check
+
+    frontend_bias_check must contain:
+    - frontend_was_analyzed
+    - frontend_artifacts_used
+    - frontend_assumptions_made
+    - confidence_of_isolation
+
+    Produce a structured artifact named ux_strategy_blueprint.
+  output_format:
+    type: object
+    additionalProperties: true
+- id: visual-design-generation
+  name: Visual Design Generation
+  depends_on:
+  - ux-strategy
+  provider: codex
+  model: gpt-5.5
+  modelReasoningEffort: high
+  context: fresh
+  prompt: |2
+          UPSTREAM NODE OUTPUTS
+
+          The following upstream outputs are injected explicitly by Archon. Use these exact values as the source artifacts for this node:
+
+          discovery_report:
+          $discovery.output
+
+          backend_ux_blueprint:
+          $backend-blueprint.output
+
+          ux_strategy_blueprint:
+          $ux-strategy.output
+
+
+          CODEX SKILL EMULATION
+
+          This workflow uses Codex, so Archon cannot preload Claude skills in this node.
+          Treat these skill names as mandatory design lenses to emulate inside the prompt:
+
+          - Emil Kowalski: layout quality, spacing, hierarchy, motion sense, density and screen composition.
+          - taste: premium feeling, product personality, differentiation, subtle details and avoidance of generic UI.
+
+          Do not mention that real Claude skills were loaded. Use the principles directly.
+
+    You are the visual design generation phase of a backend-first frontend
+    design workflow.
+
+    Your mission is to transform ux_strategy_blueprint into an ambitious,
+    distinctive and implementation-aware visual design direction.
+
+    IMPORTANT RULES:
+    - Do not inspect the existing frontend.
+    - Do not reuse current UI patterns.
+    - Do not copy existing layouts.
+    - Do not copy existing styling.
+    - Do not write frontend code yet.
+    - Do not implement components yet.
+    - Do not produce generic UI direction.
+
+    Use only:
+    - discovery_report
+    - backend_ux_blueprint
+    - ux_strategy_blueprint
+    - explicit user preferences
+    - product goals
+    - business requirements
+    - target user needs
+
+    Use the Emil Kowalski skill to improve:
+    - Layout quality
+    - Spacing
+    - Visual hierarchy
+    - Motion sense
+    - Information density
+    - First impression
+    - Dashboard/screen composition
+
+    Use the taste skill to improve:
+    - Product personality
+    - Premium feeling
+    - Differentiation
+    - Delight
+    - Subtle details
+    - Avoidance of boring/generic UI
+
+    Propose 2-3 distinct visual directions.
+
+    For each direction include:
+    - Name
+    - Visual personality
+    - Emotional tone
+    - Strengths
+    - Weaknesses
+    - Best-fit user/product context
+    - Implementation complexity
+    - Accessibility risks
+    - UX alignment score
+
+    Then select the strongest direction and explain why.
+
+    Final output must include:
+    - visual_strategy_summary
+    - visual_direction_options
+    - selected_visual_direction
+    - selection_rationale
+    - visual_personality
+    - design_principles
+    - layout_principles
+    - typography_direction
+    - color_direction
+    - component_system_direction
+    - motion_direction
+    - responsive_design_direction
+    - screen_concepts
+    - component_concepts
+    - accessibility_visual_requirements
+    - implementation_feasibility_notes
+    - visual_traceability_matrix
+    - exploratory_visual_ideas
+    - visual_confidence_by_decision
+    - implementation_handoff
+    - visual_risks_and_tradeoffs
+    - frontend_bias_check
+
+    Produce a structured artifact named visual_design_blueprint.
+  output_format:
+    type: object
+    additionalProperties: true
+- id: visual-design-critique
+  name: Visual Design Critique
+  depends_on:
+  - visual-design-generation
+  provider: codex
+  model: gpt-5.5
+  modelReasoningEffort: high
+  context: fresh
+  prompt: |2
+          UPSTREAM NODE OUTPUTS
+
+          The following upstream outputs are injected explicitly by Archon. Use these exact values as the source artifacts for this node:
+
+          discovery_report:
+          $discovery.output
+
+          backend_ux_blueprint:
+          $backend-blueprint.output
+
+          ux_strategy_blueprint:
+          $ux-strategy.output
+
+          visual_design_blueprint:
+          $visual-design-generation.output
+
+
+          CODEX SKILL EMULATION
+
+          This workflow uses Codex, so Archon cannot preload Claude skills in this node.
+          Treat the impeccable-design skill as a mandatory critique lens to emulate inside the prompt:
+
+          - ruthless hierarchy review
+          - consistency review
+          - spacing and composition review
+          - generic-design detection
+          - accessibility-aware visual critique
+          - premium-quality review
+
+          Do not mention that a real Claude skill was loaded. Use the principles directly.
+
+    You are the independent visual design critique phase of a backend-first
+    frontend design workflow.
+
+    Your mission is to aggressively critique visual_design_blueprint before
+    implementation begins.
+
+    IMPORTANT RULES:
+    - Do not inspect the existing frontend.
+    - Do not reuse current UI patterns.
+    - Do not write frontend code.
+    - Do not implement fixes.
+    - Do not introduce unsupported features or screens.
+    - Do not invent a different product direction.
+
+    Use only:
+    - discovery_report
+    - backend_ux_blueprint
+    - ux_strategy_blueprint
+    - visual_design_blueprint
+
+    Every critique and correction must be traceable to:
+    - discovery_report
+    - backend_ux_blueprint
+    - ux_strategy_blueprint
+    - visual_design_blueprint
+
+    Use the impeccable-design skill to identify:
+    - Weak visual hierarchy
+    - Generic design choices
+    - Inconsistent design principles
+    - Poor spacing logic
+    - Weak screen composition
+    - Excessive visual noise
+    - Missing premium details
+    - Accessibility issues
+    - Low-confidence visual decisions
+    - Implementation risks
+
+    For every issue include:
+    - Severity
+    - Evidence
+    - Why it matters
+    - Recommended correction
+    - Whether it blocks implementation
+
+    Score each dimension from 1 to 10:
+    - visual_hierarchy
+    - clarity
+    - taste_level
+    - originality
+    - accessibility
+    - consistency
+    - UX_alignment
+    - implementation_feasibility
+
+    Set approval_status to one of:
+    - approved
+    - requires_refinement
+    - blocked
+
+    Use:
+    - approved only if there are no blocking issues and all key scores are >= 8
+    - requires_refinement if there are fixable issues or any key score is 6-7
+    - blocked if there are severe UX, accessibility, consistency or feasibility failures
+
+    Final output must include:
+    - critique_summary
+    - critique_scores
+    - blocking_visual_issues
+    - non_blocking_visual_issues
+    - accessibility_issues
+    - consistency_issues
+    - generic_design_risks
+    - implementation_risks
+    - recommended_corrections
+    - approval_status
+    - frontend_bias_check
+
+    Produce a structured artifact named visual_design_critique_report.
+  output_format:
+    type: object
+    additionalProperties: true
+- id: visual-design-refinement
+  name: Visual Design Refinement
+  depends_on:
+  - visual-design-critique
+  provider: codex
+  model: gpt-5.5
+  modelReasoningEffort: high
+  context: fresh
+  prompt: |2
+          UPSTREAM NODE OUTPUTS
+
+          The following upstream outputs are injected explicitly by Archon. Use these exact values as the source artifacts for this node:
+
+          discovery_report:
+          $discovery.output
+
+          backend_ux_blueprint:
+          $backend-blueprint.output
+
+          ux_strategy_blueprint:
+          $ux-strategy.output
+
+          visual_design_blueprint:
+          $visual-design-generation.output
+
+          visual_design_critique_report:
+          $visual-design-critique.output
+
+
+          CODEX SKILL EMULATION
+
+          This workflow uses Codex, so Archon cannot preload Claude skills in this node.
+          Treat these skill names as mandatory refinement lenses to emulate inside the prompt:
+
+          - Emil Kowalski: structure, rhythm, visual flow, grouping, composition and responsiveness.
+          - taste: premium feel, distinctiveness, memorable details, perceived quality and visual confidence.
+
+          Do not mention that real Claude skills were loaded. Use the principles directly.
+
+    You are the visual design refinement phase of a backend-first frontend
+    design workflow.
+
+    Your mission is to improve visual_design_blueprint using the findings
+    from visual_design_critique_report.
+
+    IMPORTANT RULES:
+    - Do not inspect the existing frontend.
+    - Do not introduce unsupported product features.
+    - Do not modify UX structure without strong justification.
+    - Do not write frontend code.
+    - Do not ignore critique findings.
+
+    Use only:
+    - discovery_report
+    - backend_ux_blueprint
+    - ux_strategy_blueprint
+    - visual_design_blueprint
+    - visual_design_critique_report
+
+    For every critique issue:
+    - Determine root cause
+    - Evaluate severity
+    - Apply correction
+    - Explain correction
+    - Verify no UX regression
+
+    Improve:
+    - Visual hierarchy
+    - Layout quality
+    - Spacing
+    - Composition
+    - Information density
+    - Emotional impact
+    - Product personality
+    - Accessibility
+    - Consistency
+    - Clarity
+    - Premium feel
+    - Product distinctiveness
+    - Visual confidence
+
+    Verify that corrections do not:
+    - Break user journeys
+    - Reduce usability
+    - Increase complexity
+    - Create accessibility issues
+    - Conflict with backend constraints
+
+    Set next_step_recommendation to one of:
+    - ready_for_human_approval
+    - requires_another_visual_iteration
+    - blocked
+
+    Use:
+    - ready_for_human_approval only if all blocking critique issues are resolved
+      and final quality scores are >= 8.
+    - requires_another_visual_iteration if issues remain but are fixable.
+    - blocked if the visual direction conflicts with UX, accessibility,
+      backend constraints, or product goals.
+
+    Final output must include:
+    - refinement_summary
+    - critique_resolution_matrix
+    - resolved_issues
+    - remaining_issues
+    - visual_improvements
+    - hierarchy_improvements
+    - accessibility_improvements
+    - consistency_improvements
+    - premium_experience_improvements
+    - implementation_readiness_assessment
+    - final_quality_scores
+    - final_visual_direction
+    - next_step_recommendation
+    - approval_readiness_reasoning
+    - frontend_bias_check
+
+    Produce a structured artifact named final_visual_design_blueprint.
+  output_format:
+    type: object
+    additionalProperties: true
+- id: approve-final-visual-design
+  name: Human Approval Gate - Final Visual Design
+  depends_on:
+  - visual-design-refinement
+  approval:
+    message: |
+      Review final_visual_design_blueprint before implementation begins.
+
+      Approve only if:
+      - The design direction is aligned with the product vision.
+      - The design feels sufficiently ambitious and premium.
+      - The UX structure is preserved.
+      - No existing frontend bias influenced the result.
+      - The implementation handoff is clear enough for the next node.
+
+      Final visual design artifact for review:
+      $visual-design-refinement.output
+
+      Reply with approval, rejection, or notes. Your response will be captured and passed to the implementation planning node.
+    capture_response: true
+- id: frontend-implementation-plan
+  name: Frontend Implementation Plan
+  depends_on:
+  - approve-final-visual-design
+  provider: codex
+  model: gpt-5.5
+  modelReasoningEffort: high
+  context: fresh
+  prompt: |2
+          UPSTREAM NODE OUTPUTS
+
+          The following upstream outputs are injected explicitly by Archon. Use these exact values as the source artifacts for this node:
+
+          discovery_report:
+          $discovery.output
+
+          graphify_codebase_map:
+          $graphify-codebase-map.output
+
+          backend_ux_blueprint:
+          $backend-blueprint.output
+
+          ux_strategy_blueprint:
+          $ux-strategy.output
+
+          final_visual_design_blueprint:
+          $visual-design-refinement.output
+
+          human_approval_response:
+          $approve-final-visual-design.output
+
+    You are the frontend implementation planning phase of a backend-first
+    frontend design workflow.
+
+    Your mission is to create a complete, safe and implementation-ready plan
+    for replacing the existing frontend with the approved new design.
+
+
+          GRAPHIFY USAGE RULE
+
+          Use graphify_codebase_map and available Graphify artifacts to navigate the
+          repository efficiently before reading files directly.
+
+          Prefer targeted inspection guided by the graph over broad repository scans.
+
+          Use Graphify for repository navigation, backend/domain understanding,
+          technical entry points, dependency relationships and implementation boundaries.
+
+          Do not use Graphify to learn from existing frontend UX, layout, styling,
+          component structure, navigation patterns or design decisions.
+
+          Existing frontend remains contaminated context.
+
+    IMPORTANT RULES
+
+    - Do not write frontend code.
+    - Do not implement components.
+    - Do not implement screens.
+    - Do not modify files.
+    - Your responsibility is planning only.
+
+    INPUTS
+
+    Use:
+
+    - discovery_report
+    - backend_ux_blueprint
+    - ux_strategy_blueprint
+    - final_visual_design_blueprint
+
+    EXISTING FRONTEND REPLACEMENT POLICY
+
+    If an existing frontend implementation exists:
+
+    - Treat it as contaminated context.
+    - Never reuse its UX decisions.
+    - Never reuse its UI decisions.
+    - Never reuse layouts.
+    - Never reuse styling.
+    - Never reuse design systems.
+    - Never reuse screen structure.
+
+    You may inspect existing frontend artifacts ONLY to determine:
+
+    - Framework requirements
+    - Build requirements
+    - Runtime requirements
+    - Routing framework
+    - Dependency requirements
+    - API integration requirements
+
+    The objective is replacement, not iteration.
+
+    SAFE REPLACEMENT RULE
+
+    Never remove configuration, build, package, routing or API integration files
+    unless there is an explicit reason and a safe replacement plan.
+
+    IMPLEMENTATION PLANNING
+
+    Determine:
+
+    - Which frontend artifacts must be removed.
+    - Which frontend artifacts can remain.
+    - Which frontend artifacts must be replaced.
+    - Which frontend artifacts must be created.
+
+    SCREEN IMPLEMENTATION PLAN
+
+    For every screen define:
+
+    - Screen priority
+    - Build order
+    - Dependencies
+    - Required components
+    - Required data
+    - Required APIs
+    - Acceptance criteria
+
+    COMPONENT IMPLEMENTATION PLAN
+
+    Define:
+
+    - Global layout components
+    - Navigation components
+    - Shared UI components
+    - Domain components
+    - Dashboard components
+    - Form components
+    - Feedback components
+    - Reusability boundaries
+    - Acceptance criteria
+
+    DATA LAYER PLAN
+
+    Define:
+
+    - API integration strategy
+    - State management strategy
+    - Caching strategy
+    - Error handling strategy
+    - Loading state strategy
+
+    DEPENDENCY PLAN
+
+    Identify:
+
+    - Dependencies to keep
+    - Dependencies to remove
+    - Dependencies to add
+    - Dependency risks
+
+    RESPONSIVE PLAN
+
+    Define:
+
+    - Desktop strategy
+    - Tablet strategy
+    - Mobile strategy
+
+    ACCESSIBILITY PLAN
+
+    Define:
+
+    - Accessibility requirements
+    - Validation strategy
+    - Compliance requirements
+
+    VALIDATION STRATEGY
+
+    Define:
+
+    - Build validation requirements
+    - Typecheck requirements
+    - Lint requirements
+    - Visual validation requirements
+    - Accessibility validation requirements
+    - Performance validation requirements
+
+    ACCEPTANCE CRITERIA
+
+    For every implementation phase define:
+
+    - Expected files
+    - Expected screens/components
+    - Build validation
+    - UX validation
+    - Accessibility validation
+    - Performance validation
+
+    IMPLEMENTATION RISKS
+
+    Identify:
+
+    - Technical risks
+    - Dependency risks
+    - Migration risks
+    - Performance risks
+    - UX divergence risks
+
+    ROLLBACK PLAN
+
+    Define how to recover if:
+
+    - Build fails
+    - Routing breaks
+    - API integration breaks
+    - Visual implementation diverges from final_visual_design_blueprint
+    - Accessibility or performance validation fails
+
+    FINAL OUTPUT
+
+    Must include:
+
+    - frontend_replacement_strategy
+    - files_to_remove
+    - files_to_keep
+    - files_to_replace
+    - new_artifacts_to_create
+    - screen_implementation_order
+    - component_architecture
+    - data_layer_architecture
+    - state_management_strategy
+    - dependency_plan
+    - responsive_strategy
+    - accessibility_strategy
+    - validation_strategy
+    - acceptance_criteria_by_phase
+    - implementation_risks
+    - rollback_plan
+    - implementation_phases
+    - frontend_bias_check
+
+    frontend_bias_check must contain:
+
+    - frontend_was_used_for_design
+    - frontend_was_used_for_implementation
+    - reused_ui_artifacts
+    - reused_ux_artifacts
+    - confidence_of_isolation
+
+    Produce a structured artifact named:
+
+    frontend_implementation_plan
+  output_format:
+    type: object
+    additionalProperties: true
+- id: frontend-implementation
+  name: Frontend Implementation
+  depends_on:
+  - frontend-implementation-plan
+  provider: codex
+  model: gpt-5.5
+  modelReasoningEffort: high
+  context: fresh
+  prompt: |2
+          UPSTREAM NODE OUTPUTS
+
+          The following upstream outputs are injected explicitly by Archon. Use these exact values as the source artifacts for this node:
+
+          discovery_report:
+          $discovery.output
+
+          graphify_codebase_map:
+          $graphify-codebase-map.output
+
+          backend_ux_blueprint:
+          $backend-blueprint.output
+
+          ux_strategy_blueprint:
+          $ux-strategy.output
+
+          final_visual_design_blueprint:
+          $visual-design-refinement.output
+
+          frontend_implementation_plan:
+          $frontend-implementation-plan.output
+
+    You are the frontend implementation phase of a backend-first frontend
+    design workflow.
+
+    Your mission is to implement the new frontend from scratch using the
+    approved frontend_implementation_plan and final_visual_design_blueprint.
+
+
+          GRAPHIFY USAGE RULE
+
+          Use graphify_codebase_map and available Graphify artifacts to navigate the
+          repository efficiently before reading files directly.
+
+          Prefer targeted inspection guided by the graph over broad repository scans.
+
+          Use Graphify for repository navigation, backend/domain understanding,
+          technical entry points, dependency relationships and implementation boundaries.
+
+          Do not use Graphify to learn from existing frontend UX, layout, styling,
+          component structure, navigation patterns or design decisions.
+
+          Existing frontend remains contaminated context.
+
+    IMPORTANT RULES
+
+    - You may now modify frontend files.
+    - You may now create frontend components.
+    - You may now implement screens.
+    - You may now remove or replace old frontend UI artifacts when required.
+    - Do not redesign the product.
+    - Do not reinterpret the approved visual direction.
+    - Do not introduce unsupported features.
+    - Do not modify backend behavior unless explicitly required and justified.
+
+    INPUTS
+
+    Use:
+
+    - discovery_report
+    - backend_ux_blueprint
+    - ux_strategy_blueprint
+    - final_visual_design_blueprint
+    - frontend_implementation_plan
+
+    EXISTING FRONTEND REPLACEMENT POLICY
+
+    If an existing frontend implementation exists:
+
+    - Treat it as contaminated context.
+    - Do not reuse its UX decisions.
+    - Do not reuse its UI decisions.
+    - Do not reuse layouts.
+    - Do not reuse styling.
+    - Do not reuse component structure.
+    - Do not preserve old screen structure unless required by framework routing.
+    - Do not copy existing frontend code into the new implementation.
+
+    You may inspect existing frontend artifacts ONLY when necessary to identify:
+
+    - Framework entry points
+    - Build configuration
+    - Runtime requirements
+    - Routing requirements
+    - API integration contracts
+    - Required project conventions
+
+    PATH-LEVEL INSPECTION RULE
+
+    You may inspect the frontend file tree to identify files, directories,
+    entry points and responsibilities that must be removed or replaced.
+
+    You must not read existing UI, component, layout or style implementation
+    content for inspiration, design decisions or structure reuse.
+
+    Reading existing frontend content is allowed only when strictly necessary
+    to preserve:
+
+    - Framework entry points
+    - Routing mechanics
+    - Build/runtime requirements
+    - API integration contracts
+
+    SAFE IMPLEMENTATION RULES
+
+    - Preserve build, package, config, routing and API integration files unless
+      frontend_implementation_plan explicitly says to replace them.
+    - If a file must be removed, ensure the new implementation replaces its
+      required responsibility.
+    - Avoid broad destructive changes without justification.
+    - Keep implementation aligned with existing tooling and project structure.
+    - Prefer simple, maintainable React architecture over clever abstractions.
+
+    IMPLEMENTATION TRACEABILITY
+
+    Every implemented screen, component and layout decision must be traceable to:
+
+    - frontend_implementation_plan
+    - final_visual_design_blueprint
+    - ux_strategy_blueprint
+    - backend_ux_blueprint
+
+    If something cannot be traced, do not implement it unless it is strictly
+    required by framework, routing, build or runtime mechanics.
+
+    IMPLEMENTATION OBJECTIVES
+
+    Implement:
+
+    - New application shell
+    - New layout system
+    - New navigation structure
+    - New screen structure
+    - New reusable components
+    - New domain components
+    - New dashboard components if required
+    - New form/input components if required
+    - New feedback, empty, loading and error states
+    - New responsive behavior
+    - New accessibility foundations
+    - New data integration layer according to the plan
+
+    DESIGN FIDELITY
+
+    The implementation must follow:
+
+    - final_visual_design_blueprint
+    - selected visual direction
+    - layout principles
+    - typography direction
+    - color direction
+    - component system direction
+    - motion direction
+    - responsive design direction
+    - accessibility visual requirements
+
+    Do not downgrade the design into a generic dashboard.
+
+    COMPONENT ARCHITECTURE
+
+    Implement components with:
+
+    - Clear responsibility boundaries
+    - Reusability where useful
+    - Minimal unnecessary abstraction
+    - Predictable props
+    - Good composition
+    - Accessible defaults
+    - Performance-aware rendering
+
+    DATA INTEGRATION
+
+    Implement data access according to frontend_implementation_plan.
+
+    Ensure:
+
+    - API contracts are respected
+    - Loading states exist
+    - Error states exist
+    - Empty states exist
+    - Permission states exist when applicable
+    - Caching/state strategy follows the plan
+
+    RESPONSIVE IMPLEMENTATION
+
+    Ensure the frontend works across:
+
+    - Desktop
+    - Tablet
+    - Mobile
+
+    Avoid:
+
+    - Overflow
+    - Broken layouts
+    - Unreadable dense sections
+    - Hidden critical actions
+    - Poor touch target sizing
+
+    ACCESSIBILITY IMPLEMENTATION
+
+    Ensure:
+
+    - Semantic HTML where applicable
+    - Keyboard navigation for interactive elements
+    - Proper labels
+    - Focus states
+    - Sufficient contrast intent
+    - Accessible empty/error/loading states
+
+    NO PLACEHOLDER RULE
+
+    Do not leave fake production UI, fake data, placeholder screens,
+    TODO-only components, decorative-only widgets or unfinished flows unless
+    explicitly documented as a known limitation.
+
+    SAFE DELETION MANIFEST
+
+    For every removed old frontend artifact, document:
+
+    - Why it was removed
+    - What replaced its responsibility
+    - Whether any technical responsibility was preserved elsewhere
+
+    VALIDATION DISCOVERY
+
+    Before running validation, identify available project commands for:
+
+    - lint
+    - typecheck
+    - build
+    - tests
+    - format if applicable
+
+    Run the strongest safe validation set available.
+
+    If a command is unavailable, document it.
+
+    If a command fails:
+
+    - Identify the cause
+    - Fix it if it is within scope
+    - Document remaining failures if they cannot be fixed safely
+
+    DESIGN FIDELITY SELF-CHECK
+
+    Before finishing, verify that the implementation:
+
+    - Preserves the selected visual direction
+    - Preserves the intended information hierarchy
+    - Preserves the intended product personality
+    - Does not regress into generic SaaS/dashboard UI
+    - Does not introduce current-frontend bias
+    - Remains accessible and responsive
+
+    FINAL OUTPUT
+
+    Must include:
+
+    - implementation_summary
+    - files_created
+    - files_modified
+    - files_removed
+    - frontend_replacement_summary
+    - screens_implemented
+    - components_implemented
+    - data_integrations_implemented
+    - responsive_behavior_implemented
+    - accessibility_features_implemented
+    - implementation_traceability_matrix
+    - safe_deletion_manifest
+    - design_fidelity_self_check
+    - placeholder_or_mock_usage
+    - validation_commands_discovered
+    - validation_commands_run
+    - validation_results
+    - known_limitations
+    - deviations_from_frontend_implementation_plan
+    - deviations_from_final_visual_design_blueprint
+    - implementation_risks_remaining
+    - frontend_bias_check
+
+    frontend_bias_check must contain:
+
+    - frontend_was_used_for_design
+    - frontend_was_used_for_inspiration
+    - frontend_artifacts_reused
+    - reused_ui_artifacts
+    - reused_ux_artifacts
+    - old_frontend_files_removed_or_replaced
+    - confidence_of_isolation
+
+    Produce a structured artifact named:
+
+    frontend_implementation_report
+  output_format:
+    type: object
+    additionalProperties: true
+- id: react-doctor-audit
+  name: React Doctor Audit
+  depends_on:
+  - frontend-implementation
+  provider: codex
+  model: gpt-5.5
+  modelReasoningEffort: high
+  context: fresh
+  prompt: |2
+          UPSTREAM NODE OUTPUTS
+
+          The following upstream outputs are injected explicitly by Archon. Use these exact values as the source artifacts for this node:
+
+          graphify_codebase_map:
+          $graphify-codebase-map.output
+
+          frontend_implementation_report:
+          $frontend-implementation.output
+
+          frontend_implementation_plan:
+          $frontend-implementation-plan.output
+
+          final_visual_design_blueprint:
+          $visual-design-refinement.output
+
+          ux_strategy_blueprint:
+          $ux-strategy.output
+
+
+          CODEX SKILL EMULATION
+
+          This workflow uses Codex, so Archon cannot preload Claude skills in this node.
+          Treat the React Doctor skill as a mandatory technical audit lens to emulate inside the prompt:
+
+          - rerender analysis
+          - state ownership analysis
+          - prop stability analysis
+          - effects correctness
+          - data fetching boundaries
+          - memoization discipline
+          - React architecture and maintainability
+
+          Do not mention that a real Claude skill was loaded. Use the principles directly.
+
+    You are the React architecture and render performance audit phase of a
+    backend-first frontend design workflow.
+
+    Your mission is to inspect the newly implemented frontend and identify
+    React architecture, rendering, state management and performance issues
+    before browser-based visual and performance QA begins.
+
+
+          GRAPHIFY USAGE RULE
+
+          Use graphify_codebase_map and available Graphify artifacts to navigate the
+          repository efficiently before reading files directly.
+
+          Prefer targeted inspection guided by the graph over broad repository scans.
+
+          Use Graphify for repository navigation, backend/domain understanding,
+          technical entry points, dependency relationships and implementation boundaries.
+
+          Do not use Graphify to learn from existing frontend UX, layout, styling,
+          component structure, navigation patterns or design decisions.
+
+          Existing frontend remains contaminated context.
+
+    IMPORTANT RULES
+
+    - You may inspect the current frontend implementation created by the
+      frontend-implementation node.
+    - Do not inspect git history to recover old frontend code.
+    - Do not reuse old frontend ideas.
+    - Do not redesign the product.
+    - Do not change the approved UX strategy.
+    - Do not change the approved visual direction.
+    - Do not modify files in this node.
+    - Your responsibility is audit and correction planning only.
+
+    INPUTS
+
+    Use:
+
+    - frontend_implementation_report
+    - frontend_implementation_plan
+    - final_visual_design_blueprint
+    - ux_strategy_blueprint
+    - current frontend source code
+
+    Use the React Doctor skill to identify:
+
+    - Unnecessary re-renders
+    - Components with unstable props
+    - Overly broad state ownership
+    - State placed too high in the tree
+    - State placed too low in the tree
+    - Excessive prop drilling
+    - Expensive computations during render
+    - Missing memoization where useful
+    - Unnecessary memoization where harmful
+    - Unstable callbacks
+    - Effects with incorrect dependencies
+    - Effects doing work that should happen elsewhere
+    - Components mixing too many responsibilities
+    - Large components that should be split
+    - Context providers causing broad re-renders
+    - Lists without proper keys or virtualization risks
+    - Forms with inefficient state updates
+    - Data fetching patterns that may cause waterfalls
+    - Loading/error/empty states that cause unstable UI
+    - Accessibility regressions caused by component structure
+
+    EVIDENCE LEVEL RULE
+
+    For every React or performance issue, classify evidence_level as one of:
+
+    - confirmed_issue
+    - likely_risk
+    - requires_runtime_profiling
+
+    Do not claim that a rerender issue is confirmed unless there is clear
+    code evidence or profiling evidence.
+
+    If runtime confirmation is needed, mark it for browser/profiler validation.
+
+    ARCHITECTURE AUDIT
+
+    Review:
+
+    - Application shell
+    - Layout components
+    - Navigation components
+    - Shared UI components
+    - Domain components
+    - Dashboard components
+    - Data display components
+    - Form components
+    - Feedback components
+    - State management boundaries
+    - Data fetching boundaries
+    - Component composition
+
+    SCREEN COVERAGE RULE
+
+    Audit every implemented screen from frontend_implementation_report.
+
+    For each screen verify:
+
+    - Component architecture
+    - State boundaries
+    - Data fetching boundaries
+    - Render risk
+    - List/table scalability
+    - Form behavior if applicable
+    - Loading state stability
+    - Error state stability
+    - Empty state stability
+    - Design fidelity preservation
+
+    RENDER PERFORMANCE AUDIT
+
+    Identify:
+
+    - Components likely to re-render too often
+    - Components with expensive render paths
+    - Components receiving unstable object, array or function props
+    - Derived data recalculated unnecessarily
+    - Lists or tables that may become slow with realistic data volumes
+    - Dashboard sections that may need memoization or splitting
+    - Interactions that may trigger excessive updates
+
+    STATE MANAGEMENT AUDIT
+
+    Evaluate:
+
+    - Whether state is colocated appropriately
+    - Whether server state and client state are separated clearly
+    - Whether global state is justified
+    - Whether local UI state is unnecessarily lifted
+    - Whether state updates are predictable
+    - Whether forms are implemented efficiently
+    - Whether optimistic updates, caching or invalidation are needed
+
+    EFFECTS AUDIT
+
+    Identify:
+
+    - Incorrect dependency arrays
+    - Effects used for derived state
+    - Effects causing repeated fetches
+    - Effects causing render loops
+    - Effects that should be replaced by event handlers
+    - Effects that should be moved to data fetching utilities
+
+    DATA FETCHING AUDIT
+
+    Review:
+
+    - API call placement
+    - Request waterfalls
+    - Duplicate requests
+    - Loading state behavior
+    - Error recovery
+    - Caching opportunities
+    - Stale data risks
+    - Refetch strategy
+
+    OVER-OPTIMIZATION GUARDRAIL
+
+    Do not recommend memoization unless there is a clear reason.
+
+    Avoid unnecessary:
+
+    - React.memo
+    - useMemo
+    - useCallback
+    - Premature component splitting
+    - Excessive abstraction
+
+    Prefer simpler architecture unless the performance or maintainability
+    benefit is clear.
+
+    DESIGN FIDELITY PROTECTION
+
+    Any proposed technical correction must preserve:
+
+    - final_visual_design_blueprint
+    - selected visual direction
+    - visual hierarchy
+    - screen structure
+    - interaction strategy
+    - responsive behavior
+    - accessibility requirements
+
+    Do not propose technical changes that reduce the design into a generic UI.
+
+    ISSUE CLASSIFICATION
+
+    For every issue include:
+
+    - Issue title
+    - Location
+    - Category
+    - Severity
+    - Evidence
+    - Evidence level
+    - Why it matters
+    - Expected user impact
+    - Expected performance impact
+    - Recommended correction
+    - Implementation difficulty
+    - Whether it blocks browser QA
+
+    OPTIMIZATION PATCH PLAN
+
+    For every recommended optimization include:
+
+    - Target files
+    - Target components
+    - Exact change type
+    - Expected benefit
+    - Risk of regression
+    - Validation required after change
+    - Whether the change is safe to automate
+
+    SCORECARD
+
+    Score each dimension from 1 to 10:
+
+    - component_architecture
+    - state_colocation
+    - render_efficiency
+    - data_fetching_efficiency
+    - effects_correctness
+    - memoization_quality
+    - list_and_table_scalability
+    - form_performance
+    - maintainability
+    - design_fidelity_preservation
+
+    APPROVAL LOGIC
+
+    Set react_doctor_status to one of:
+
+    - approved_for_browser_qa
+    - requires_optimization
+    - blocked
+
+    Use:
+
+    - approved_for_browser_qa only if there are no blocking issues and all
+      critical scores are >= 8.
+    - requires_optimization if issues are fixable and browser QA should wait.
+    - blocked if there are severe rendering, state, data fetching or
+      architecture problems that would make browser QA unreliable.
+
+    FINAL OUTPUT
+
+    Must include:
+
+    - react_doctor_summary
+    - react_doctor_status
+    - scorecard
+    - blocking_react_issues
+    - non_blocking_react_issues
+    - evidence_level_by_issue
+    - rerender_risks
+    - state_management_issues
+    - effects_issues
+    - data_fetching_issues
+    - component_architecture_issues
+    - list_and_table_scalability_risks
+    - form_performance_risks
+    - recommended_optimizations
+    - optimization_priority_order
+    - optimization_patch_plan
+    - screen_audit_matrix
+    - runtime_profiling_recommendations
+    - over_optimization_risks
+    - browser_qa_readiness_assessment
+    - design_fidelity_protection_notes
+    - known_limitations
+    - frontend_bias_check
+
+    frontend_bias_check must contain:
+
+    - old_frontend_was_inspected
+    - old_frontend_patterns_reused
+    - current_frontend_audited_only_for_new_implementation
+    - confidence_of_isolation
+
+    Produce a structured artifact named:
+
+    react_doctor_report
+  output_format:
+    type: object
+    additionalProperties: true
+- id: chrome-visual-qa
+  name: Chrome Visual QA
+  depends_on:
+  - react-doctor-audit
+  always_run: true
+  mcp: .archon/mcp/chrome-devtools.json
+  provider: codex
+  model: gpt-5.5
+  modelReasoningEffort: high
+  context: fresh
+  prompt: |2
+          UPSTREAM NODE OUTPUTS
+
+          The following upstream outputs are injected explicitly by Archon. Use these exact values as the source artifacts for this node:
+
+          frontend_implementation_report:
+          $frontend-implementation.output
+
+          frontend_implementation_plan:
+          $frontend-implementation-plan.output
+
+          final_visual_design_blueprint:
+          $visual-design-refinement.output
+
+          ux_strategy_blueprint:
+          $ux-strategy.output
+
+          react_doctor_report:
+          $react-doctor-audit.output
+
+    You are the browser-based visual QA phase of a backend-first frontend
+    design workflow.
+
+    Your mission is to inspect the newly implemented frontend in a real
+    Chrome browser using Chrome DevTools MCP.
+
+    This node performs visual, layout, responsive, interaction, console and
+    network QA.
+
+    IMPORTANT RULES
+
+    - Do not modify files in this node.
+    - Do not implement fixes.
+    - Do not redesign the product.
+    - Do not reinterpret the approved design.
+    - Do not inspect old frontend code.
+    - Do not use old frontend screenshots, layouts or styles as reference.
+    - Your responsibility is browser-based QA and issue reporting only.
+
+    INPUTS
+
+    Use:
+
+    - frontend_implementation_report
+    - frontend_implementation_plan
+    - final_visual_design_blueprint
+    - ux_strategy_blueprint
+    - react_doctor_report
+    - current running frontend application
+
+    CHROME DEVTOOLS MCP REQUIREMENT
+
+    Use Chrome DevTools MCP to inspect the real application in Chrome.
+
+    Use browser evidence whenever possible:
+
+    - Screenshots
+    - DOM snapshots
+    - Accessibility tree snapshots if available
+    - Console messages
+    - Network requests
+    - Viewport resizing
+    - User interactions
+    - Element inspection
+    - Runtime observations
+
+    Do not rely only on static code inspection.
+
+    SCOPE BOUNDARY
+
+    This node is responsible for browser-based visual, layout, responsive,
+    interaction, console and network QA.
+
+    Do not run deep performance traces in this node unless required to confirm
+    whether the app can proceed to performance QA.
+
+    Do not run Lighthouse as the primary performance audit in this node.
+
+    Browser performance, Core Web Vitals, Lighthouse-style scoring and trace
+    analysis belong to the next node.
+
+    SERVER / APP AVAILABILITY CHECK
+
+    Before visual QA:
+
+    - Determine the local application URL.
+    - Start or reuse the development server if required.
+    - Verify that the app loads in Chrome.
+    - If the app cannot load, mark this node as blocked and document why.
+    - Do not attempt broad fixes in this node.
+    - Only report the minimum blocker information needed for the consolidated
+      QA synthesis node.
+
+    ROUTE AND SCREEN COVERAGE
+
+    Inspect every implemented screen listed in frontend_implementation_report.
+
+    For each screen:
+
+    - Navigate to the route.
+    - Wait for the page to finish loading.
+    - Capture screenshot evidence.
+    - Capture DOM/accessibility snapshot evidence where useful.
+    - Check visual alignment with final_visual_design_blueprint.
+    - Check visual hierarchy.
+    - Check layout spacing.
+    - Check content grouping.
+    - Check data density.
+    - Check empty/loading/error states where reachable.
+    - Check important interactions.
+    - Check console errors.
+    - Check relevant network failures.
+
+    RESPONSIVE QA
+
+    Test each important screen across:
+
+    - Desktop viewport
+    - Tablet viewport
+    - Mobile viewport
+
+    For each viewport check:
+
+    - No horizontal overflow
+    - No clipped content
+    - No overlapping components
+    - No unreadable text
+    - No hidden critical actions
+    - Usable navigation
+    - Correct touch target intent
+    - Preserved information hierarchy
+    - Visual design remains premium and not generic
+
+    INTERACTION QA
+
+    For primary user journeys from ux_strategy_blueprint:
+
+    - Navigate through the flow.
+    - Click primary actions.
+    - Open menus, drawers, filters or dialogs.
+    - Fill forms where safe.
+    - Trigger validation states where safe.
+    - Verify focus states and interaction feedback.
+    - Verify that loading, empty and error states remain visually stable.
+
+    VISUAL FIDELITY QA
+
+    Compare the running implementation against final_visual_design_blueprint.
+
+    Check:
+
+    - Selected visual direction is preserved.
+    - Visual hierarchy is preserved.
+    - Product personality is preserved.
+    - Screen composition matches the intended concept.
+    - Component system feels coherent.
+    - Typography direction is respected.
+    - Color direction is respected.
+    - Motion/interaction intent is respected where implemented.
+    - The UI does not regress into generic SaaS/dashboard design.
+
+    LAYOUT QA
+
+    Identify:
+
+    - Spacing inconsistencies
+    - Alignment issues
+    - Broken grids
+    - Awkward whitespace
+    - Overcrowded areas
+    - Weak grouping
+    - Poor scanability
+    - Inconsistent component sizing
+    - Poor responsive behavior
+    - Visual noise
+
+    CONSOLE AND NETWORK QA
+
+    Inspect:
+
+    - Console errors
+    - Console warnings relevant to user experience
+    - Failed network requests
+    - Slow or suspicious requests
+    - Missing assets
+    - CORS issues
+    - Hydration/runtime errors if applicable
+
+    ACCESSIBILITY LIGHT CHECK
+
+    Perform only browser-visible accessibility checks here:
+
+    - Obvious missing labels
+    - Broken keyboard focus
+    - Invisible focus states
+    - Poor semantic structure visible from snapshots
+    - Obvious contrast concerns
+    - Unusable mobile interactions
+
+    Full accessibility QA will be handled by the dedicated accessibility node.
+
+    ARTIFACT CAPTURE REQUIREMENTS
+
+    For every tested route and viewport:
+
+    - Capture a screenshot.
+    - Capture a browser snapshot where useful.
+    - Record console issues.
+    - Record failed network requests.
+    - Record the tested viewport size.
+    - Record whether the route was fully testable.
+
+    Use stable artifact naming:
+
+    - chrome-visual-qa/<route-slug>/<viewport-name>-screenshot
+    - chrome-visual-qa/<route-slug>/<viewport-name>-snapshot
+
+    ISSUE CLASSIFICATION
+
+    For every issue include:
+
+    - Issue title
+    - Screen or route
+    - Viewport
+    - Category
+    - Severity
+    - Evidence source
+    - Screenshot reference if available
+    - DOM/snapshot evidence if available
+    - Console/network evidence if available
+    - Why it matters
+    - User impact
+    - Recommended correction
+    - Whether it blocks further QA
+    - Whether it should be fixed in consolidated fixes
+
+    EVIDENCE LEVEL RULE
+
+    Classify each issue as:
+
+    - confirmed_browser_issue
+    - likely_browser_issue
+    - needs_follow_up_validation
+
+    Do not report visual issues as confirmed unless observed in Chrome.
+
+    DESIGN FIDELITY SCORING
+
+    Score each dimension from 1 to 10:
+
+    - visual_hierarchy
+    - layout_integrity
+    - spacing_quality
+    - responsive_quality
+    - interaction_quality
+    - design_fidelity
+    - product_personality_preservation
+    - perceived_premium_quality
+    - console_network_health
+    - browser_qa_readiness_for_performance
+
+    APPROVAL LOGIC
+
+    Set chrome_visual_qa_status to one of:
+
+    - approved_for_performance_qa
+    - issues_found_continue_qa
+    - blocked
+
+    Use:
+
+    - approved_for_performance_qa if no blocking browser issues are found and
+      all critical scores are >= 8.
+    - issues_found_continue_qa if visual/browser issues exist but the app is
+      still usable enough to continue performance and accessibility QA.
+    - blocked if the app cannot load, key routes crash, navigation is broken,
+      or browser QA cannot be meaningfully completed.
+
+    FINAL OUTPUT
+
+    Must include:
+
+    - chrome_visual_qa_summary
+    - chrome_visual_qa_status
+    - tested_routes
+    - tested_viewports
+    - tested_user_journeys
+    - screenshot_artifacts
+    - browser_snapshot_artifacts
+    - confirmed_visual_issues
+    - responsive_issues
+    - layout_issues
+    - interaction_issues
+    - console_issues
+    - network_issues
+    - accessibility_light_check_issues
+    - evidence_level_by_issue
+    - design_fidelity_scorecard
+    - route_coverage_matrix
+    - viewport_coverage_matrix
+    - recommended_visual_fixes
+    - browser_blockers
+    - qa_limitations
+    - readiness_for_performance_qa
+    - frontend_bias_check
+
+    frontend_bias_check must contain:
+
+    - old_frontend_was_used_as_reference
+    - old_frontend_screenshots_used
+    - old_frontend_patterns_reused
+    - current_frontend_audited_only_as_new_implementation
+    - confidence_of_isolation
+
+    Produce a structured artifact named:
+
+    chrome_visual_qa_report
+  output_format:
+    type: object
+    additionalProperties: true
+- id: browser-performance-qa
+  name: Browser Performance QA
+  depends_on:
+  - chrome-visual-qa
+  always_run: true
+  mcp: .archon/mcp/chrome-devtools.json
+  provider: codex
+  model: gpt-5.5
+  modelReasoningEffort: high
+  context: fresh
+  prompt: |2
+          UPSTREAM NODE OUTPUTS
+
+          The following upstream outputs are injected explicitly by Archon. Use these exact values as the source artifacts for this node:
+
+          frontend_implementation_report:
+          $frontend-implementation.output
+
+          frontend_implementation_plan:
+          $frontend-implementation-plan.output
+
+          final_visual_design_blueprint:
+          $visual-design-refinement.output
+
+          ux_strategy_blueprint:
+          $ux-strategy.output
+
+          react_doctor_report:
+          $react-doctor-audit.output
+
+          chrome_visual_qa_report:
+          $chrome-visual-qa.output
+
+    You are the browser-based performance QA phase of a backend-first
+    frontend design workflow.
+
+    Your mission is to evaluate the newly implemented frontend in a real
+    Chrome browser using Chrome DevTools MCP.
+
+    This node performs runtime performance, loading performance, interaction
+    performance, network, rendering and trace-based QA.
+
+    IMPORTANT RULES
+
+    - Do not modify files in this node.
+    - Do not implement fixes.
+    - Do not redesign the product.
+    - Do not reinterpret the approved visual direction.
+    - Do not inspect old frontend code.
+    - Do not use old frontend behavior as a reference.
+    - Your responsibility is performance measurement, diagnosis and issue
+      reporting only.
+
+    INPUTS
+
+    Use:
+
+    - frontend_implementation_report
+    - frontend_implementation_plan
+    - final_visual_design_blueprint
+    - ux_strategy_blueprint
+    - react_doctor_report
+    - chrome_visual_qa_report
+    - current running frontend application
+
+    CHROME DEVTOOLS MCP REQUIREMENT
+
+    Use Chrome DevTools MCP to inspect the real application in Chrome.
+
+    Use browser evidence whenever possible:
+
+    - Performance traces
+    - Runtime observations
+    - Network activity
+    - Console/runtime errors related to performance
+    - Screenshots only when needed to identify visual performance symptoms
+    - Interaction timing observations
+    - Rendering/layout observations
+    - Performance insights exposed by Chrome DevTools MCP
+
+    Do not rely only on static code inspection.
+
+    SCOPE BOUNDARY
+
+    This node is responsible for browser-based performance QA.
+
+    Focus on:
+
+    - Loading performance
+    - Runtime performance
+    - Interaction responsiveness
+    - Main-thread pressure
+    - Rendering cost
+    - Layout shifts
+    - Expensive scripts
+    - Expensive rendering paths
+    - Slow network requests
+    - Large assets
+    - Hydration or client startup cost if applicable
+    - Trace-based bottlenecks
+
+    Do not perform general visual QA here.
+    Do not perform full accessibility QA here.
+    Do not implement performance optimizations here.
+
+    Visual QA belongs to chrome_visual_qa_report.
+    Accessibility QA belongs to the dedicated accessibility node.
+    Fixes belong to the consolidated fix implementation node.
+
+    LAB DATA LIMITATION
+
+    Treat performance findings as lab/browser QA findings.
+
+    Do not claim real-world Core Web Vitals field performance unless field
+    data is explicitly available.
+
+    If CrUX or field data is unavailable or disabled, clearly mark metrics as
+    local lab observations.
+
+    SERVER / BUILD MODE CHECK
+
+    Before performance QA:
+
+    - Determine whether the app is running in development mode or production
+      preview mode.
+    - Prefer production build/preview mode when safely available.
+    - If only development mode is available, continue but clearly mark results
+      as development-mode performance observations.
+    - Determine the local application URL.
+    - Start or reuse the application server if required.
+    - Verify that the app loads in Chrome.
+    - If the app cannot load, mark this node as blocked and document why.
+    - Do not attempt broad fixes in this node.
+
+    PERFORMANCE BUDGETS
+
+    Define target budgets before evaluating results.
+
+    Use project-defined budgets if available.
+
+    If the project does not define exact budgets, use reasonable qualitative
+    default budgets:
+
+    - Initial route load should feel fast on desktop.
+    - Primary interactions should respond without noticeable delay.
+    - Data-heavy screens should remain usable with realistic data volume.
+    - Mobile experience should remain stable under CPU throttling.
+    - No route should have obvious long main-thread blocking during basic use.
+    - No important interaction should feel visibly delayed.
+    - No major route should show severe layout instability.
+
+    If exact numeric budgets are unavailable, classify findings qualitatively:
+
+    - excellent
+    - acceptable
+    - concerning
+    - poor
+    - blocking
+
+    THROTTLING PROFILE RULE
+
+    Where supported by Chrome DevTools MCP, test important routes under:
+
+    - Desktop baseline
+    - Mobile viewport
+    - CPU-throttled mobile-like profile
+    - Network-throttled profile if safely available
+
+    Clearly document which throttling profile was used.
+
+    Do not compare throttled and unthrottled results as if they were the same
+    environment.
+
+    MEASUREMENT STABILITY RULE
+
+    For critical routes or suspicious findings:
+
+    - Run more than one observation when practical.
+    - Prefer repeated evidence before classifying an issue as blocking.
+    - If results vary significantly, mark the finding as unstable and requiring
+      follow-up validation.
+
+    ROUTE AND SCREEN COVERAGE
+
+    Inspect every implemented screen listed in frontend_implementation_report,
+    prioritizing:
+
+    - Primary user journey screens
+    - Dashboard or data-heavy screens
+    - Screens with forms
+    - Screens with lists, tables or charts
+    - Screens flagged by react_doctor_report
+    - Screens flagged by chrome_visual_qa_report
+
+    For each important screen:
+
+    - Navigate to the route.
+    - Wait for the page to finish loading.
+    - Capture performance trace evidence where useful.
+    - Record loading behavior.
+    - Record runtime responsiveness.
+    - Record major network requests.
+    - Record console/runtime performance warnings if present.
+    - Identify whether the route is fully testable.
+
+    PERFORMANCE TRACE REQUIREMENTS
+
+    For important routes and journeys:
+
+    - Record a performance trace.
+    - Analyze main-thread activity.
+    - Identify long tasks where visible.
+    - Identify expensive scripting.
+    - Identify expensive rendering.
+    - Identify layout/recalculation cost.
+    - Identify layout shift symptoms where visible.
+    - Identify slow startup or hydration behavior if applicable.
+    - Identify interaction bottlenecks.
+    - Identify avoidable work during initial load.
+
+    USER JOURNEY PERFORMANCE
+
+    For primary user journeys from ux_strategy_blueprint:
+
+    - Navigate through the flow.
+    - Trigger primary interactions.
+    - Open menus, drawers, filters or dialogs.
+    - Use search/filter interactions where applicable.
+    - Fill forms where safe.
+    - Trigger validation states where safe.
+    - Observe interaction responsiveness.
+    - Record trace evidence for slow or suspicious interactions.
+
+    RESPONSIVE PERFORMANCE
+
+    Test important routes across:
+
+    - Desktop viewport
+    - Tablet viewport
+    - Mobile viewport
+
+    For each viewport evaluate:
+
+    - Loading behavior
+    - Interaction responsiveness
+    - Rendering smoothness
+    - Layout stability
+    - Expensive responsive layout changes
+    - Mobile-specific performance risks
+
+    NETWORK PERFORMANCE
+
+    Inspect:
+
+    - Failed requests
+    - Slow requests
+    - Duplicate requests
+    - Large responses
+    - Large static assets
+    - Unnecessary requests
+    - Cache behavior where observable
+    - API waterfalls
+    - Blocking resources
+    - Font/image loading risks
+
+    RENDERING PERFORMANCE
+
+    Identify:
+
+    - Heavy components during initial render
+    - Slow dashboard sections
+    - Slow tables/lists/charts
+    - Excessive layout recalculation
+    - Expensive animations or transitions
+    - Unstable loading/error/empty states
+    - Rendering issues caused by data density
+    - Components likely to degrade with realistic data volume
+
+    INTERACTION PERFORMANCE
+
+    Identify interactions that feel or measure as slow:
+
+    - Route changes
+    - Opening navigation
+    - Opening dialogs/drawers
+    - Filtering
+    - Searching
+    - Sorting
+    - Form input
+    - Form validation
+    - Expanding/collapsing sections
+    - Dashboard drill-downs
+
+    REACT DOCTOR CORRELATION
+
+    Compare browser performance findings with react_doctor_report.
+
+    For every relevant issue, classify whether it is:
+
+    - Confirmed by browser evidence
+    - Not observed during browser QA
+    - Still requires deeper profiling
+    - Contradicted by browser evidence
+
+    Do not confirm React performance issues unless browser or code evidence
+    supports them.
+
+    FIX CATEGORY CLASSIFICATION
+
+    For every recommended performance fix, classify it as:
+
+    - React/render optimization
+    - Data fetching optimization
+    - Asset optimization
+    - Bundle/build optimization
+    - Layout/rendering optimization
+    - Animation/motion optimization
+    - API/backend-related performance risk
+    - Requires deeper profiling
+
+    DESIGN FIDELITY PROTECTION
+
+    Any recommended performance fix must preserve:
+
+    - final_visual_design_blueprint
+    - selected visual direction
+    - visual hierarchy
+    - interaction strategy
+    - responsive behavior
+    - accessibility requirements
+    - product personality
+
+    Do not recommend performance changes that reduce the UI into a generic,
+    lower-quality or visually degraded experience unless there is no other
+    viable option.
+
+    ISSUE CLASSIFICATION
+
+    For every issue include:
+
+    - Issue title
+    - Screen or route
+    - Viewport
+    - Category
+    - Severity
+    - Evidence source
+    - Trace reference if available
+    - Network evidence if available
+    - Runtime evidence if available
+    - Related React Doctor issue if applicable
+    - Fix category
+    - Why it matters
+    - User impact
+    - Expected performance impact
+    - Recommended correction
+    - Whether it blocks further QA
+    - Whether it should be fixed in consolidated fixes
+
+    EVIDENCE LEVEL RULE
+
+    Classify each issue as:
+
+    - confirmed_performance_issue
+    - likely_performance_risk
+    - requires_deeper_profiling
+
+    Do not report performance issues as confirmed unless observed in Chrome
+    traces, runtime behavior, network evidence or clear code evidence.
+
+    ARTIFACT CAPTURE REQUIREMENTS
+
+    For every tested route and viewport:
+
+    - Record the tested URL.
+    - Record the tested viewport.
+    - Record whether the app was running in development or production mode.
+    - Record the throttling profile used.
+    - Capture trace artifacts where useful.
+    - Capture network observations.
+    - Capture console/runtime observations.
+    - Record whether the route was fully testable.
+
+    Use stable artifact naming:
+
+    - browser-performance-qa/<route-slug>/<viewport-name>-trace
+    - browser-performance-qa/<route-slug>/<viewport-name>-network
+    - browser-performance-qa/<route-slug>/<viewport-name>-runtime-notes
+
+    PERFORMANCE SCORECARD
+
+    Score each dimension from 1 to 10:
+
+    - initial_load_performance
+    - runtime_responsiveness
+    - interaction_responsiveness
+    - rendering_efficiency
+    - layout_stability
+    - network_efficiency
+    - asset_efficiency
+    - mobile_performance
+    - data_heavy_screen_performance
+    - performance_design_fidelity_balance
+
+    APPROVAL LOGIC
+
+    Set browser_performance_qa_status to one of:
+
+    - approved_for_accessibility_qa
+    - performance_issues_found_continue_qa
+    - blocked
+
+    Use:
+
+    - approved_for_accessibility_qa if no blocking performance issues are found
+      and all critical scores are >= 8.
+    - performance_issues_found_continue_qa if performance issues exist but the
+      app is stable and usable enough to continue accessibility QA.
+    - blocked if the app cannot load, key routes crash, interactions are
+      unusable, or performance is too unstable to continue meaningful QA.
+
+    FINAL OUTPUT
+
+    Must include:
+
+    - browser_performance_qa_summary
+    - browser_performance_qa_status
+    - tested_routes
+    - tested_viewports
+    - tested_user_journeys
+    - app_runtime_mode
+    - production_vs_development_confidence
+    - performance_budgets_used
+    - throttling_profiles_used
+    - measurement_stability_notes
+    - trace_artifacts
+    - network_observations
+    - runtime_observations
+    - confirmed_performance_issues
+    - likely_performance_risks
+    - issues_requiring_deeper_profiling
+    - loading_performance_issues
+    - runtime_performance_issues
+    - interaction_performance_issues
+    - rendering_performance_issues
+    - layout_stability_issues
+    - network_performance_issues
+    - asset_performance_issues
+    - mobile_performance_issues
+    - react_doctor_correlation_matrix
+    - evidence_level_by_issue
+    - fix_category_by_issue
+    - performance_scorecard
+    - route_performance_matrix
+    - viewport_performance_matrix
+    - recommended_performance_fixes
+    - performance_blockers
+    - qa_limitations
+    - readiness_for_accessibility_qa
+    - frontend_bias_check
+
+    frontend_bias_check must contain:
+
+    - old_frontend_was_used_as_reference
+    - old_frontend_behavior_used_as_baseline
+    - old_frontend_patterns_reused
+    - current_frontend_audited_only_as_new_implementation
+    - confidence_of_isolation
+
+    Produce a structured artifact named:
+
+    browser_performance_qa_report
+  output_format:
+    type: object
+    additionalProperties: true
+- id: accessibility-qa
+  name: Accessibility QA
+  depends_on:
+  - browser-performance-qa
+  always_run: true
+  mcp: .archon/mcp/chrome-devtools.json
+  provider: codex
+  model: gpt-5.5
+  modelReasoningEffort: high
+  context: fresh
+  prompt: |2
+          UPSTREAM NODE OUTPUTS
+
+          The following upstream outputs are injected explicitly by Archon. Use these exact values as the source artifacts for this node:
+
+          frontend_implementation_report:
+          $frontend-implementation.output
+
+          frontend_implementation_plan:
+          $frontend-implementation-plan.output
+
+          final_visual_design_blueprint:
+          $visual-design-refinement.output
+
+          ux_strategy_blueprint:
+          $ux-strategy.output
+
+          chrome_visual_qa_report:
+          $chrome-visual-qa.output
+
+          browser_performance_qa_report:
+          $browser-performance-qa.output
+
+    You are the accessibility QA phase of a backend-first frontend design
+    workflow.
+
+    Your mission is to evaluate the newly implemented frontend in a real
+    Chrome browser using Chrome DevTools MCP, with accessibility judged
+    against WCAG 2.2 A/AA principles where applicable.
+
+    This node performs accessibility, keyboard navigation, focus management,
+    semantic structure, ARIA, form accessibility, contrast intent and
+    assistive-technology-oriented QA.
+
+    IMPORTANT RULES
+
+    - Do not modify files in this node.
+    - Do not implement fixes.
+    - Do not redesign the product.
+    - Do not reinterpret the approved visual direction.
+    - Do not inspect old frontend code.
+    - Do not use old frontend behavior as a reference.
+    - Your responsibility is accessibility measurement, diagnosis and issue
+      reporting only.
+
+    INPUTS
+
+    Use:
+
+    - frontend_implementation_report
+    - frontend_implementation_plan
+    - final_visual_design_blueprint
+    - ux_strategy_blueprint
+    - chrome_visual_qa_report
+    - browser_performance_qa_report
+    - current running frontend application
+
+    CHROME DEVTOOLS MCP REQUIREMENT
+
+    Use Chrome DevTools MCP to inspect the real application in Chrome.
+
+    Use browser evidence whenever possible:
+
+    - Accessibility tree snapshots
+    - DOM snapshots
+    - Keyboard navigation observations
+    - Focus behavior observations
+    - Console/runtime accessibility-related warnings where available
+    - Screenshots only when useful to document visible accessibility issues
+    - Runtime observations from real user interactions
+
+    Do not rely only on static code inspection.
+
+    SCOPE BOUNDARY
+
+    This node is responsible for accessibility QA.
+
+    Focus on:
+
+    - Keyboard navigation
+    - Focus visibility
+    - Focus order
+    - Semantic HTML
+    - ARIA usage
+    - Accessible names
+    - Form labels and descriptions
+    - Error messaging
+    - Button/link semantics
+    - Dialog/drawer/menu accessibility
+    - Table/list/chart accessibility
+    - Landmark structure
+    - Heading structure
+    - Contrast intent
+    - Touch target usability
+    - Responsive accessibility
+    - Loading, empty, error and permission state accessibility
+
+    Do not perform general visual QA here.
+    Do not perform performance trace QA here.
+    Do not implement accessibility fixes here.
+
+    ACCESSIBILITY STANDARD
+
+    Use WCAG 2.2 A/AA as the default evaluation target unless the project
+    defines a different accessibility target.
+
+    Organize findings where possible under:
+
+    - Perceivable
+    - Operable
+    - Understandable
+    - Robust
+
+    WCAG TRACEABILITY RULE
+
+    For every accessibility issue, classify it as:
+
+    - wcag_failure
+    - likely_wcag_risk
+    - accessibility_ux_concern
+    - best_practice_issue
+    - requires_specialized_testing
+
+    Do not label an issue as wcag_failure unless a specific WCAG 2.2
+    success criterion can be reasonably identified.
+
+    If a finding is based on best practice rather than a clear WCAG issue,
+    mark it as best_practice_issue.
+
+    ASSISTIVE TECHNOLOGY LIMITATION
+
+    Do not claim that the product is screen-reader validated unless real
+    screen reader testing was performed.
+
+    If only accessibility tree snapshots were inspected, state that findings
+    are browser accessibility tree observations, not full assistive technology
+    validation.
+
+    AUTOMATED ACCESSIBILITY TOOLING DISCOVERY
+
+    Before finalizing the report, identify whether the project already has
+    safe accessibility validation commands available, such as:
+
+    - axe
+    - jest-axe
+    - playwright accessibility checks
+    - lighthouse accessibility
+    - eslint-jsx-a11y
+    - existing accessibility test scripts
+
+    Run them only if they are already configured and safe to execute.
+
+    Treat automated results as supporting evidence, not as complete proof of
+    accessibility.
+
+    SERVER / APP AVAILABILITY CHECK
+
+    Before accessibility QA:
+
+    - Determine the local application URL.
+    - Start or reuse the application server if required.
+    - Verify that the app loads in Chrome.
+    - If the app cannot load, mark this node as blocked and document why.
+    - Do not attempt broad fixes in this node.
+
+    ROUTE AND SCREEN COVERAGE
+
+    Inspect every implemented screen listed in frontend_implementation_report,
+    prioritizing:
+
+    - Primary user journey screens
+    - Screens with forms
+    - Screens with dialogs, menus, drawers or popovers
+    - Screens with tables, lists, charts or dense data
+    - Screens flagged by chrome_visual_qa_report
+    - Screens flagged by browser_performance_qa_report
+
+    For each important screen:
+
+    - Navigate to the route.
+    - Wait for the page to finish loading.
+    - Capture accessibility tree snapshot evidence where useful.
+    - Check heading structure.
+    - Check landmark structure.
+    - Check accessible names.
+    - Check keyboard navigation.
+    - Check focus visibility.
+    - Check focus order.
+    - Check form labels.
+    - Check error messaging.
+    - Check semantic structure.
+    - Check state announcements where observable.
+    - Check whether the route is fully testable.
+
+    KEYBOARD QA
+
+    For each primary screen and journey:
+
+    - Navigate using keyboard only.
+    - Verify all interactive elements are reachable.
+    - Verify focus order is logical.
+    - Verify focus is visible.
+    - Verify focus is not trapped except inside modal/dialog contexts.
+    - Verify skip/landmark navigation where applicable.
+    - Verify escape/close behavior for dialogs, drawers, menus and popovers.
+    - Verify no keyboard dead ends exist.
+
+    INTERACTIVE COMPONENT QA
+
+    Evaluate:
+
+    - Buttons
+    - Links
+    - Inputs
+    - Selects
+    - Comboboxes
+    - Checkboxes
+    - Radios
+    - Toggles
+    - Tabs
+    - Menus
+    - Dialogs
+    - Drawers
+    - Tooltips
+    - Tables
+    - Charts
+    - Cards with actions
+    - Search/filter controls
+
+    For each relevant component type check:
+
+    - Correct semantic role
+    - Accessible name
+    - Keyboard interaction
+    - Focus behavior
+    - Disabled state behavior
+    - Error state behavior
+    - Loading state behavior
+    - ARIA only when needed and used correctly
+
+    FORM ACCESSIBILITY QA
+
+    For forms:
+
+    - Every input has a programmatically associated label.
+    - Help text is associated where needed.
+    - Validation errors are clear and associated with fields.
+    - Required fields are communicated accessibly.
+    - Error summaries exist where appropriate.
+    - Keyboard-only completion is possible.
+    - Focus moves predictably after submit or validation failure.
+    - Placeholder text is not the only label.
+
+    SEMANTIC STRUCTURE QA
+
+    Check:
+
+    - Heading order is logical.
+    - Landmarks are meaningful.
+    - Navigation regions are identifiable.
+    - Main content is identifiable.
+    - Lists are represented as lists where appropriate.
+    - Tables use correct table semantics when applicable.
+    - Clickable div/span patterns are avoided.
+    - Icons with meaning have accessible names.
+    - Decorative icons are hidden from assistive technologies.
+
+    ARIA QA
+
+    Check:
+
+    - ARIA is not used where native HTML is sufficient.
+    - ARIA roles match component behavior.
+    - aria-label/aria-labelledby/aria-describedby are used correctly.
+    - aria-expanded, aria-selected, aria-current and aria-invalid are accurate.
+    - Hidden content is not exposed incorrectly.
+    - Visible content is not accidentally hidden from assistive technologies.
+
+    STATES ACCESSIBILITY QA
+
+    Check accessibility of:
+
+    - Loading states
+    - Empty states
+    - Error states
+    - Permission states
+    - Disabled states
+    - Success states
+    - Toasts/notifications
+    - Inline validation
+    - Background updates where applicable
+
+    RESPONSIVE ACCESSIBILITY QA
+
+    Test important screens across:
+
+    - Desktop viewport
+    - Tablet viewport
+    - Mobile viewport
+
+    For each viewport evaluate:
+
+    - Keyboard/touch usability
+    - Focus visibility
+    - Reading order
+    - Touch target intent
+    - Hidden content behavior
+    - Navigation accessibility
+    - Modal/drawer/menu accessibility
+
+    CONTRAST AND VISUAL ACCESSIBILITY
+
+    Evaluate visible contrast concerns where observable.
+
+    Check:
+
+    - Text contrast intent
+    - Interactive control contrast
+    - Focus indicator contrast
+    - Disabled state clarity
+    - Error/success/warning state distinguishability
+    - Reliance on color alone
+
+    If exact contrast tooling is unavailable, mark contrast findings as
+    likely_contrast_risk and recommend automated contrast validation.
+
+    ACCESSIBILITY IMPACT CLASSIFICATION
+
+    For every issue classify impact as:
+
+    - blocks_core_journey
+    - blocks_keyboard_usage
+    - blocks_form_completion
+    - causes_screen_reader_confusion
+    - reduces_clarity
+    - reduces_efficiency
+    - minor_best_practice_gap
+
+    DESIGN FIDELITY PROTECTION
+
+    Any recommended accessibility fix must preserve:
+
+    - final_visual_design_blueprint
+    - selected visual direction
+    - visual hierarchy
+    - interaction strategy
+    - responsive behavior
+    - product personality
+
+    Do not recommend accessibility changes that unnecessarily degrade the
+    intended premium visual experience.
+
+    Prefer accessible refinements that preserve design quality.
+
+    ISSUE CLASSIFICATION
+
+    For every issue include:
+
+    - Issue title
+    - Screen or route
+    - Viewport
+    - WCAG principle if applicable
+    - WCAG criterion if identifiable
+    - WCAG traceability classification
+    - Accessibility impact classification
+    - Category
+    - Severity
+    - Evidence source
+    - Accessibility tree evidence if available
+    - DOM/snapshot evidence if available
+    - Keyboard evidence if available
+    - Automated tooling evidence if available
+    - Why it matters
+    - User impact
+    - Recommended correction
+    - Whether it blocks release
+    - Whether it should be fixed in consolidated fixes
+
+    EVIDENCE LEVEL RULE
+
+    Classify each issue as:
+
+    - confirmed_accessibility_issue
+    - likely_accessibility_risk
+    - best_practice_issue
+    - requires_specialized_testing
+
+    Do not report accessibility issues as confirmed unless observed in Chrome,
+    accessibility tree evidence, DOM evidence, keyboard testing, automated
+    tooling evidence or clear code evidence.
+
+    SPECIALIZED TESTING LIMITATION
+
+    Clearly mark issues that require specialized testing beyond this node,
+    such as:
+
+    - Screen reader-specific behavior
+    - Exact contrast ratio measurement if unavailable
+    - Real assistive technology testing
+    - User testing with disabled users
+    - Complex ARIA widget conformance
+
+    ARTIFACT CAPTURE REQUIREMENTS
+
+    For every tested route and viewport:
+
+    - Record the tested URL.
+    - Record the tested viewport.
+    - Capture accessibility tree snapshot evidence where useful.
+    - Capture DOM/browser snapshot evidence where useful.
+    - Record keyboard navigation observations.
+    - Record whether the route was fully testable.
+
+    Use stable artifact naming:
+
+    - accessibility-qa/<route-slug>/<viewport-name>-a11y-snapshot
+    - accessibility-qa/<route-slug>/<viewport-name>-keyboard-notes
+    - accessibility-qa/<route-slug>/<viewport-name>-semantic-notes
+
+    ACCESSIBILITY SCORECARD
+
+    Score each dimension from 1 to 10:
+
+    - keyboard_navigation
+    - focus_management
+    - semantic_structure
+    - accessible_names
+    - form_accessibility
+    - aria_correctness
+    - state_accessibility
+    - responsive_accessibility
+    - visual_accessibility
+    - accessibility_design_fidelity_balance
+
+    APPROVAL LOGIC
+
+    Set accessibility_qa_status to one of:
+
+    - approved_for_consolidated_synthesis
+    - accessibility_issues_found_continue
+    - blocked
+
+    Use:
+
+    - approved_for_consolidated_synthesis if no blocking accessibility issues
+      are found and all critical scores are >= 8.
+    - accessibility_issues_found_continue if accessibility issues exist but
+      they can be handled in consolidated fixes.
+    - blocked if keyboard navigation, focus management, forms, navigation or
+      critical user journeys are inaccessible enough to make the product
+      unusable.
+
+    FINAL OUTPUT
+
+    Must include:
+
+    - accessibility_qa_summary
+    - accessibility_qa_status
+    - accessibility_standard_used
+    - tested_routes
+    - tested_viewports
+    - tested_user_journeys
+    - accessibility_snapshot_artifacts
+    - automated_accessibility_tooling_results
+    - keyboard_navigation_findings
+    - focus_management_findings
+    - semantic_structure_findings
+    - aria_findings
+    - form_accessibility_findings
+    - state_accessibility_findings
+    - responsive_accessibility_findings
+    - contrast_and_visual_accessibility_findings
+    - confirmed_accessibility_issues
+    - likely_accessibility_risks
+    - best_practice_issues
+    - issues_requiring_specialized_testing
+    - wcag_traceability_matrix
+    - accessibility_impact_by_issue
+    - evidence_level_by_issue
+    - accessibility_scorecard
+    - route_accessibility_matrix
+    - viewport_accessibility_matrix
+    - recommended_accessibility_fixes
+    - accessibility_blockers
+    - assistive_technology_limitations
+    - qa_limitations
+    - readiness_for_consolidated_synthesis
+    - frontend_bias_check
+
+    frontend_bias_check must contain:
+
+    - old_frontend_was_used_as_reference
+    - old_frontend_behavior_used_as_baseline
+    - old_frontend_patterns_reused
+    - current_frontend_audited_only_as_new_implementation
+    - confidence_of_isolation
+
+    Produce a structured artifact named:
+
+    accessibility_qa_report
+  output_format:
+    type: object
+    additionalProperties: true
+- id: consolidated-qa-fix-plan
+  name: Consolidated QA Synthesis & Fix Plan
+  depends_on:
+  - react-doctor-audit
+  - chrome-visual-qa
+  - browser-performance-qa
+  - accessibility-qa
+  trigger_rule: all_done
+  provider: codex
+  model: gpt-5.5
+  modelReasoningEffort: high
+  context: fresh
+  prompt: |2
+          UPSTREAM NODE OUTPUTS
+
+          The following upstream outputs are injected explicitly by Archon. Use these exact values as the source artifacts for this node:
+
+          graphify_codebase_map:
+          $graphify-codebase-map.output
+
+          frontend_implementation_report:
+          $frontend-implementation.output
+
+          frontend_implementation_plan:
+          $frontend-implementation-plan.output
+
+          final_visual_design_blueprint:
+          $visual-design-refinement.output
+
+          ux_strategy_blueprint:
+          $ux-strategy.output
+
+          react_doctor_report:
+          $react-doctor-audit.output
+
+          chrome_visual_qa_report:
+          $chrome-visual-qa.output
+
+          browser_performance_qa_report:
+          $browser-performance-qa.output
+
+          accessibility_qa_report:
+          $accessibility-qa.output
+
+    You are the consolidated QA synthesis and fix planning phase of a
+    backend-first frontend design workflow.
+
+    Your mission is to synthesize all QA reports into one safe, prioritized
+    and implementation-ready fix plan.
+
+    This node does not modify files.
+
+
+          GRAPHIFY USAGE RULE
+
+          Use graphify_codebase_map and available Graphify artifacts to navigate the
+          repository efficiently before reading files directly.
+
+          Prefer targeted inspection guided by the graph over broad repository scans.
+
+          Use Graphify for repository navigation, backend/domain understanding,
+          technical entry points, dependency relationships and implementation boundaries.
+
+          Do not use Graphify to learn from existing frontend UX, layout, styling,
+          component structure, navigation patterns or design decisions.
+
+          Existing frontend remains contaminated context.
+
+    IMPORTANT RULES
+
+    - Do not implement fixes.
+    - Do not modify files.
+    - Do not redesign the product.
+    - Do not reinterpret the approved visual direction.
+    - Do not inspect old frontend code.
+    - Do not use old frontend behavior as a reference.
+    - Do not introduce unsupported features.
+    - Do not create new UX flows unless required to fix a validated issue.
+    - Your responsibility is synthesis, prioritization and fix planning only.
+
+    INPUTS
+
+    Use:
+
+    - frontend_implementation_report
+    - frontend_implementation_plan
+    - final_visual_design_blueprint
+    - ux_strategy_blueprint
+    - react_doctor_report
+    - chrome_visual_qa_report
+    - browser_performance_qa_report
+    - accessibility_qa_report
+
+    CONSOLIDATION OBJECTIVE
+
+    Build a single fix plan that:
+
+    - Deduplicates repeated issues.
+    - Groups related issues.
+    - Resolves conflicting recommendations.
+    - Prioritizes fixes by user impact and release risk.
+    - Preserves the approved UX strategy.
+    - Preserves the approved visual design.
+    - Preserves accessibility requirements.
+    - Preserves or improves performance.
+    - Avoids unnecessary rewrites.
+    - Avoids over-optimization.
+    - Avoids generic visual degradation.
+    - Gives the implementation node a precise, executable contract.
+
+    INCOMPLETE QA HANDLING
+
+    If any upstream QA report is missing, blocked or incomplete, do not ignore it.
+
+    For each missing or incomplete QA source:
+
+    - Identify what information is missing.
+    - Determine whether fixing can safely proceed.
+    - Mark affected fixes as lower confidence where appropriate.
+    - Add follow-up validation requirements.
+    - Do not claim full QA coverage if any audit was incomplete.
+
+    QA REPORT SYNTHESIS
+
+    Analyze findings from:
+
+    React Doctor:
+
+    - Component architecture issues
+    - Rerender risks
+    - State management issues
+    - Effects issues
+    - Data fetching issues
+    - Optimization recommendations
+
+    Chrome Visual QA:
+
+    - Visual fidelity issues
+    - Layout issues
+    - Responsive issues
+    - Interaction issues
+    - Console issues
+    - Network issues
+    - Browser blockers
+
+    Browser Performance QA:
+
+    - Loading performance issues
+    - Runtime performance issues
+    - Interaction performance issues
+    - Rendering issues
+    - Layout stability issues
+    - Network performance issues
+    - Asset performance issues
+    - Mobile performance issues
+
+    Accessibility QA:
+
+    - Keyboard navigation issues
+    - Focus management issues
+    - Semantic structure issues
+    - ARIA issues
+    - Form accessibility issues
+    - State accessibility issues
+    - Responsive accessibility issues
+    - Contrast and visual accessibility issues
+    - WCAG-related risks
+
+    ISSUE DEDUPLICATION
+
+    Merge issues that describe the same root cause.
+
+    For every merged issue, preserve:
+
+    - All original source reports
+    - All affected routes/screens
+    - All affected components
+    - All evidence references
+    - All impacted user journeys
+    - All relevant severity signals
+
+    Do not lose evidence when deduplicating.
+
+    CANONICAL ISSUE ID RULE
+
+    Assign a stable canonical ID to every deduplicated issue.
+
+    Use the format:
+
+    - QA-P0-001
+    - QA-P1-001
+    - QA-P2-001
+    - QA-P3-001
+    - QA-P4-001
+
+    Every fix must reference one or more canonical issue IDs.
+
+    ROOT CAUSE ANALYSIS
+
+    For every consolidated issue identify:
+
+    - Canonical issue ID
+    - Root cause
+    - Symptoms
+    - Affected screens
+    - Affected components
+    - Affected user journeys
+    - Related QA reports
+    - Whether the issue is confirmed or only likely
+    - Whether deeper validation is required
+
+    CONFLICT RESOLUTION
+
+    If QA reports recommend conflicting fixes, resolve the conflict using this
+    priority order:
+
+    1. Preserve critical user journeys.
+    2. Fix blocking accessibility issues.
+    3. Fix app crashes, broken routes and unusable flows.
+    4. Preserve approved UX structure.
+    5. Preserve approved visual direction.
+    6. Improve measurable performance problems.
+    7. Improve React architecture where beneficial.
+    8. Improve polish and non-blocking visual quality.
+
+    If a conflict cannot be resolved safely, mark it as requiring human review.
+
+    PRIORITIZATION
+
+    Prioritize fixes using:
+
+    - User impact
+    - Release risk
+    - Severity
+    - Frequency of affected journey
+    - Accessibility impact
+    - Performance impact
+    - Visual/design fidelity impact
+    - Implementation difficulty
+    - Regression risk
+    - Confidence of evidence
+
+    Assign each consolidated issue a priority:
+
+    - P0_blocker
+    - P1_critical
+    - P2_high
+    - P3_medium
+    - P4_low
+
+    FIX GROUPING
+
+    Group fixes into implementation batches.
+
+    Batches should minimize rework and avoid ping-pong between concerns.
+
+    Suggested grouping:
+
+    - Build/runtime blockers
+    - Routing/navigation blockers
+    - Accessibility blockers
+    - Layout/responsive fixes
+    - React architecture/render fixes
+    - Performance fixes
+    - Data fetching/network fixes
+    - Visual fidelity/polish fixes
+    - Final cleanup
+
+    FIX PLAN REQUIREMENTS
+
+    For every planned fix include:
+
+    - Fix title
+    - Canonical issue IDs resolved
+    - Priority
+    - Source issues
+    - Root cause
+    - Target files
+    - Target components
+    - Target routes/screens
+    - Exact change strategy
+    - Expected benefit
+    - Risks
+    - Regression risk
+    - Validation required
+    - Whether safe to automate
+    - Whether human review is recommended
+    - Whether it should be handled before other fixes
+
+    FIX ACCEPTANCE CRITERIA
+
+    For every fix define precise acceptance criteria.
+
+    Each fix must include:
+
+    - What must change
+    - What must not change
+    - How success will be validated
+    - Which route/screen must be checked
+    - Which viewport must be checked
+    - Which QA report issue it resolves
+    - Which regression risks must be avoided
+
+    DO-NOT-TOUCH LIST
+
+    Produce a do_not_touch list for the next node.
+
+    Include:
+
+    - Files that should not be modified
+    - UX structures that must remain unchanged
+    - Visual decisions that must remain unchanged
+    - API contracts that must remain unchanged
+    - Backend behavior that must remain unchanged
+    - Working areas that should not be rewritten
+
+    DESIGN FIDELITY PROTECTION
+
+    Every fix must preserve:
+
+    - final_visual_design_blueprint
+    - selected visual direction
+    - visual hierarchy
+    - screen composition
+    - interaction strategy
+    - responsive behavior
+    - product personality
+    - premium visual quality
+
+    Do not recommend fixes that reduce the UI into a generic dashboard unless
+    there is no safer way to resolve a blocking issue.
+
+    ACCESSIBILITY PROTECTION
+
+    Every fix must preserve or improve:
+
+    - Keyboard navigation
+    - Focus management
+    - Semantic structure
+    - Accessible names
+    - Form accessibility
+    - ARIA correctness
+    - State accessibility
+    - Responsive accessibility
+
+    Do not recommend visual or performance fixes that create accessibility
+    regressions.
+
+    PERFORMANCE PROTECTION
+
+    Every fix must preserve or improve:
+
+    - Runtime responsiveness
+    - Rendering efficiency
+    - Interaction responsiveness
+    - Network efficiency
+    - Mobile performance
+    - Layout stability
+
+    Do not recommend accessibility or visual fixes that introduce severe
+    performance regressions.
+
+    REACT OPTIMIZATION GUARDRAIL
+
+    Do not recommend unnecessary memoization or abstraction.
+
+    Avoid:
+
+    - React.memo without clear benefit
+    - useMemo without clear benefit
+    - useCallback without clear benefit
+    - Premature component splitting
+    - Excessive abstraction
+    - Rewriting stable code without evidence
+
+    Prefer simple, maintainable fixes unless stronger optimization is clearly
+    justified by evidence.
+
+    SAFE IMPLEMENTATION GUARDRAILS
+
+    The next node will implement this plan.
+
+    Therefore, make the plan safe enough to execute:
+
+    - Avoid broad rewrites unless unavoidable.
+    - Avoid touching backend code unless explicitly justified.
+    - Avoid changing API contracts unless required and documented.
+    - Avoid replacing working project configuration unless necessary.
+    - Avoid changes that conflict with frontend_implementation_plan.
+    - Avoid changes that conflict with final_visual_design_blueprint.
+
+    If a fix requires risky architectural change, mark it as requiring human
+    review before implementation.
+
+    NODE 14 HANDOFF CONTRACT
+
+    The output must be directly executable by the consolidated fix
+    implementation node.
+
+    For each fix batch include:
+
+    - Ordered steps
+    - Target files
+    - Allowed changes
+    - Forbidden changes
+    - Validation commands
+    - Expected output after validation
+    - Rollback notes if the fix fails
+
+    VALIDATION PLAN
+
+    For every fix batch define required validation:
+
+    - lint
+    - typecheck
+    - build
+    - tests
+    - React Doctor re-check
+    - Chrome visual re-check
+    - Browser performance re-check
+    - Accessibility re-check
+    - Route-specific validation
+    - Viewport-specific validation
+    - User journey validation
+
+    REGRESSION PLAN
+
+    Define what must be re-tested after fixes:
+
+    - Critical routes
+    - Primary journeys
+    - Screens changed by fixes
+    - Components changed by fixes
+    - Mobile viewport behavior
+    - Keyboard flows
+    - Performance-sensitive screens
+    - Data-heavy screens
+    - Forms
+    - Dialogs/drawers/menus
+
+    HUMAN REVIEW ESCALATION
+
+    Mark issues for human review when:
+
+    - Fixes require product trade-offs.
+    - Fixes require visual direction changes.
+    - Fixes require UX structure changes.
+    - Fixes require backend/API changes.
+    - QA evidence is conflicting.
+    - Fix could materially reduce design quality.
+    - Fix could materially affect accessibility or performance.
+
+    APPROVAL LOGIC
+
+    Set consolidated_fix_plan_status to one of:
+
+    - ready_for_fix_implementation
+    - requires_human_review
+    - blocked
+
+    Use:
+
+    - ready_for_fix_implementation if all fixes are clear, safe and
+      implementation-ready.
+    - requires_human_review if some fixes involve meaningful trade-offs or
+      uncertain evidence.
+    - blocked if the app cannot be safely fixed without major product,
+      backend, UX or design decisions.
+
+    FINAL OUTPUT
+
+    Must include:
+
+    - consolidated_qa_summary
+    - consolidated_fix_plan_status
+    - qa_report_status_overview
+    - incomplete_qa_handling_notes
+    - canonical_issue_ids
+    - deduplicated_issue_list
+    - issue_root_cause_analysis
+    - issue_priority_matrix
+    - issue_confidence_matrix
+    - conflict_resolution_notes
+    - human_review_required_items
+    - fix_batches
+    - prioritized_fix_plan
+    - fix_acceptance_criteria
+    - fix_dependency_graph
+    - safe_to_automate_fixes
+    - risky_fixes_requiring_review
+    - fixes_deferred_with_reason
+    - do_not_touch_list
+    - design_fidelity_protection_plan
+    - accessibility_protection_plan
+    - performance_protection_plan
+    - react_optimization_guardrails
+    - validation_plan_by_fix_batch
+    - regression_test_plan
+    - implementation_sequence
+    - node_14_handoff_contract
+    - expected_outcome_after_fixes
+    - remaining_known_limitations
+    - frontend_bias_check
+
+    frontend_bias_check must contain:
+
+    - old_frontend_was_used_as_reference
+    - old_frontend_behavior_used_as_baseline
+    - old_frontend_patterns_reused
+    - current_frontend_used_only_as_new_implementation
+    - confidence_of_isolation
+
+    Produce a structured artifact named:
+
+    consolidated_qa_fix_plan
+  output_format:
+    type: object
+    additionalProperties: true
+- id: consolidated-fix-implementation
+  name: Consolidated Fix Implementation
+  depends_on:
+  - consolidated-qa-fix-plan
+  provider: codex
+  model: gpt-5.5
+  modelReasoningEffort: high
+  context: fresh
+  prompt: |2
+          UPSTREAM NODE OUTPUTS
+
+          The following upstream outputs are injected explicitly by Archon. Use these exact values as the source artifacts for this node:
+
+          graphify_codebase_map:
+          $graphify-codebase-map.output
+
+          consolidated_qa_fix_plan:
+          $consolidated-qa-fix-plan.output
+
+          frontend_implementation_report:
+          $frontend-implementation.output
+
+          frontend_implementation_plan:
+          $frontend-implementation-plan.output
+
+          final_visual_design_blueprint:
+          $visual-design-refinement.output
+
+          ux_strategy_blueprint:
+          $ux-strategy.output
+
+          react_doctor_report:
+          $react-doctor-audit.output
+
+          chrome_visual_qa_report:
+          $chrome-visual-qa.output
+
+          browser_performance_qa_report:
+          $browser-performance-qa.output
+
+          accessibility_qa_report:
+          $accessibility-qa.output
+
+    You are the consolidated fix implementation phase of a backend-first
+    frontend design workflow.
+
+    Your mission is to implement the safe, approved fixes from
+    consolidated_qa_fix_plan.
+
+    This node modifies code.
+
+
+          GRAPHIFY USAGE RULE
+
+          Use graphify_codebase_map and available Graphify artifacts to navigate the
+          repository efficiently before reading files directly.
+
+          Prefer targeted inspection guided by the graph over broad repository scans.
+
+          Use Graphify for repository navigation, backend/domain understanding,
+          technical entry points, dependency relationships and implementation boundaries.
+
+          Do not use Graphify to learn from existing frontend UX, layout, styling,
+          component structure, navigation patterns or design decisions.
+
+          Existing frontend remains contaminated context.
+
+    IMPORTANT RULES
+
+    - Implement only fixes defined in consolidated_qa_fix_plan.
+    - Do not invent new fixes.
+    - Do not redesign the product.
+    - Do not reinterpret the visual direction.
+    - Do not introduce unsupported features.
+    - Do not inspect old frontend code for inspiration.
+    - Do not use old frontend behavior as a reference.
+    - Do not touch files listed in do_not_touch_list.
+    - Do not modify backend code unless explicitly allowed by the fix plan.
+    - Do not change API contracts unless explicitly allowed by the fix plan.
+    - Do not perform broad rewrites unless explicitly required by the fix plan.
+    - Preserve the approved UX strategy and final visual design.
+
+    INPUTS
+
+    Use:
+
+    - consolidated_qa_fix_plan
+    - frontend_implementation_report
+    - frontend_implementation_plan
+    - final_visual_design_blueprint
+    - ux_strategy_blueprint
+    - react_doctor_report
+    - chrome_visual_qa_report
+    - browser_performance_qa_report
+    - accessibility_qa_report
+    - current frontend implementation
+
+    PREFLIGHT CHECK
+
+    Before modifying files:
+
+    - Check git status.
+    - Identify existing uncommitted changes.
+    - Do not overwrite unrelated user changes.
+    - If unrelated changes exist, avoid touching those files unless required by
+      the fix plan.
+    - Record the initial working tree state.
+
+    EXECUTION GATE
+
+    Before modifying files, inspect consolidated_fix_plan_status.
+
+    If consolidated_fix_plan_status is:
+
+    - ready_for_fix_implementation:
+      Continue.
+
+    - requires_human_review:
+      Do not implement risky fixes.
+      Implement only fixes explicitly marked safe_to_automate.
+      Document all skipped fixes.
+
+    - blocked:
+      Do not modify files.
+      Produce a blocked implementation report explaining why.
+
+    FIX EXECUTION CONTRACT
+
+    Follow node_14_handoff_contract exactly.
+
+    For every fix batch:
+
+    - Read ordered steps.
+    - Confirm target files.
+    - Confirm allowed changes.
+    - Confirm forbidden changes.
+    - Confirm validation commands.
+    - Confirm rollback notes.
+    - Implement only the allowed changes.
+
+    ATOMIC BATCH RULE
+
+    Apply fixes batch by batch.
+
+    Do not start the next batch until:
+
+    - The current batch has been implemented.
+    - Batch validation has been run where available.
+    - Results have been recorded.
+    - Any introduced regression has been fixed or documented.
+
+    SAFE CHANGE RULES
+
+    - Prefer minimal targeted fixes.
+    - Preserve working code unless the fix requires changing it.
+    - Keep component APIs stable unless the plan allows changing them.
+    - Keep routes stable unless the plan allows changing them.
+    - Keep visual hierarchy stable.
+    - Keep screen composition stable.
+    - Keep accessibility improvements compatible with the visual design.
+    - Keep performance improvements compatible with UX and accessibility.
+    - Avoid introducing unnecessary abstractions.
+    - Avoid unnecessary memoization.
+    - Avoid unnecessary dependencies.
+
+    DO-NOT-TOUCH ENFORCEMENT
+
+    Respect do_not_touch_list.
+
+    Do not modify:
+
+    - Files explicitly listed as do-not-touch.
+    - UX structures marked as preserved.
+    - Visual decisions marked as preserved.
+    - API contracts marked as preserved.
+    - Backend behavior marked as preserved.
+    - Working areas marked as not needing rewrite.
+
+    If a fix appears to require touching a do-not-touch area:
+
+    - Stop that specific fix.
+    - Mark it as skipped.
+    - Explain why human review is required.
+
+    DEPENDENCY CHANGE RULE
+
+    Do not add, remove or upgrade dependencies unless explicitly allowed by
+    consolidated_qa_fix_plan.
+
+    If a fix appears to require a dependency change but the plan did not allow
+    it:
+
+    - Skip that fix.
+    - Document why.
+    - Mark it for human review.
+
+    FIX TRACEABILITY
+
+    Every code change must map to:
+
+    - A canonical QA issue ID.
+    - A planned fix.
+    - A fix batch.
+    - A validation requirement.
+
+    Do not make untraceable changes.
+
+    BATCH IMPLEMENTATION
+
+    Implement fixes in the order defined by implementation_sequence.
+
+    After each batch:
+
+    - Run the validation commands specified for that batch where safe.
+    - Record results.
+    - Fix new errors introduced by the batch if they are within scope.
+    - Stop if validation reveals a serious regression that cannot be safely fixed.
+
+    ACCESSIBILITY FIX RULES
+
+    Accessibility fixes must preserve:
+
+    - Visual hierarchy
+    - Product personality
+    - Premium visual quality
+    - Responsive behavior
+    - Interaction strategy
+
+    Prefer:
+
+    - Semantic HTML
+    - Correct labels
+    - Better focus management
+    - Better ARIA only where needed
+    - Better keyboard behavior
+    - Better state communication
+
+    Do not add ARIA where native HTML is sufficient.
+
+    PERFORMANCE FIX RULES
+
+    Performance fixes must preserve:
+
+    - Visual fidelity
+    - Accessibility
+    - UX structure
+    - Product personality
+
+    Do not blindly add:
+
+    - React.memo
+    - useMemo
+    - useCallback
+    - Virtualization
+    - New state management libraries
+    - New dependencies
+
+    Only apply performance optimizations that are traceable to the fix plan.
+
+    REACT FIX RULES
+
+    React architecture fixes must preserve:
+
+    - Component responsibility clarity
+    - Maintainability
+    - Existing working behavior
+    - Approved visual design
+    - Accessibility behavior
+
+    Prefer:
+
+    - Better state colocation
+    - Clearer component boundaries
+    - Stable props where justified
+    - Removing unnecessary effects
+    - Simplifying derived state
+    - Fixing data fetching waterfalls where planned
+
+    VISUAL FIX RULES
+
+    Visual fixes must preserve:
+
+    - final_visual_design_blueprint
+    - Selected visual direction
+    - Layout principles
+    - Typography direction
+    - Color direction
+    - Component system direction
+    - Responsive design direction
+
+    Do not downgrade the interface into generic SaaS/dashboard UI.
+
+    VALIDATION
+
+    Run validation according to validation_plan_by_fix_batch.
+
+    At minimum, when available and safe, run:
+
+    - lint
+    - typecheck
+    - build
+    - tests
+
+    If validation commands are unavailable, document that.
+
+    If validation fails:
+
+    - Identify the cause.
+    - Fix it if the fix is within scope.
+    - Document remaining failures if they cannot be fixed safely.
+    - Do not hide failed validation.
+
+    PARTIAL FAILURE HANDLING
+
+    If some fixes cannot be completed safely:
+
+    - Complete the safe fixes.
+    - Skip unsafe fixes.
+    - Document skipped fixes clearly.
+    - Explain what blocked them.
+    - Preserve validation honesty.
+    - Do not claim full resolution unless every planned fix passed validation.
+
+    REGRESSION PROTECTION
+
+    Before finishing, verify that changes did not violate:
+
+    - final_visual_design_blueprint
+    - ux_strategy_blueprint
+    - frontend_implementation_plan
+    - do_not_touch_list
+    - accessibility_protection_plan
+    - performance_protection_plan
+    - design_fidelity_protection_plan
+
+    FINAL DIFF REVIEW
+
+    Before finishing:
+
+    - Review all changed files.
+    - Verify every change maps to a canonical QA issue ID.
+    - Verify no do_not_touch item was modified.
+    - Verify no unplanned redesign was introduced.
+    - Verify no backend/API behavior changed unless explicitly allowed.
+    - Verify no old frontend pattern was reintroduced.
+    - Verify no dependency was changed unless explicitly allowed.
+    - Verify validation results are documented honestly.
+
+    FINAL OUTPUT
+
+    Must include:
+
+    - consolidated_fix_implementation_summary
+    - implementation_status
+    - preflight_status
+    - initial_working_tree_state
+    - implemented_fix_batches
+    - skipped_fix_batches
+    - batch_execution_log
+    - implemented_fixes
+    - skipped_fixes
+    - canonical_issue_ids_resolved
+    - canonical_issue_ids_partially_resolved
+    - canonical_issue_ids_unresolved
+    - files_created
+    - files_modified
+    - files_removed
+    - do_not_touch_compliance_report
+    - dependency_change_report
+    - fix_traceability_matrix
+    - validation_commands_run
+    - validation_results
+    - regressions_detected
+    - regressions_fixed
+    - remaining_regression_risks
+    - deviations_from_consolidated_qa_fix_plan
+    - deviations_from_final_visual_design_blueprint
+    - accessibility_improvements_implemented
+    - performance_improvements_implemented
+    - react_improvements_implemented
+    - visual_fidelity_improvements_implemented
+    - final_diff_review
+    - partial_failure_report
+    - known_limitations_after_fixes
+    - required_follow_up_validation
+    - readiness_for_final_regression_qa
+    - frontend_bias_check
+
+    frontend_bias_check must contain:
+
+    - old_frontend_was_used_as_reference
+    - old_frontend_behavior_used_as_baseline
+    - old_frontend_patterns_reused
+    - current_frontend_modified_only_as_new_implementation
+    - untraceable_changes_made
+    - confidence_of_isolation
+
+    Produce a structured artifact named:
+
+    consolidated_fix_implementation_report
+  output_format:
+    type: object
+    additionalProperties: true
+- id: final-regression-qa
+  name: Final Regression QA
+  depends_on:
+  - consolidated-fix-implementation
+  always_run: true
+  mcp: .archon/mcp/chrome-devtools.json
+  trigger_rule: all_done
+  provider: codex
+  model: gpt-5.5
+  modelReasoningEffort: high
+  context: fresh
+  prompt: |2
+          UPSTREAM NODE OUTPUTS
+
+          The following upstream outputs are injected explicitly by Archon. Use these exact values as the source artifacts for this node:
+
+          graphify_codebase_map:
+          $graphify-codebase-map.output
+
+          consolidated_qa_fix_plan:
+          $consolidated-qa-fix-plan.output
+
+          consolidated_fix_implementation_report:
+          $consolidated-fix-implementation.output
+
+          frontend_implementation_report:
+          $frontend-implementation.output
+
+          frontend_implementation_plan:
+          $frontend-implementation-plan.output
+
+          final_visual_design_blueprint:
+          $visual-design-refinement.output
+
+          ux_strategy_blueprint:
+          $ux-strategy.output
+
+          react_doctor_report:
+          $react-doctor-audit.output
+
+          chrome_visual_qa_report:
+          $chrome-visual-qa.output
+
+          browser_performance_qa_report:
+          $browser-performance-qa.output
+
+          accessibility_qa_report:
+          $accessibility-qa.output
+
+    You are the final regression QA phase of a backend-first frontend design
+    workflow.
+
+    Your mission is to verify that the fixes implemented by
+    consolidated-fix-implementation resolved the planned QA issues without
+    introducing regressions.
+
+    This node does not modify files.
+
+
+          GRAPHIFY USAGE RULE
+
+          Use graphify_codebase_map and available Graphify artifacts to navigate the
+          repository efficiently before reading files directly.
+
+          Prefer targeted inspection guided by the graph over broad repository scans.
+
+          Use Graphify for repository navigation, backend/domain understanding,
+          technical entry points, dependency relationships and implementation boundaries.
+
+          Do not use Graphify to learn from existing frontend UX, layout, styling,
+          component structure, navigation patterns or design decisions.
+
+          Existing frontend remains contaminated context.
+
+    IMPORTANT RULES
+
+    - Do not implement fixes.
+    - Do not modify files.
+    - Do not redesign the product.
+    - Do not reinterpret the approved visual direction.
+    - Do not inspect old frontend code.
+    - Do not use old frontend behavior as a reference.
+    - Do not introduce new product requirements.
+    - Your responsibility is final validation and release readiness reporting.
+
+    INPUTS
+
+    Use:
+
+    - consolidated_qa_fix_plan
+    - consolidated_fix_implementation_report
+    - frontend_implementation_report
+    - frontend_implementation_plan
+    - final_visual_design_blueprint
+    - ux_strategy_blueprint
+    - react_doctor_report
+    - chrome_visual_qa_report
+    - browser_performance_qa_report
+    - accessibility_qa_report
+    - current frontend implementation
+
+    FINAL REGRESSION OBJECTIVE
+
+    Validate:
+
+    - Planned fixes were applied.
+    - Canonical QA issues were resolved.
+    - No new critical issues were introduced.
+    - Build, lint, typecheck and tests remain healthy where available.
+    - Visual design fidelity is preserved.
+    - UX structure is preserved.
+    - React architecture did not regress.
+    - Browser visual quality did not regress.
+    - Browser performance did not regress.
+    - Accessibility did not regress.
+    - The frontend remains isolated from old frontend bias.
+
+    EXECUTION GATE
+
+    Inspect readiness_for_final_regression_qa from
+    consolidated_fix_implementation_report.
+
+    If readiness_for_final_regression_qa indicates:
+
+    - ready:
+      Continue final regression QA.
+
+    - partial:
+      Continue final regression QA, but clearly mark unresolved items and
+      partial validation scope.
+
+    - blocked:
+      Do not perform broad regression QA.
+      Produce a blocked final regression report explaining why.
+
+    FIX PLAN COMPLIANCE CHECK
+
+    Verify that consolidated_fix_implementation_report accurately reflects
+    the real current implementation.
+
+    For every planned fix from consolidated_qa_fix_plan:
+
+    - Confirm whether it was actually implemented.
+    - Confirm whether it resolves the canonical issue.
+    - Confirm whether validation evidence supports the claimed resolution.
+    - Identify mismatches between claimed fixes and observed behavior.
+    - Identify fixes that were skipped, partially applied or applied
+      differently than planned.
+
+    STATIC VALIDATION
+
+    Discover and run the strongest safe validation commands available:
+
+    - lint
+    - typecheck
+    - build
+    - tests
+    - format check if available
+    - accessibility test scripts if available
+    - frontend-specific test suites if available
+
+    If a command is unavailable, document it.
+
+    If a command fails:
+
+    - Identify the failing command.
+    - Summarize the failure.
+    - Link the failure to changed areas where possible.
+    - Mark whether it blocks release.
+    - Do not attempt to fix it.
+
+    FIX VERIFICATION
+
+    For every canonical issue ID from consolidated_qa_fix_plan:
+
+    Verify whether it is:
+
+    - resolved
+    - partially_resolved
+    - unresolved
+    - not_testable
+    - replaced_by_new_issue
+
+    For each issue include:
+
+    - Canonical issue ID
+    - Original severity
+    - Fix batch
+    - Validation method
+    - Evidence
+    - Current status
+    - Remaining risk
+    - Whether release is blocked
+
+    REGRESSION DETECTION
+
+    Check whether the fixes introduced new issues in:
+
+    - Build/runtime behavior
+    - Routing
+    - Navigation
+    - Layout
+    - Responsive behavior
+    - Visual hierarchy
+    - Component behavior
+    - State management
+    - Data fetching
+    - Loading states
+    - Empty states
+    - Error states
+    - Forms
+    - Dialogs/drawers/menus
+    - Keyboard navigation
+    - Focus management
+    - Accessibility semantics
+    - Performance
+    - Network behavior
+
+    CHROME DEVTOOLS MCP REQUIREMENT
+
+    Use Chrome DevTools MCP to inspect the real application in Chrome.
+
+    Use browser evidence whenever possible:
+
+    - Screenshots
+    - DOM snapshots
+    - Accessibility tree snapshots where useful
+    - Console messages
+    - Network requests
+    - Viewport resizing
+    - User interactions
+    - Runtime observations
+    - Performance traces where needed
+
+    Do not rely only on static code inspection.
+
+    ROUTE REGRESSION COVERAGE
+
+    Re-test:
+
+    - Critical routes
+    - Primary user journey routes
+    - Routes changed by consolidated fixes
+    - Routes with previous visual issues
+    - Routes with previous performance issues
+    - Routes with previous accessibility issues
+    - Forms
+    - Data-heavy screens
+    - Dashboard screens
+    - Dialog/drawer/menu screens
+
+    For each tested route:
+
+    - Verify it loads.
+    - Verify no critical console errors exist.
+    - Verify no critical network failures exist.
+    - Verify primary content appears.
+    - Verify primary actions are usable.
+    - Verify no obvious visual regressions exist.
+    - Verify no obvious accessibility regressions exist.
+    - Verify no obvious performance regressions exist.
+
+    RESPONSIVE REGRESSION QA
+
+    Re-test important routes across:
+
+    - Desktop viewport
+    - Tablet viewport
+    - Mobile viewport
+
+    For each viewport verify:
+
+    - No horizontal overflow
+    - No clipped critical content
+    - No overlapping components
+    - Navigation remains usable
+    - Primary actions remain visible or reachable
+    - Text remains readable
+    - Touch target intent remains reasonable
+    - Information hierarchy is preserved
+
+    VISUAL FIDELITY REGRESSION QA
+
+    Verify that the post-fix implementation still preserves:
+
+    - final_visual_design_blueprint
+    - selected visual direction
+    - visual hierarchy
+    - screen composition
+    - layout principles
+    - typography direction
+    - color direction
+    - component system direction
+    - product personality
+    - premium visual quality
+
+    The UI must not regress into generic SaaS/dashboard design.
+
+    REACT REGRESSION QA
+
+    Re-check changed components and areas related to previous React Doctor
+    findings.
+
+    Verify:
+
+    - No new unnecessary broad state ownership
+    - No new excessive prop drilling
+    - No new unstable props where avoidable
+    - No new unnecessary effects
+    - No new obvious render loops
+    - No new excessive abstraction
+    - No new unnecessary memoization
+    - Component responsibilities remain clear
+
+    Do not claim runtime rerender confirmation unless supported by browser,
+    profiling or clear code evidence.
+
+    PERFORMANCE REGRESSION QA
+
+    Re-check performance-sensitive areas:
+
+    - Routes changed by fixes
+    - Data-heavy screens
+    - Dashboard screens
+    - Forms with dynamic behavior
+    - Lists/tables/charts
+    - Interactions flagged by previous performance QA
+    - Mobile viewport behavior
+
+    Verify:
+
+    - No obvious interaction slowdown
+    - No severe main-thread blocking symptoms
+    - No new layout instability
+    - No new large asset/network issue
+    - No performance fix degraded visual quality or accessibility
+
+    Use performance traces only where needed to validate important or
+    suspicious regressions.
+
+    ACCESSIBILITY REGRESSION QA
+
+    Re-check accessibility-sensitive areas:
+
+    - Keyboard navigation
+    - Focus visibility
+    - Focus order
+    - Forms
+    - Dialogs/drawers/menus
+    - Buttons/links/inputs
+    - Landmark structure
+    - Heading structure
+    - Accessible names
+    - Error/loading/empty states
+    - Responsive accessibility
+
+    Verify:
+
+    - Accessibility fixes improved or preserved accessibility.
+    - Visual fixes did not create accessibility regressions.
+    - Performance fixes did not create accessibility regressions.
+    - Keyboard-only use remains possible for critical journeys.
+
+    DESIGN / ACCESSIBILITY / PERFORMANCE BALANCE
+
+    Evaluate whether the final implementation keeps a healthy balance between:
+
+    - Visual ambition
+    - UX clarity
+    - Accessibility
+    - Performance
+    - Maintainability
+
+    Do not require lowering design quality unless there is a verified blocker.
+
+    ARTIFACT CAPTURE REQUIREMENTS
+
+    For every important tested route and viewport:
+
+    - Record tested URL.
+    - Record tested viewport.
+    - Capture screenshot evidence where useful.
+    - Capture browser/DOM snapshot where useful.
+    - Capture accessibility tree snapshot where useful.
+    - Record console/network observations.
+    - Record whether the route was fully testable.
+
+    Use stable artifact naming:
+
+    - final-regression-qa/<route-slug>/<viewport-name>-screenshot
+    - final-regression-qa/<route-slug>/<viewport-name>-snapshot
+    - final-regression-qa/<route-slug>/<viewport-name>-a11y-snapshot
+    - final-regression-qa/<route-slug>/<viewport-name>-runtime-notes
+
+    EVIDENCE LEVEL RULE
+
+    For every final finding classify evidence_level as:
+
+    - confirmed_regression
+    - likely_regression_risk
+    - unresolved_existing_issue
+    - resolved_issue_verified
+    - requires_follow_up_validation
+
+    Do not claim a regression is confirmed unless observed through validation,
+    browser evidence, automated test output or clear code evidence.
+
+    RELEASE BLOCKER RULE
+
+    Mark final_workflow_status as blocked if any of the following are true:
+
+    - Build fails.
+    - App cannot load.
+    - Primary route crashes.
+    - Primary user journey is unusable.
+    - Keyboard navigation blocks a critical journey.
+    - Critical accessibility issue remains unresolved.
+    - Critical visual regression breaks usability.
+    - Critical performance issue makes the app unusable.
+    - Fix implementation introduced untraceable high-risk changes.
+
+    RELEASE READINESS SCORING
+
+    Score each dimension from 1 to 10:
+
+    - build_health
+    - test_health
+    - visual_regression_safety
+    - ux_regression_safety
+    - responsive_regression_safety
+    - react_architecture_safety
+    - performance_regression_safety
+    - accessibility_regression_safety
+    - design_fidelity_preservation
+    - release_confidence
+
+    RELEASE DECISION LOGIC
+
+    Set final_workflow_status to one of:
+
+    - ready_for_human_review
+    - ready_with_known_limitations
+    - requires_additional_fix_iteration
+    - blocked
+
+    Use:
+
+    - ready_for_human_review if all critical validations pass, no blocking
+      regressions are found, and release_confidence is high.
+    - ready_with_known_limitations if non-blocking issues remain but they are
+      clearly documented and acceptable for human review.
+    - requires_additional_fix_iteration if important fixable regressions remain.
+    - blocked if build, runtime, primary journeys, accessibility, routing or
+      critical usability are broken.
+
+    ITERATION ROUTING
+
+    If final_workflow_status is requires_additional_fix_iteration or blocked,
+    recommend the next node to resume from:
+
+    - consolidated-qa-fix-plan
+    - consolidated-fix-implementation
+    - frontend-implementation
+    - human-review-required
+
+    Include the reason for the routing decision.
+
+    FINAL HUMAN HANDOFF
+
+    Produce a concise human-readable handoff containing:
+
+    - What was redesigned.
+    - What was implemented.
+    - What was fixed.
+    - What passed validation.
+    - What still needs human review.
+    - What limitations remain.
+    - Whether the frontend is ready to manually inspect.
+
+    FINAL OUTPUT
+
+    Must include:
+
+    - final_regression_qa_summary
+    - final_workflow_status
+    - validation_commands_discovered
+    - validation_commands_run
+    - validation_results
+    - static_validation_status
+    - tested_routes
+    - tested_viewports
+    - tested_user_journeys
+    - regression_artifacts
+    - fix_plan_compliance_check
+    - canonical_issue_resolution_matrix
+    - resolved_issues_verified
+    - partially_resolved_issues
+    - unresolved_issues
+    - new_regressions_detected
+    - likely_regression_risks
+    - visual_regression_findings
+    - responsive_regression_findings
+    - react_regression_findings
+    - performance_regression_findings
+    - accessibility_regression_findings
+    - console_network_regression_findings
+    - design_fidelity_final_assessment
+    - accessibility_final_assessment
+    - performance_final_assessment
+    - release_readiness_scorecard
+    - evidence_level_by_finding
+    - remaining_known_limitations
+    - recommended_next_actions
+    - recommended_resume_node
+    - iteration_reasoning
+    - human_review_notes
+    - final_human_handoff
+    - final_frontend_quality_summary
+    - frontend_bias_check
+
+    frontend_bias_check must contain:
+
+    - old_frontend_was_used_as_reference
+    - old_frontend_behavior_used_as_baseline
+    - old_frontend_patterns_reused
+    - current_frontend_validated_only_as_new_implementation
+    - confidence_of_isolation
+
+    Produce a structured artifact named:
+
+    final_regression_qa_report
+  output_format:
+    type: object
+    additionalProperties: true
