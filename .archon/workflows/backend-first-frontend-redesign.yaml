@@ -270,9 +270,6 @@ nodes:
     Produce a structured artifact named:
 
     graphify_codebase_map
-  output_format:
-    type: object
-    additionalProperties: true
 - id: backend-blueprint
   name: Backend UX Blueprint
   depends_on:
@@ -389,9 +386,6 @@ nodes:
     - confidence_of_isolation
 
     Produce a structured artifact named backend_ux_blueprint.
-  output_format:
-    type: object
-    additionalProperties: true
 - id: ux-strategy
   name: UX Strategy & Information Architecture
   depends_on:
@@ -471,9 +465,6 @@ nodes:
     - confidence_of_isolation
 
     Produce a structured artifact named ux_strategy_blueprint.
-  output_format:
-    type: object
-    additionalProperties: true
 - id: visual-design-generation
   name: Visual Design Generation
   depends_on:
@@ -588,9 +579,6 @@ nodes:
     - frontend_bias_check
 
     Produce a structured artifact named visual_design_blueprint.
-  output_format:
-    type: object
-    additionalProperties: true
 - id: visual-design-critique
   name: Visual Design Critique
   depends_on:
@@ -710,9 +698,6 @@ nodes:
     - frontend_bias_check
 
     Produce a structured artifact named visual_design_critique_report.
-  output_format:
-    type: object
-    additionalProperties: true
 - id: visual-design-refinement
   name: Visual Design Refinement
   depends_on:
@@ -831,9 +816,6 @@ nodes:
     - frontend_bias_check
 
     Produce a structured artifact named final_visual_design_blueprint.
-  output_format:
-    type: object
-    additionalProperties: true
 - id: approve-final-visual-design
   name: Human Approval Gate - Final Visual Design
   depends_on:
@@ -1098,9 +1080,6 @@ nodes:
     Produce a structured artifact named:
 
     frontend_implementation_plan
-  output_format:
-    type: object
-    additionalProperties: true
 - id: frontend-implementation
   name: Frontend Implementation
   depends_on:
@@ -1405,9 +1384,6 @@ nodes:
     Produce a structured artifact named:
 
     frontend_implementation_report
-  output_format:
-    type: object
-    additionalProperties: true
 - id: react-doctor-audit
   name: React Doctor Audit
   depends_on:
@@ -1742,9 +1718,6 @@ nodes:
     Produce a structured artifact named:
 
     react_doctor_report
-  output_format:
-    type: object
-    additionalProperties: true
 - id: chrome-visual-qa
   name: Chrome Visual QA
   depends_on:
@@ -2072,9 +2045,6 @@ nodes:
     Produce a structured artifact named:
 
     chrome_visual_qa_report
-  output_format:
-    type: object
-    additionalProperties: true
 - id: browser-performance-qa
   name: Browser Performance QA
   depends_on:
@@ -2546,9 +2516,6 @@ nodes:
     Produce a structured artifact named:
 
     browser_performance_qa_report
-  output_format:
-    type: object
-    additionalProperties: true
 - id: accessibility-qa
   name: Accessibility QA
   depends_on:
@@ -3059,9 +3026,6 @@ nodes:
     Produce a structured artifact named:
 
     accessibility_qa_report
-  output_format:
-    type: object
-    additionalProperties: true
 - id: consolidated-qa-fix-plan
   name: Consolidated QA Synthesis & Fix Plan
   depends_on:
@@ -3577,9 +3541,6 @@ nodes:
     Produce a structured artifact named:
 
     consolidated_qa_fix_plan
-  output_format:
-    type: object
-    additionalProperties: true
 - id: consolidated-fix-implementation
   name: Consolidated Fix Implementation
   depends_on:
@@ -3980,9 +3941,6 @@ nodes:
     Produce a structured artifact named:
 
     consolidated_fix_implementation_report
-  output_format:
-    type: object
-    additionalProperties: true
 - id: final-regression-qa
   name: Final Regression QA
   depends_on:
@@ -4514,6 +4472,3 @@ nodes:
     Produce a structured artifact named:
 
     final_regression_qa_report
-  output_format:
-    type: object
-    additionalProperties: true
