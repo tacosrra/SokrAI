@@ -1,0 +1,975 @@
+name: archon-upgrade-existing-frontend-premium-v1-codex-compatible
+
+description: |
+  Codex-compatible workflow to audit an existing frontend, inspect it in Chrome,
+  ask the user what improvements they want, synthesize the approved direction,
+  plan the upgrade, wait for explicit approval, implement a substantial premium
+  frontend improvement, and run React/performance/browser QA afterwards.
+
+  Important: Archon per-node skills are Claude-only. This Codex workflow embeds
+  the Emil Kowalski / taste / impeccable / React Doctor criteria in prompts but
+  does not use the `skills:` field.
+
+provider: codex
+model: gpt-5.5
+modelReasoningEffort: high
+interactive: true
+
+worktree:
+  enabled: true
+
+tags:
+  - frontend
+  - ux
+  - design
+  - chrome-devtools
+  - react-doctor
+  - premium-upgrade
+
+nodes:
+  - id: setup_upgrade_artifacts
+    bash: |
+      set -euo pipefail
+
+      mkdir -p docs/frontend-upgrade
+      mkdir -p artifacts/frontend-upgrade/before
+      mkdir -p artifacts/frontend-upgrade/after
+      mkdir -p artifacts/frontend-upgrade/notes
+
+      cat > docs/frontend-upgrade/00-workflow-scope.md <<'EOF'
+      # Existing Frontend Premium Upgrade Workflow
+
+      This workflow upgrades an existing frontend. It must not create a new frontend from scratch unless the user explicitly approves that decision.
+
+      ## Hard rules
+
+      - Audit first, implement later.
+      - Do not modify app source during audit, question, and planning phases.
+      - Inspect frontend source and rendered UI.
+      - Ask the user targeted questions about desired improvements before implementation.
+      - Wait for explicit user approval before implementation.
+      - Preserve backend contracts and existing product behavior.
+      - Do not invent unsupported features.
+      - Do not expose debug, internal API, raw payloads, request IDs, logs, hashes, n8n, Ollama, Fastify, PostgreSQL, or backend implementation details in the normal UI.
+      - For SokrAI-like healthcare/proposal tools: report/PDF readiness, preview, dossier, and export must appear only in the final phase.
+      - The final result should feel professional, premium, product-specific, responsive, accessible, and ready to show as a serious MVP.
+
+      ## Mandatory skill/tool usage
+
+      This workflow is Codex-compatible. Archon per-node `skills:` are Claude-only, so this workflow emulates the skill criteria through explicit prompt instructions instead of using the `skills:` field.
+
+      ### emil-kowalski skill
+      Use for visual hierarchy, interaction design, layout rhythm, premium UI composition, product-specific interface craft, micro-interactions, and affordances.
+
+      ### taste skill
+      Use for product judgement, rejecting generic or gimmicky UI, choosing tradeoffs between minimalism/polish/usability, and deciding whether the frontend feels like a serious MVP.
+
+      ### impeccable skill
+      Use for strict screenshot-level quality: typography, spacing, surfaces, buttons, inputs, cards, polish, responsive composition, and default-looking UI detection.
+
+      ### react-doctor skill
+      Use for React component architecture, rerenders, state placement, hydration risks, hooks, memoization, client/server split, and performance-sensitive UI decisions.
+
+      ### Chrome DevTools MCP
+      Use for rendered UI inspection, screenshots, responsive viewport checks, console errors, network/API behavior, performance observations, layout/overflow issues, and DOM inspection when useful.
+
+      ## Required output artifacts
+
+      - docs/frontend-upgrade/00-workflow-scope.md
+      - docs/frontend-upgrade/00-skills-and-tools-check.md
+      - docs/frontend-upgrade/00-project-command-detection.md
+      - docs/frontend-upgrade/01-current-frontend-inventory.md
+      - docs/frontend-upgrade/02-browser-baseline-audit.md
+      - docs/frontend-upgrade/03-visual-ux-audit.md
+      - docs/frontend-upgrade/04-reference-analysis.md
+      - docs/frontend-upgrade/05-questions-for-user.md
+      - docs/frontend-upgrade/06-user-approved-improvement-direction.md
+      - docs/frontend-upgrade/07-implementation-plan.md
+      - docs/frontend-upgrade/08-implementation-summary.md
+      - docs/frontend-upgrade/09-react-quality-pass.md
+      - docs/frontend-upgrade/10-performance-pass.md
+      - docs/frontend-upgrade/11-validation-results.md
+      - docs/frontend-upgrade/12-before-after-review.md
+      - docs/frontend-upgrade/13-final-review.md
+      - artifacts/frontend-upgrade/before/
+      - artifacts/frontend-upgrade/after/
+      EOF
+
+      echo "Prepared frontend-upgrade documentation and artifact directories."
+    timeout: 120000
+
+  - id: verify_skills_and_mcp
+    bash: |
+      set -euo pipefail
+
+      {
+        echo "# Skills and Tools Check"
+        echo
+        echo "## Project-local skill directories"
+        for skill in emil-kowalski taste impeccable react-doctor; do
+          if [ -f ".claude/skills/$skill/SKILL.md" ]; then
+            echo "- $skill: present at .claude/skills/$skill/SKILL.md"
+          else
+            echo "- $skill: MISSING at .claude/skills/$skill/SKILL.md"
+          fi
+        done
+        echo
+        echo "## Chrome DevTools MCP config"
+        if [ -f ".archon/mcp/chrome-devtools.json" ]; then
+          echo "- chrome-devtools MCP config: present at .archon/mcp/chrome-devtools.json"
+          if command -v python3 >/dev/null 2>&1; then
+            python3 -m json.tool .archon/mcp/chrome-devtools.json >/dev/null && echo "- chrome-devtools MCP JSON: valid" || echo "- chrome-devtools MCP JSON: INVALID"
+          fi
+        else
+          echo "- chrome-devtools MCP config: MISSING at .archon/mcp/chrome-devtools.json"
+        fi
+        echo
+        echo "## Runtime notes"
+        echo "- Archon per-node skills only load for Claude nodes. This Codex-compatible workflow embeds equivalent criteria in prompts instead of using `skills:`."
+        echo "- Chrome DevTools MCP needs Node/npm and Chrome available on the machine running Archon."
+        echo "- If a skill/MCP is unavailable, later nodes must document the limitation and continue with explicit fallback criteria."
+      } > docs/frontend-upgrade/00-skills-and-tools-check.md
+
+      cat docs/frontend-upgrade/00-skills-and-tools-check.md
+    depends_on:
+      - setup_upgrade_artifacts
+    timeout: 120000
+
+  - id: detect_project_commands
+    bash: |
+      set -euo pipefail
+
+      {
+        echo "# Project Command Detection"
+        echo
+        echo "## Working directory"
+        pwd
+        echo
+        echo "## Git status"
+        git status --short || true
+        echo
+        echo "## Package manager hints"
+        ls -1 package.json bun.lockb bun.lock pnpm-lock.yaml package-lock.json yarn.lock 2>/dev/null || true
+        echo
+        echo "## package.json scripts"
+        if [ -f package.json ]; then
+          if command -v node >/dev/null 2>&1; then
+            node - <<'NODE'
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+            const scripts = pkg.scripts || {};
+            for (const [name, cmd] of Object.entries(scripts)) {
+              console.log(`- ${name}: ${cmd}`);
+            }
+            NODE
+          elif command -v bun >/dev/null 2>&1; then
+            bun -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); for (const [k,v] of Object.entries(pkg.scripts||{})) console.log('- '+k+': '+v);"
+          else
+            echo "package.json found, but neither node nor bun is available to parse scripts."
+          fi
+        else
+          echo "No package.json found at repo root."
+        fi
+        echo
+        echo "## Frontend-looking paths"
+        find . -maxdepth 5 -type f \( \
+          -name "next.config.*" -o \
+          -name "vite.config.*" -o \
+          -name "tailwind.config.*" -o \
+          -name "postcss.config.*" -o \
+          -name "app.*" -o \
+          -name "main.*" -o \
+          -name "layout.*" -o \
+          -name "page.*" -o \
+          -name "globals.css" -o \
+          -name "index.css" \
+        \) | sed 's#^\./##' | sort | head -250
+      } > docs/frontend-upgrade/00-project-command-detection.md
+
+      cat docs/frontend-upgrade/00-project-command-detection.md
+    depends_on:
+      - verify_skills_and_mcp
+    timeout: 120000
+
+  - id: frontend_inventory
+    prompt: |
+      You are auditing an existing frontend. This is a read-only audit phase for app source.
+
+      Mandatory skill usage:
+      - Use the react-doctor skill.
+      - Focus on React/component architecture, state placement, rendering boundaries, route structure, and maintainability.
+
+      Read:
+      - docs/frontend-upgrade/00-workflow-scope.md
+      - docs/frontend-upgrade/00-skills-and-tools-check.md
+      - docs/frontend-upgrade/00-project-command-detection.md
+      - package.json and workspace/package files
+      - frontend routes, layouts, pages, components, styles, Tailwind/theme files, UI primitives, hooks, state management, data-fetching code, and public assets
+
+      You may inspect frontend source code.
+      You must not modify app source code in this node.
+      You may only write documentation under docs/frontend-upgrade/.
+
+      Produce docs/frontend-upgrade/01-current-frontend-inventory.md with this structure:
+
+      # Current Frontend Inventory
+
+      ## Executive summary
+      ## Framework and app structure
+      ## Main routes and screens
+      ## Component architecture
+      ## Styling system
+      ## UX flows detected
+      ## Product constraints detected
+      ## SokrAI-specific safety constraints if relevant
+      ## Risk areas
+      ## Areas suitable for substantial redesign
+      ## Areas that should not be touched without approval
+      ## Recommended redesign intensity
+      Choose: light polish / substantial within current structure / aggressive shell rebuild.
+    depends_on:
+      - detect_project_commands
+    context: fresh
+    idle_timeout: 600000
+
+  - id: browser_baseline_capture
+    prompt: |
+      You are performing browser-based visual QA of the existing frontend before changes.
+
+      Mandatory tool usage:
+      - Use Chrome DevTools MCP if available.
+      - Inspect the rendered UI, not only code.
+      - Capture screenshots through browser tooling when possible.
+      - Check console errors, network failures, layout overflow, responsive breakpoints, and visible loading/error states.
+
+      Mandatory skill usage:
+      - Use impeccable to judge screenshot-level visual quality.
+
+      Read:
+      - docs/frontend-upgrade/00-workflow-scope.md
+      - docs/frontend-upgrade/00-project-command-detection.md
+      - docs/frontend-upgrade/01-current-frontend-inventory.md
+
+      Goal:
+      Run the app locally if possible, open it in Chrome via DevTools MCP, inspect the main screens, and capture baseline screenshots before source-code changes.
+
+      Important:
+      - Do not modify app source code.
+      - You may run install/dev/build commands only as needed to inspect the app.
+      - Prefer the detected package manager.
+      - If the app cannot run, document exactly why and continue with static/browser-limited audit.
+      - If Chrome DevTools MCP cannot connect, document the limitation clearly and still produce a useful audit.
+
+      Required breakpoints:
+      - desktop around 1440px
+      - desktop around 1280px
+      - tablet around 768px
+      - mobile around 390px
+
+      Save screenshots, if possible, under artifacts/frontend-upgrade/before/.
+
+      Produce docs/frontend-upgrade/02-browser-baseline-audit.md with this structure:
+
+      # Browser Baseline Audit
+
+      ## Run command used
+      ## URLs/screens inspected
+      ## Chrome DevTools MCP usage
+      ## Screenshots captured
+      ## First impression
+      ## Desktop findings
+      ## Tablet findings
+      ## Mobile findings
+      ## Console/network findings
+      ## State coverage
+      ## Most damaging visual issues
+      ## Most promising improvement opportunities
+      ## Implementation cautions
+    mcp: .archon/mcp/chrome-devtools.json
+    depends_on:
+      - frontend_inventory
+    context: shared
+    retry:
+      max_attempts: 2
+      delay_ms: 3000
+      on_error: transient
+    idle_timeout: 900000
+
+  - id: visual_ux_audit
+    prompt: |
+      You are a senior product designer and frontend UX auditor.
+
+      Mandatory skill usage:
+      - Use emil-kowalski for layout, interaction design, visual hierarchy, and interface craft.
+      - Use taste for product judgement and rejecting generic/overdesigned directions.
+      - Use impeccable for a strict premium visual quality bar.
+
+      This audit must be precise and critical, not polite.
+
+      Read:
+      - docs/frontend-upgrade/00-workflow-scope.md
+      - docs/frontend-upgrade/01-current-frontend-inventory.md
+      - docs/frontend-upgrade/02-browser-baseline-audit.md
+      - screenshots under artifacts/frontend-upgrade/before/ if available
+
+      This is still a no-code phase. Do not modify app source.
+
+      Produce docs/frontend-upgrade/03-visual-ux-audit.md with this structure:
+
+      # Visual UX Audit
+
+      ## Executive diagnosis
+      ## Blocking UX issues
+      For each: Problem / Evidence / Screen or route / Likely cause / Suggested direction / Risk if ignored.
+      ## Visual quality issues
+      Evaluate hierarchy, typography, spacing, surfaces, contrast, cards, buttons, inputs, icons, empty/loading/error states.
+      ## Product clarity issues
+      ## Interaction issues
+      ## Accessibility issues
+      ## Responsive issues
+      ## Performance and perceived performance issues
+      ## Premium differentiation opportunities
+      ## Anti-basic UI checklist
+      Include naked textarea, generic card grid, default Tailwind look, weak CTA, empty centered form, decorative AI gradients, meaningless KPI widgets, poor focus states, missing loading/error/recovery states.
+      ## Recommended redesign intensity
+      Choose and justify: light polish / substantial redesign within current structure / aggressive shell rebuild.
+    depends_on:
+      - browser_baseline_capture
+    context: shared
+    idle_timeout: 600000
+
+  - id: stitch_reference_review
+    prompt: |
+      This is an optional reference review. Use Stitch only if Stitch/MCP/project tools are available in this environment.
+
+      Mandatory skill usage:
+      - Use taste to decide which Stitch/reference ideas are actually worth transferring.
+      - Use impeccable to reject visual ideas that would lower the quality bar.
+      - Use emil-kowalski to translate reference patterns into better interaction/layout decisions.
+
+      Read:
+      - docs/frontend-upgrade/00-workflow-scope.md
+      - docs/frontend-upgrade/01-current-frontend-inventory.md
+      - docs/frontend-upgrade/02-browser-baseline-audit.md
+      - docs/frontend-upgrade/03-visual-ux-audit.md
+
+      Goal:
+      Compare the existing frontend with available Stitch/reference screens and extract visual/product inspiration.
+
+      Important:
+      - Stitch is inspiration, not source of truth.
+      - Do not write or edit Stitch screens.
+      - Do not modify app source code.
+      - If Stitch tools are unavailable, write that clearly and still provide a reference analysis based on repo/browser evidence.
+
+      Preferred references if available:
+      - SokrAI Premium Visual Concept
+      - Interview Mode Selection
+      - Remix of Interview Mode Selection
+      - Existing SokrAI workspace/report/intake concepts
+
+      Produce docs/frontend-upgrade/04-reference-analysis.md with this structure:
+
+      # Reference Analysis
+
+      ## Reference sources inspected
+      ## Ideas worth transferring
+      ## Ideas that should be rejected
+      ## Ideas that need adaptation
+      ## Candidate visual directions
+      For each: name / product feeling / best suited screens / risks / why it improves the current frontend.
+      ## Recommended direction
+    depends_on:
+      - visual_ux_audit
+    context: shared
+    retry:
+      max_attempts: 1
+      delay_ms: 3000
+      on_error: transient
+    idle_timeout: 600000
+
+  - id: frontend_improvement_questions
+    prompt: |
+      You are now preparing the required user-question phase.
+
+      Mandatory skill usage:
+      - Use taste to ask better product/design tradeoff questions.
+      - Use emil-kowalski to frame questions around actual interaction and layout decisions.
+      - Use impeccable to keep recommended defaults at a premium quality bar.
+
+      Read:
+      - docs/frontend-upgrade/00-workflow-scope.md
+      - docs/frontend-upgrade/01-current-frontend-inventory.md
+      - docs/frontend-upgrade/02-browser-baseline-audit.md
+      - docs/frontend-upgrade/03-visual-ux-audit.md
+      - docs/frontend-upgrade/04-reference-analysis.md if it exists
+
+      Your task:
+      Create targeted questions for the user about what improvements and changes they want before implementation.
+
+      Behavior:
+      - Ask specific questions based on the audited UI, not generic preferences.
+      - Every question must include your recommended default.
+      - Make it easy for the user to say "approve defaults".
+      - Do not implement code.
+      - Do not modify app source.
+
+      Required question areas:
+      1. Redesign intensity: light polish / substantial within current structure / aggressive shell rebuild.
+      2. Main screen priority: current task / recent-resume state / upload-input / progress-status / dashboard overview.
+      3. Product feeling: calm clinical-professional / premium SaaS / editorial guided workspace / dense analytical tool / futuristic AI product.
+      4. Navigation model: preserve / simplify / replace.
+      5. Component preservation: routes, backend-connected components, copy, current flows, visual identity elements.
+      6. Components/patterns to replace: generic cards, naked textareas, weak buttons, poor empty states, default layouts, other audited weaknesses.
+      7. States and recovery: empty/loading/error/saving/retry/stale/unavailable.
+      8. Responsive priority: desktop showcase vs equal mobile optimization.
+      9. Risk tolerance: conservative / medium / bold.
+      10. Acceptance bar: what would make the user say “now this frontend looks professional/premium enough”.
+
+      SokrAI hard constraints if relevant:
+      - Do not show technical/debug/audit internals in normal UI.
+      - Do not show report/PDF readiness, preview, export, dossier, or final report UI during active interview.
+      - Do not imply clinical diagnosis, triage, compliance approval, or automatic medical decision-making.
+      - Preserve human-review framing.
+
+      Produce docs/frontend-upgrade/05-questions-for-user.md with:
+
+      # Frontend Improvement Questions
+
+      ## Recommended default direction
+      ## Questions for the user
+      ## How to answer quickly
+      ## What happens after the user answers
+
+      End your response by showing the exact questions the user should answer at the approval gate.
+    depends_on:
+      - stitch_reference_review
+    context: shared
+    idle_timeout: 600000
+
+  - id: user_direction_gate
+    approval:
+      message: |
+        Review docs/frontend-upgrade/05-questions-for-user.md and reply with the improvements/changes you want.
+
+        You can answer freely, or simply approve with:
+        "approve defaults"
+
+        Your answer will be captured and used to synthesize the final design direction before implementation planning.
+      capture_response: true
+      on_reject:
+        prompt: |
+          The user rejected the question set or wants different questions.
+
+          Rejection feedback:
+          $REJECTION_REASON
+
+          Revise docs/frontend-upgrade/05-questions-for-user.md so the questions are more useful, specific, and aligned with the audited frontend.
+
+          Do not modify app source code.
+        max_attempts: 4
+    depends_on:
+      - frontend_improvement_questions
+
+  - id: synthesize_user_direction
+    prompt: |
+      Synthesize the user's answer into an approved frontend improvement direction.
+
+      Mandatory skill usage:
+      - Use taste to resolve product/design tradeoffs.
+      - Use emil-kowalski to translate user preferences into layout and interaction choices.
+      - Use impeccable to preserve a premium quality bar.
+
+      Read:
+      - docs/frontend-upgrade/00-workflow-scope.md
+      - docs/frontend-upgrade/03-visual-ux-audit.md
+      - docs/frontend-upgrade/04-reference-analysis.md if it exists
+      - docs/frontend-upgrade/05-questions-for-user.md
+
+      User answer captured at approval gate:
+      $user_direction_gate.output
+
+      If the user wrote "approve defaults" or gave incomplete answers, use the recommended defaults from docs/frontend-upgrade/05-questions-for-user.md and explicitly document which defaults were assumed.
+
+      Produce docs/frontend-upgrade/06-user-approved-improvement-direction.md with this structure:
+
+      # User-Approved Improvement Direction
+
+      ## User answer received
+      ## Approved defaults
+      ## Redesign intensity
+      ## Target product feeling
+      ## Main screen priority
+      ## Navigation decision
+      ## Components to preserve
+      ## Components/patterns to replace
+      ## State/recovery decision
+      ## Responsive decision
+      ## Risk tolerance
+      ## Acceptance bar
+      ## Explicit non-goals
+      ## Hard constraints
+      ## Implementation permission status
+
+      The implementation permission status must say:
+      "Implementation is NOT approved yet. The next node must create a plan and wait for the final approval gate."
+    depends_on:
+      - user_direction_gate
+    context: shared
+    idle_timeout: 600000
+
+  - id: upgrade_plan
+    prompt: |
+      Create the implementation plan for the approved existing-frontend premium upgrade.
+
+      Mandatory skill usage:
+      - Use emil-kowalski for screen-level layout and interaction planning.
+      - Use taste for product tradeoffs and visual direction.
+      - Use impeccable for final visual acceptance criteria.
+      - Use react-doctor for component architecture and rendering-risk planning.
+
+      Read:
+      - docs/frontend-upgrade/00-workflow-scope.md
+      - docs/frontend-upgrade/01-current-frontend-inventory.md
+      - docs/frontend-upgrade/02-browser-baseline-audit.md
+      - docs/frontend-upgrade/03-visual-ux-audit.md
+      - docs/frontend-upgrade/04-reference-analysis.md if it exists
+      - docs/frontend-upgrade/06-user-approved-improvement-direction.md
+
+      You may inspect source code again.
+      Do not modify app source code in this node.
+
+      Produce docs/frontend-upgrade/07-implementation-plan.md with this structure:
+
+      # Frontend Upgrade Implementation Plan
+
+      ## Summary
+      ## Approved direction
+      ## Layer 1 — Design system foundation
+      Include tokens, color, typography, spacing, radius, shadows, surfaces, focus states, buttons, inputs, cards/panels, tabs/navigation.
+      ## Layer 2 — Layout and app shell
+      ## Layer 3 — Core screen redesign
+      For each screen/component: current problem / proposed solution / files likely to change / constraints.
+      ## Layer 4 — States and recovery
+      Include empty/loading/saving/error/retry/unavailable/stale/resume states where relevant.
+      ## Layer 5 — Accessibility and interaction polish
+      ## Layer 6 — Performance and maintainability
+      ## Files likely to change
+      ## Files that must not change
+      ## Backend/API contracts to preserve
+      ## Product constraints
+      ## Risk assessment
+      ## Rollback strategy
+      ## Validation strategy
+      ## Acceptance criteria
+      ## Non-goals
+      ## Approval summary
+      Include: "I will implement...", "I will not implement...", "Risks...".
+    depends_on:
+      - synthesize_user_direction
+    context: shared
+    idle_timeout: 900000
+
+  - id: implementation_approval_gate
+    approval:
+      message: |
+        Review docs/frontend-upgrade/07-implementation-plan.md.
+
+        Approve only if you want Archon to modify the existing frontend according to this plan.
+
+        You can approve with extra comments, or reject with specific changes. On rejection, the plan will be revised before implementation.
+      capture_response: true
+      on_reject:
+        prompt: |
+          The user rejected the implementation plan with this feedback:
+          $REJECTION_REASON
+
+          Revise docs/frontend-upgrade/07-implementation-plan.md accordingly.
+
+          Read:
+          - docs/frontend-upgrade/07-implementation-plan.md
+          - docs/frontend-upgrade/06-user-approved-improvement-direction.md
+          - docs/frontend-upgrade/03-visual-ux-audit.md
+
+          Do not modify app source code.
+        max_attempts: 4
+    depends_on:
+      - upgrade_plan
+
+  - id: implement_frontend_upgrade
+    prompt: |
+      Implement the approved existing-frontend premium upgrade.
+
+      Mandatory skill usage:
+      - Use impeccable throughout implementation to avoid default-looking UI.
+      - Use emil-kowalski for layout, interaction, forms/composer, navigation, responsive behavior, and microcopy.
+      - Use taste to avoid generic SaaS dashboards, unnecessary widgets, decorative AI clichés, and overcomplication.
+      - Use react-doctor when changing React components, state, hooks, memoization, or layout composition.
+
+      Mandatory browser usage:
+      - Use Chrome DevTools MCP whenever a visual, responsive, console, network, or performance decision cannot be reliably judged from code alone.
+
+      Read first:
+      - docs/frontend-upgrade/00-workflow-scope.md
+      - docs/frontend-upgrade/01-current-frontend-inventory.md
+      - docs/frontend-upgrade/02-browser-baseline-audit.md
+      - docs/frontend-upgrade/03-visual-ux-audit.md
+      - docs/frontend-upgrade/04-reference-analysis.md if it exists
+      - docs/frontend-upgrade/06-user-approved-improvement-direction.md
+      - docs/frontend-upgrade/07-implementation-plan.md
+
+      Final approval comment:
+      $implementation_approval_gate.output
+
+      Implementation rules:
+      - You may now modify frontend source code.
+      - Do not rebuild the entire frontend from scratch unless the approved plan explicitly says so.
+      - Preserve existing routes unless the approved plan explicitly changes them.
+      - Preserve backend/API contracts.
+      - Preserve working product behavior.
+      - Do not invent unsupported product features.
+      - Do not expose debug/internal API/raw payload/system/backend implementation details in the normal UI.
+      - For SokrAI-like tools, do not show report/PDF readiness, preview, export, dossier, or final report UI during active interview.
+      - Keep human-review framing.
+      - Do not imply diagnosis, triage, compliance approval, or automatic clinical decision-making.
+      - Improve the current frontend substantially, not superficially.
+      - Every changed interactive component needs usable hover/focus/disabled/loading states.
+      - Every changed screen must remain responsive.
+      - Prefer maintainable components and tokens over one-off styling.
+
+      Avoid:
+      - generic SaaS dashboards
+      - random KPI cards
+      - decorative AI gradients
+      - default Tailwind-looking screens
+      - naked textareas
+      - weak CTAs
+      - nested card clutter
+      - excessive animation
+      - hidden raw backend/debug data in normal UI
+
+      After editing, update docs/frontend-upgrade/08-implementation-summary.md with this structure:
+
+      # Frontend Upgrade Implementation Summary
+
+      ## What changed
+      ## Files changed
+      ## Design system improvements
+      ## Screen/layout improvements
+      ## State/recovery improvements
+      ## Accessibility improvements
+      ## Responsive improvements
+      ## Backend contracts preserved
+      ## Product constraints preserved
+      ## Known limitations
+      ## Follow-up recommendations
+    mcp: .archon/mcp/chrome-devtools.json
+    depends_on:
+      - implementation_approval_gate
+    context: shared
+    retry:
+      max_attempts: 2
+      delay_ms: 5000
+      on_error: transient
+    idle_timeout: 1200000
+
+  - id: react_quality_pass
+    prompt: |
+      Perform a React/frontend quality pass after the implementation.
+
+      Mandatory skill usage:
+      - Use react-doctor.
+
+      Read:
+      - docs/frontend-upgrade/07-implementation-plan.md
+      - docs/frontend-upgrade/08-implementation-summary.md
+      - changed frontend files
+
+      Inspect for:
+      - unnecessary rerenders
+      - oversized components
+      - badly placed state
+      - prop drilling
+      - unstable callbacks/objects
+      - hydration risks
+      - client/server component mistakes if Next.js
+      - duplicated UI logic
+      - brittle responsive logic
+      - accessibility regressions
+      - maintainability issues
+
+      You may make small corrective code changes if needed.
+      Do not change product scope.
+      Do not add unsupported features.
+
+      Produce docs/frontend-upgrade/09-react-quality-pass.md with:
+
+      # React Quality Pass
+
+      ## Summary
+      ## Issues found
+      ## Fixes applied
+      ## Issues intentionally deferred
+      ## Rerender risks
+      ## Component architecture notes
+      ## Accessibility notes
+      ## Follow-ups
+    depends_on:
+      - implement_frontend_upgrade
+    context: shared
+    idle_timeout: 900000
+
+  - id: performance_pass
+    prompt: |
+      Perform a frontend performance and perceived-performance pass.
+
+      Mandatory tool usage:
+      - Use Chrome DevTools MCP for performance/console/network/layout inspection if available.
+
+      Mandatory skill usage:
+      - Use react-doctor for React-related performance risks.
+
+      Read:
+      - docs/frontend-upgrade/07-implementation-plan.md
+      - docs/frontend-upgrade/08-implementation-summary.md
+      - docs/frontend-upgrade/09-react-quality-pass.md
+      - changed frontend files
+      - package scripts
+
+      Check:
+      - bundle risk
+      - unnecessary dependencies
+      - image/font loading
+      - layout shift risks
+      - loading state quality
+      - excessive client-side rendering
+      - excessive animation
+      - slow initial route concerns
+      - expensive components
+      - whether build output reports warnings
+
+      You may make small corrective code changes if needed.
+      Do not change product scope.
+      Do not add unsupported features.
+
+      Produce docs/frontend-upgrade/10-performance-pass.md with:
+
+      # Performance Pass
+
+      ## Summary
+      ## Chrome DevTools MCP usage
+      ## Checks performed
+      ## Performance risks found
+      ## Fixes applied
+      ## Build/bundle observations
+      ## Perceived performance improvements
+      ## Deferred recommendations
+    mcp: .archon/mcp/chrome-devtools.json
+    depends_on:
+      - react_quality_pass
+    context: shared
+    idle_timeout: 900000
+
+  - id: validate_frontend
+    bash: |
+      set -euo pipefail
+
+      if [ ! -f package.json ]; then
+        echo "No package.json found; skipping validation." | tee docs/frontend-upgrade/11-validation-results.md
+        exit 0
+      fi
+
+      if [ -f bun.lockb ] || [ -f bun.lock ]; then
+        PM="bun"
+        RUN="bun run"
+        INSTALL="bun install"
+      elif [ -f pnpm-lock.yaml ]; then
+        PM="pnpm"
+        RUN="pnpm run"
+        INSTALL="pnpm install"
+      elif [ -f yarn.lock ]; then
+        PM="yarn"
+        RUN="yarn run"
+        INSTALL="yarn install"
+      else
+        PM="npm"
+        RUN="npm run"
+        INSTALL="npm install"
+      fi
+
+      if command -v node >/dev/null 2>&1; then
+        node - <<'NODE' > /tmp/frontend-upgrade-scripts.txt
+        const fs = require('fs');
+        const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+        const scripts = pkg.scripts || {};
+        for (const name of ['lint', 'typecheck', 'test', 'build']) {
+          if (scripts[name]) console.log(name);
+        }
+            NODE
+      elif command -v bun >/dev/null 2>&1; then
+        bun -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); for (const name of ['lint','typecheck','test','build']) if ((pkg.scripts||{})[name]) console.log(name);" > /tmp/frontend-upgrade-scripts.txt
+      else
+        : > /tmp/frontend-upgrade-scripts.txt
+      fi
+
+      {
+        echo "# Validation Results"
+        echo
+        echo "Package manager: $PM"
+        echo
+        echo "## Install"
+        echo '```'
+        echo "$INSTALL"
+        echo '```'
+      } > docs/frontend-upgrade/11-validation-results.md
+
+      $INSTALL >> docs/frontend-upgrade/11-validation-results.md 2>&1 || {
+        echo "Install failed." >> docs/frontend-upgrade/11-validation-results.md
+        cat docs/frontend-upgrade/11-validation-results.md
+        exit 1
+      }
+
+      while read -r SCRIPT; do
+        [ -z "$SCRIPT" ] && continue
+        {
+          echo
+          echo "## $SCRIPT"
+          echo '```'
+          echo "$RUN $SCRIPT"
+          echo '```'
+        } >> docs/frontend-upgrade/11-validation-results.md
+
+        $RUN "$SCRIPT" >> docs/frontend-upgrade/11-validation-results.md 2>&1 || {
+          echo "$SCRIPT failed." >> docs/frontend-upgrade/11-validation-results.md
+          cat docs/frontend-upgrade/11-validation-results.md
+          exit 1
+        }
+      done < /tmp/frontend-upgrade-scripts.txt
+
+      if [ ! -s /tmp/frontend-upgrade-scripts.txt ]; then
+        echo "No lint/typecheck/test/build scripts found." >> docs/frontend-upgrade/11-validation-results.md
+      fi
+
+      cat docs/frontend-upgrade/11-validation-results.md
+    depends_on:
+      - performance_pass
+    timeout: 900000
+
+  - id: browser_qa_after
+    prompt: |
+      Perform final browser QA after implementation.
+
+      Mandatory tool usage:
+      - Use Chrome DevTools MCP.
+      - Capture after screenshots.
+      - Compare before and after visually.
+      - Inspect responsive breakpoints.
+      - Check console errors.
+      - Check layout overflow.
+      - Check visible loading/error/empty states.
+
+      Mandatory skill usage:
+      - Use impeccable for screenshot-level quality review.
+      - Use emil-kowalski for interaction/layout review.
+      - Use taste to judge whether the result truly feels more professional.
+
+      Read:
+      - docs/frontend-upgrade/02-browser-baseline-audit.md
+      - docs/frontend-upgrade/03-visual-ux-audit.md
+      - docs/frontend-upgrade/06-user-approved-improvement-direction.md
+      - docs/frontend-upgrade/07-implementation-plan.md
+      - docs/frontend-upgrade/08-implementation-summary.md
+      - docs/frontend-upgrade/11-validation-results.md
+
+      Goal:
+      Run the app, inspect the improved frontend in Chrome, and compare before vs after.
+
+      Required:
+      - Capture after screenshots if browser tools are available.
+      - Save them under artifacts/frontend-upgrade/after/.
+      - Check desktop around 1440px.
+      - Check desktop around 1280px.
+      - Check tablet around 768px.
+      - Check mobile around 390px.
+      - Look for overlap, broken layout, weak hierarchy, bad spacing, inaccessible focus, hidden CTAs, poor loading/error states.
+      - Verify approved product constraints are still respected.
+      - For SokrAI-like active-interview screens, verify they do not expose report/PDF/export/final-report UI.
+
+      You may make small corrective fixes if you find clear visual bugs.
+      If you fix anything, update docs/frontend-upgrade/08-implementation-summary.md with a "Post-QA fixes" section.
+
+      Produce docs/frontend-upgrade/12-before-after-review.md with:
+
+      # Before / After Browser Review
+
+      ## Screens inspected
+      ## After screenshots
+      ## Before baseline summary
+      ## After result summary
+      ## What improved
+      ## What still feels weak
+      ## Desktop QA
+      ## Tablet QA
+      ## Mobile QA
+      ## Accessibility QA
+      ## Product constraint QA
+      ## Remaining risks
+      ## Recommended next PR
+    mcp: .archon/mcp/chrome-devtools.json
+    depends_on:
+      - validate_frontend
+    context: shared
+    retry:
+      max_attempts: 2
+      delay_ms: 5000
+      on_error: transient
+    idle_timeout: 1200000
+
+  - id: final_review
+    prompt: |
+      Produce the final workflow review and PR-ready summary.
+
+      Mandatory skill usage:
+      - Use taste to judge whether the final result matches the approved product direction.
+      - Use impeccable to judge whether the final result meets the visual quality bar.
+
+      Read:
+      - docs/frontend-upgrade/00-workflow-scope.md
+      - docs/frontend-upgrade/06-user-approved-improvement-direction.md
+      - docs/frontend-upgrade/07-implementation-plan.md
+      - docs/frontend-upgrade/08-implementation-summary.md
+      - docs/frontend-upgrade/09-react-quality-pass.md
+      - docs/frontend-upgrade/10-performance-pass.md
+      - docs/frontend-upgrade/11-validation-results.md
+      - docs/frontend-upgrade/12-before-after-review.md
+      - git diff
+
+      Produce docs/frontend-upgrade/13-final-review.md with:
+
+      # Final Frontend Upgrade Review
+
+      ## Executive summary
+      ## User-approved direction implemented
+      ## Major visual/UX improvements
+      ## Major technical improvements
+      ## Files changed
+      ## Validation results
+      ## Browser QA results
+      ## Screenshots
+      ## Product constraints preserved
+      ## Known limitations
+      ## Recommended follow-ups
+      ## PR description draft
+
+      The PR description draft must include:
+      - Summary
+      - Before/after evidence
+      - Tests/validation
+      - Risks
+      - Follow-ups
+
+      Also print the PR description draft in your final node response.
+    depends_on:
+      - browser_qa_after
+    context: fresh
+    idle_timeout: 600000
