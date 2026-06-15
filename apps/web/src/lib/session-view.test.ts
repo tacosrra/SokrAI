@@ -1224,4 +1224,76 @@ describe('deriveSessionPresentation', () => {
       resolvedGapsCount: 1,
     });
   });
+
+  it('keeps resolved module turns in conversation history for the active phase', () => {
+    const presentation = deriveSessionPresentation(resolvedProblemAudit({
+      module_chats: [
+        completedModuleChat('problem'),
+        {
+          chat_id: 'chat-solution',
+          proposal_id: 'session-1',
+          module: 'solution',
+          chat_status: 'waiting_for_user',
+          active_turn_id: 'solution-turn-2',
+          turns: [
+            {
+              turn_id: 'solution-turn-1',
+              chat_id: 'chat-solution',
+              proposal_id: 'session-1',
+              module: 'solution',
+              turn_seq: 1,
+              question_text: 'Que hace la solucion propuesta en terminos concretos?',
+              answer_text: 'no lo se',
+              turn_status: 'resolved',
+              agent_status: 'continue',
+              diagnosis: ['La respuesta sigue siendo vaga.'],
+              source_refs: [],
+              gap_refs: [],
+              audit_refs: [],
+              warnings: [],
+              created_at: '2026-05-24T14:31:00.000Z',
+              completed_at: '2026-05-24T14:32:00.000Z',
+            },
+            {
+              turn_id: 'solution-turn-2',
+              chat_id: 'chat-solution',
+              proposal_id: 'session-1',
+              module: 'solution',
+              turn_seq: 2,
+              question_text: 'En una frase operativa, que hace la solucion en el dia a dia?',
+              turn_status: 'awaiting_user',
+              agent_status: 'continue',
+              diagnosis: ['Falta definir la solucion.'],
+              source_refs: [],
+              gap_refs: [],
+              audit_refs: [],
+              warnings: [],
+              created_at: '2026-05-24T14:32:00.000Z',
+            },
+          ],
+          started_at: '2026-05-24T14:31:00.000Z',
+          warnings: [],
+        },
+      ],
+      generated_sections: [
+        generatedSection('problem'),
+      ],
+    }));
+
+    expect(presentation.conversationHistoryTurns).toEqual([
+      expect.objectContaining({
+        turn_seq: 1,
+        question_text: 'Que hace la solucion propuesta en terminos concretos?',
+        answer_text: 'no lo se',
+        status: 'resolved',
+      }),
+      expect.objectContaining({
+        turn_seq: 2,
+        question_text: 'En una frase operativa, que hace la solucion en el dia a dia?',
+        status: 'awaiting_user',
+      }),
+    ]);
+    expect(presentation.conversationHistoryByPhase.problem?.length).toBeGreaterThan(0);
+    expect(presentation.conversationHistoryByPhase.solution).toHaveLength(2);
+  });
 });

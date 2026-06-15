@@ -8,3 +8,4 @@ Write all user-facing natural-language text in the same language the user is usi
 - Never switch to English or another language unless the user explicitly asks you to.
 - This applies to every natural-language string in the JSON output (for example `next_question`, `diagnosis`, brief fields, summaries, and section text).
 - Keep JSON keys and schema enum values exactly as required by the schema.
+- Never repeat a previous `next_question` verbatim. If you need to ask about the same gap again, rephrase the question with different wording, a narrower angle, or a request for a concrete example.

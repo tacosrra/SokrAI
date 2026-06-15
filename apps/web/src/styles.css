@@ -271,8 +271,35 @@ a {
   background: rgba(236, 254, 255, 0.92);
 }
 
+.phase-rail__item--selected {
+  border-color: rgba(14, 116, 144, 0.5);
+  box-shadow: inset 0 0 0 1px rgba(14, 116, 144, 0.18);
+}
+
 .phase-rail__item--locked {
   opacity: 0.72;
+}
+
+.phase-rail__button {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.phase-rail__button--static {
+  cursor: default;
+}
+
+.phase-rail__button:focus-visible {
+  outline: 2px solid rgba(8, 145, 178, 0.45);
+  outline-offset: 2px;
+  border-radius: 14px;
 }
 
 .phase-rail__item-main {
@@ -315,6 +342,11 @@ a {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+.current-action-chip--history {
+  background: rgba(15, 118, 110, 0.12);
+  color: #0f766e;
 }
 
 .guidance-panel {

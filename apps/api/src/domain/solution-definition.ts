@@ -6,6 +6,10 @@ import type {
   SolutionDefinitionTurn,
 } from '../contracts/types';
 import { enforceSingleQuestion, isVagueAnswer } from './problem-definition';
+import {
+  ensureDistinctNextQuestion,
+  selectNonRepeatedQuestion,
+} from './conversation-question';
 
 const FORBIDDEN_TOPIC_PATTERNS = [
   /\bbusiness plan\b/i,
@@ -229,48 +233,100 @@ export function evaluateSolutionCompletion(solutionDefinition: SolutionDefinitio
   );
 }
 
-export function buildSolutionFallbackQuestion(solutionDefinition: SolutionDefinitionState): string {
+export function buildSolutionFallbackQuestionCandidates(
+  solutionDefinition: SolutionDefinitionState,
+): string[] {
   const missing = computeSolutionMissingInformation(solutionDefinition);
 
   if (missing.includes('solution_summary')) {
-    return 'Que hace la solucion propuesta en terminos concretos, sin entrar en costes ni regulacion?';
+    return [
+      'Que hace la solucion propuesta en terminos concretos, sin entrar en costes ni regulacion?',
+      'En una frase operativa, que hace la solucion en el dia a dia?',
+      'Que funcion concreta cumple la solucion para el usuario?',
+    ];
   }
 
   if (missing.includes('target_user')) {
-    return 'Que usuario o equipo usara directamente esta solucion y en que momento del trabajo?';
+    return [
+      'Que usuario o equipo usara directamente esta solucion y en que momento del trabajo?',
+      'Quien toca la solucion en la practica y en que paso del trabajo?',
+      'Que rol o equipo la usaria primero cuando este disponible?',
+    ];
   }
 
   if (missing.includes('how_it_works')) {
-    return 'Como funciona la solucion a nivel operativo, paso a paso, usando solo lo que ya sabeis?';
+    return [
+      'Como funciona la solucion a nivel operativo, paso a paso, usando solo lo que ya sabeis?',
+      'Que pasos seguiria un usuario desde que abre la solucion hasta terminar la tarea?',
+      'Que ocurre en la practica cuando alguien usa la solucion?',
+    ];
   }
 
   if (missing.includes('workflow_change')) {
-    return 'Que cambia en el flujo de trabajo actual cuando se usa esta solucion?';
+    return [
+      'Que cambia en el flujo de trabajo actual cuando se usa esta solucion?',
+      'Que tarea o paso deja de hacerse igual gracias a la solucion?',
+      'Donde encaja la solucion en el flujo actual y que sustituye o acelera?',
+    ];
   }
 
   if (missing.includes('current_solutions')) {
-    return 'Que soluciones o alternativas se usan hoy y que limitacion concreta mantiene abierta esta propuesta?';
+    return [
+      'Que soluciones o alternativas se usan hoy y que limitacion concreta mantiene abierta esta propuesta?',
+      'Que hace el equipo hoy sin esta solucion y por que no basta?',
+      'Que alternativa actual sigue dejando el problema sin resolver?',
+    ];
   }
 
   if (missing.includes('value_differential')) {
-    return 'Que diferencia de valor aporta esta solucion frente a las alternativas actuales?';
+    return [
+      'Que diferencia de valor aporta esta solucion frente a las alternativas actuales?',
+      'Que mejora concreta notaria el usuario respecto a como se hace hoy?',
+      'Por que esta solucion merece la pena frente a lo que ya existe?',
+    ];
   }
 
   if (missing.includes('scope_limits')) {
-    return 'Que queda dentro y fuera del alcance de esta solucion en esta primera version?';
+    return [
+      'Que queda dentro y fuera del alcance de esta solucion en esta primera version?',
+      'Que casos cubriria la primera version y cuales quedarian fuera?',
+      'Que frontera practica limita lo que la solucion hara al principio?',
+    ];
   }
 
   if (missing.includes('assumptions')) {
-    return 'Que supuesto importante sobre la solucion sigue sin validar?';
+    return [
+      'Que supuesto importante sobre la solucion sigue sin validar?',
+      'Que creéis que sera verdad sobre la solucion pero todavia no habeis comprobado?',
+      'Que hipotesis sobre el funcionamiento sigue abierta?',
+    ];
   }
 
   const firstAmbiguity = solutionDefinition.ambiguities_remaining[0];
 
   if (firstAmbiguity) {
-    return `Puedes concretar este punto de la solucion que sigue ambiguo: ${firstAmbiguity}?`;
+    return [
+      `Puedes concretar este punto de la solucion que sigue ambiguo: ${firstAmbiguity}?`,
+      `Que ejemplo concreto aclararia este punto pendiente de la solucion: ${firstAmbiguity}?`,
+      `Que detalle adicional cerraria esta ambiguedad: ${firstAmbiguity}?`,
+    ];
   }
 
-  return 'Que detalle falta para que la solucion quede claramente definida sin inventar informacion?';
+  return [
+    'Que detalle falta para que la solucion quede claramente definida sin inventar informacion?',
+    'Que parte de la solucion sigue poco clara y conviene precisar ahora?',
+    'Que ejemplo concreto ayudaria a cerrar la definicion de la solucion?',
+  ];
+}
+
+export function buildSolutionFallbackQuestion(
+  solutionDefinition: SolutionDefinitionState,
+  recentQuestions: string[] = [],
+): string {
+  return selectNonRepeatedQuestion(
+    buildSolutionFallbackQuestionCandidates(solutionDefinition),
+    recentQuestions,
+  );
 }
 
 export function selectSolutionGapRefs(
@@ -401,7 +457,7 @@ export function renderSolutionSection(
 export function enforceSolutionTurnGuardrails(
   turn: SolutionDefinitionTurn,
   latestAnswer?: string,
-  options: { isInitialRun?: boolean } = {},
+  options: { isInitialRun?: boolean; recentQuestions?: string[] } = {},
 ): {
   turn: SolutionDefinitionTurn;
   warnings: string[];
@@ -410,6 +466,7 @@ export function enforceSolutionTurnGuardrails(
   latestAnswerWasVague: boolean;
 } {
   const warnings: string[] = [];
+  const recentQuestions = options.recentQuestions ?? [];
   const nextQuestion = enforceSingleQuestion(turn.next_question);
   const normalizedTurn: SolutionDefinitionTurn = {
     ...turn,
@@ -441,14 +498,20 @@ export function enforceSolutionTurnGuardrails(
 
   if (questionContainsForbiddenTopic) {
     warnings.push('Model drifted into a forbidden solution topic; question was replaced with a fallback');
-    normalizedTurn.next_question = buildSolutionFallbackQuestion(normalizedTurn.updated_solution_definition);
+    normalizedTurn.next_question = buildSolutionFallbackQuestion(
+      normalizedTurn.updated_solution_definition,
+      recentQuestions,
+    );
   }
 
   if (solutionStateContainsForbiddenTopic(normalizedTurn.updated_solution_definition)) {
     warnings.push('Model drifted into forbidden solution content; forcing clarification');
     normalizedTurn.agent_status = 'continue';
     normalizedTurn.completion_reason = '';
-    normalizedTurn.next_question = buildSolutionFallbackQuestion(normalizedTurn.updated_solution_definition);
+    normalizedTurn.next_question = buildSolutionFallbackQuestion(
+      normalizedTurn.updated_solution_definition,
+      recentQuestions,
+    );
   }
 
   const isComplete = evaluateSolutionCompletion(normalizedTurn.updated_solution_definition);
@@ -470,19 +533,28 @@ export function enforceSolutionTurnGuardrails(
     normalizedTurn.agent_status = 'continue';
     normalizedTurn.completion_reason = '';
     normalizedTurn.next_question =
-      normalizedTurn.next_question || buildSolutionFallbackQuestion(normalizedTurn.updated_solution_definition);
+      normalizedTurn.next_question || buildSolutionFallbackQuestion(
+        normalizedTurn.updated_solution_definition,
+        recentQuestions,
+      );
   }
 
   if (normalizedTurn.agent_status === 'done' && !isComplete) {
     warnings.push('Model marked solution lane as done before completion criteria were met');
     normalizedTurn.agent_status = 'continue';
     normalizedTurn.completion_reason = '';
-    normalizedTurn.next_question = buildSolutionFallbackQuestion(normalizedTurn.updated_solution_definition);
+    normalizedTurn.next_question = buildSolutionFallbackQuestion(
+      normalizedTurn.updated_solution_definition,
+      recentQuestions,
+    );
   }
 
   if (normalizedTurn.agent_status !== 'done' && !normalizedTurn.next_question) {
     warnings.push('Model did not produce a usable solution question; fallback question generated');
-    normalizedTurn.next_question = buildSolutionFallbackQuestion(normalizedTurn.updated_solution_definition);
+    normalizedTurn.next_question = buildSolutionFallbackQuestion(
+      normalizedTurn.updated_solution_definition,
+      recentQuestions,
+    );
   }
 
   if (normalizedTurn.agent_status === 'done') {
@@ -494,7 +566,25 @@ export function enforceSolutionTurnGuardrails(
     warnings.push('Latest solution answer was vague; clarification was narrowed');
     normalizedTurn.agent_status = 'continue';
     normalizedTurn.completion_reason = '';
-    normalizedTurn.next_question = buildSolutionFallbackQuestion(normalizedTurn.updated_solution_definition);
+    normalizedTurn.next_question = buildSolutionFallbackQuestion(
+      normalizedTurn.updated_solution_definition,
+      recentQuestions,
+    );
+  }
+
+  if (normalizedTurn.agent_status !== 'done' && normalizedTurn.next_question) {
+    const distinctQuestion = ensureDistinctNextQuestion({
+      nextQuestion: normalizedTurn.next_question,
+      recentQuestions,
+      fallbackCandidates: buildSolutionFallbackQuestionCandidates(
+        normalizedTurn.updated_solution_definition,
+      ),
+    });
+
+    if (distinctQuestion.wasRephrased) {
+      warnings.push('Next question repeated a previous turn; question was rephrased');
+      normalizedTurn.next_question = distinctQuestion.question;
+    }
   }
 
   return {

@@ -8,6 +8,10 @@ import type {
   StructuredBrief,
 } from '../contracts/types';
 import { enforceSingleQuestion, isVagueAnswer } from './problem-definition';
+import {
+  ensureDistinctNextQuestion,
+  selectNonRepeatedQuestion,
+} from './conversation-question';
 
 export const MEDICAL_DEVICE_TRIAGE_REVIEW_WARNING = 'requires competent human review';
 
@@ -132,7 +136,8 @@ export type MedicalDeviceTriageGuardrailInterventionReason =
   | 'forbidden_output_replaced'
   | 'vague_answer_reasked'
   | 'premature_completion_blocked'
-  | 'missing_question_fallback';
+  | 'missing_question_fallback'
+  | 'repeated_question_rephrased';
 
 export interface MedicalDeviceTriageGuardrailIntervention {
   applied: boolean;
@@ -427,36 +432,76 @@ export function computeMedicalDeviceMissingInformation(state: MedicalDeviceTriag
   return Array.from(new Set(missing));
 }
 
-export function buildMedicalDeviceFallbackQuestion(state: MedicalDeviceTriageState): string {
+export function buildMedicalDeviceFallbackQuestionCandidates(
+  state: MedicalDeviceTriageState,
+): string[] {
   const missing = computeMedicalDeviceMissingInformation(state);
 
   if (missing.includes('intended_use_claims')) {
-    return 'Que uso previsto o afirmaciones funcionales deberia revisar una persona competente?';
+    return [
+      'Que uso previsto o afirmaciones funcionales deberia revisar una persona competente?',
+      'Que afirmaciones sobre el uso previsto siguen poco claras para revision humana competente?',
+      'Que dice la propuesta que hara el sistema y que parte conviene precisar?',
+    ];
   }
 
   if (missing.includes('clinical_decision_role')) {
-    return 'Que papel tendria la propuesta en decisiones clinicas, triaje, diagnostico, seguimiento o recomendacion?';
+    return [
+      'Que papel tendria la propuesta en decisiones clinicas, triaje, diagnostico, seguimiento o recomendacion?',
+      'Influiria la propuesta en triaje, diagnostico, seguimiento o recomendaciones clinicas?',
+      'Que decision o paso clinico podria verse afectado por esta propuesta?',
+    ];
   }
 
   if (missing.includes('evidence_needed')) {
-    return 'Que evidencia falta para aclarar las senales o incertidumbre sin emitir una clasificacion?';
+    return [
+      'Que evidencia falta para aclarar las senales o incertidumbre sin emitir una clasificacion?',
+      'Que prueba, dato o referencia ayudaria a aclarar las senales abiertas?',
+      'Que evidencia concreta falta para cerrar la incertidumbre sin clasificar el producto?',
+    ];
   }
 
   if (missing.includes('human_review_plan')) {
-    return 'Quien realizaria la revision humana competente y cuando se activaria?';
+    return [
+      'Quien realizaria la revision humana competente y cuando se activaria?',
+      'Que persona o rol haria la supervision humana y en que momento del flujo?',
+      'En que punto entraria una persona competente para revisar la salida?',
+    ];
   }
 
   if (missing.includes('uncertainties')) {
-    return 'Que incertidumbre concreta sobre el uso previsto queda pendiente para revision humana competente?';
+    return [
+      'Que incertidumbre concreta sobre el uso previsto queda pendiente para revision humana competente?',
+      'Que duda sobre el uso previsto sigue abierta y requiere revision humana?',
+      'Que punto sobre medical-device triage conviene aclarar antes de seguir?',
+    ];
   }
 
   const firstUncertainty = state.uncertainties[0];
 
   if (firstUncertainty) {
-    return `Puedes concretar esta incertidumbre para revision humana competente: ${firstUncertainty}?`;
+    return [
+      `Puedes concretar esta incertidumbre para revision humana competente: ${firstUncertainty}?`,
+      `Que ejemplo concreto aclararia esta incertidumbre: ${firstUncertainty}?`,
+      `Que detalle adicional cerraria este punto pendiente: ${firstUncertainty}?`,
+    ];
   }
 
-  return 'Que gap o pregunta queda abierta sobre las senales o incertidumbre de medical-device triage?';
+  return [
+    'Que gap o pregunta queda abierta sobre las senales o incertidumbre de medical-device triage?',
+    'Que senal o incertidumbre sobre el producto sigue sin aclarar?',
+    'Que detalle sobre el uso previsto ayudaria a cerrar el triage?',
+  ];
+}
+
+export function buildMedicalDeviceFallbackQuestion(
+  state: MedicalDeviceTriageState,
+  recentQuestions: string[] = [],
+): string {
+  return selectNonRepeatedQuestion(
+    buildMedicalDeviceFallbackQuestionCandidates(state),
+    recentQuestions,
+  );
 }
 
 export function evaluateMedicalDeviceCompletion(state: MedicalDeviceTriageState): boolean {
@@ -649,6 +694,7 @@ export function containsForbiddenMedicalDeviceOutput(value: unknown): boolean {
 export function enforceMedicalDeviceTriageTurnGuardrails(
   turn: MedicalDeviceTriageTurn,
   latestAnswer?: string,
+  options: { recentQuestions?: string[] } = {},
 ): {
   turn: MedicalDeviceTriageTurn;
   warnings: string[];
@@ -658,6 +704,7 @@ export function enforceMedicalDeviceTriageTurnGuardrails(
   intervention: MedicalDeviceTriageGuardrailIntervention;
 } {
   const warnings: string[] = [];
+  const recentQuestions = options.recentQuestions ?? [];
   const interventionReasons: MedicalDeviceTriageGuardrailInterventionReason[] = [];
   const normalizedFields = new Set<string>();
   let fallbackQuestionApplied = false;
@@ -686,7 +733,10 @@ export function enforceMedicalDeviceTriageTurnGuardrails(
     normalizedTurn.agent_status = 'continue';
     normalizedTurn.completion_reason = '';
     normalizedTurn.updated_medical_device_triage.triage_status = 'uncertain';
-    normalizedTurn.next_question = buildMedicalDeviceFallbackQuestion(normalizedTurn.updated_medical_device_triage);
+    normalizedTurn.next_question = buildMedicalDeviceFallbackQuestion(
+      normalizedTurn.updated_medical_device_triage,
+      recentQuestions,
+    );
     fallbackQuestionApplied = true;
   }
 
@@ -695,7 +745,10 @@ export function enforceMedicalDeviceTriageTurnGuardrails(
     interventionReasons.push('vague_answer_reasked');
     normalizedTurn.agent_status = 'continue';
     normalizedTurn.completion_reason = '';
-    normalizedTurn.next_question = buildMedicalDeviceFallbackQuestion(normalizedTurn.updated_medical_device_triage);
+    normalizedTurn.next_question = buildMedicalDeviceFallbackQuestion(
+      normalizedTurn.updated_medical_device_triage,
+      recentQuestions,
+    );
     fallbackQuestionApplied = true;
   }
 
@@ -706,14 +759,20 @@ export function enforceMedicalDeviceTriageTurnGuardrails(
     interventionReasons.push('premature_completion_blocked');
     normalizedTurn.agent_status = 'continue';
     normalizedTurn.completion_reason = '';
-    normalizedTurn.next_question = buildMedicalDeviceFallbackQuestion(normalizedTurn.updated_medical_device_triage);
+    normalizedTurn.next_question = buildMedicalDeviceFallbackQuestion(
+      normalizedTurn.updated_medical_device_triage,
+      recentQuestions,
+    );
     fallbackQuestionApplied = true;
   }
 
   if (normalizedTurn.agent_status !== 'done' && !normalizedTurn.next_question) {
     warnings.push('Model did not produce a usable medical-device triage question; fallback question generated');
     interventionReasons.push('missing_question_fallback');
-    normalizedTurn.next_question = buildMedicalDeviceFallbackQuestion(normalizedTurn.updated_medical_device_triage);
+    normalizedTurn.next_question = buildMedicalDeviceFallbackQuestion(
+      normalizedTurn.updated_medical_device_triage,
+      recentQuestions,
+    );
     fallbackQuestionApplied = true;
   }
 
@@ -721,6 +780,23 @@ export function enforceMedicalDeviceTriageTurnGuardrails(
     normalizedTurn.next_question = '';
     normalizedTurn.completion_reason =
       normalizedTurn.completion_reason || 'medical-device triage gaps sufficiently clarified for human review';
+  }
+
+  if (normalizedTurn.agent_status !== 'done' && normalizedTurn.next_question) {
+    const distinctQuestion = ensureDistinctNextQuestion({
+      nextQuestion: normalizedTurn.next_question,
+      recentQuestions,
+      fallbackCandidates: buildMedicalDeviceFallbackQuestionCandidates(
+        normalizedTurn.updated_medical_device_triage,
+      ),
+    });
+
+    if (distinctQuestion.wasRephrased) {
+      warnings.push('Next question repeated a previous turn; question was rephrased');
+      interventionReasons.push('repeated_question_rephrased');
+      normalizedTurn.next_question = distinctQuestion.question;
+      fallbackQuestionApplied = true;
+    }
   }
 
   return {

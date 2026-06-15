@@ -13,6 +13,7 @@ import type {
   ResourcesPilotViabilityTurn,
 } from '../contracts/types';
 import type { AppConfig } from '../config/env';
+import { collectRecentQuestionTexts } from '../domain/conversation-question';
 import {
   buildResourcesPilotViabilityFallbackQuestion,
   buildResourcesPilotViabilitySectionSourceRefs,
@@ -221,6 +222,11 @@ export class ResourcesPilotViabilityService {
         diagnosis: turn.diagnosis,
       }));
 
+    const recentQuestions = collectRecentQuestionTexts({
+      resolvedTurns: recentTurns,
+      currentQuestionText: activeTurn?.question_text,
+    });
+
     try {
       const modelTurn = await this.llmOrchestrator.runResourcesPilotViability({
         structuredBrief: session.latest_structured_brief_json,
@@ -231,7 +237,11 @@ export class ResourcesPilotViabilityService {
         recentTurns,
         latestAnswer: activeTurn?.answer_text,
       });
-      const guarded = enforceResourcesPilotViabilityTurnGuardrails(modelTurn.output, activeTurn?.answer_text);
+      const guarded = enforceResourcesPilotViabilityTurnGuardrails(
+        modelTurn.output,
+        activeTurn?.answer_text,
+        { recentQuestions },
+      );
 
       if (
         guarded.turn.agent_status !== 'done' &&

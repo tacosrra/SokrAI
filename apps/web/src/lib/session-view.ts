@@ -4,6 +4,7 @@ import type {
   AlphaGap,
   AlphaModule,
   BasicAlphaReport,
+  ChatTurn,
   ConversationTurn,
   GeneratedSection,
   ModuleChat,
@@ -49,6 +50,14 @@ export type PhasePrimaryAction =
   | 'download_pdf'
   | 'review_report'
   | 'recover';
+
+export interface ConversationHistoryTurn {
+  id: string;
+  turn_seq: number;
+  question_text: string;
+  answer_text: string | null;
+  status: 'awaiting_user' | 'processing' | 'resolved' | 'failed';
+}
 
 export interface SessionChecklistItem {
   id:
@@ -145,6 +154,8 @@ export interface SessionPresentation {
   completionReason: string;
   warnings: string[];
   turns: ConversationTurn[];
+  conversationHistoryTurns: ConversationHistoryTurn[];
+  conversationHistoryByPhase: Partial<Record<PhaseId, ConversationHistoryTurn[]>>;
   latestRun: AgentRun | null;
   latestSnapshot: Snapshot | null;
   runCount: number;
@@ -208,6 +219,12 @@ const PHASE_GAP_MODULE: Partial<Record<PhaseId, AlphaModule>> = {
   medical_device_triage: 'medical_device_triage',
   resources_pilot_viability: 'resources_pilot_viability',
 };
+
+export const CONVERSATIONAL_PHASE_IDS = Object.keys(PHASE_GAP_MODULE) as PhaseId[];
+
+export function getPhaseLabel(phaseId: PhaseId): string {
+  return PHASE_DETAILS[phaseId]?.label ?? phaseId;
+}
 
 const COMPLETE_SECTION_STATUSES = ['generated', 'accepted'] as const;
 const VISIBLE_SECTION_STATUSES = ['draft', ...COMPLETE_SECTION_STATUSES, 'needs_revision'] as const;
@@ -394,6 +411,170 @@ function findLatestVisibleSection(
       section.section_kind === sectionKind &&
       VISIBLE_SECTION_STATUSES.includes(section.section_status as typeof VISIBLE_SECTION_STATUSES[number]),
     ) ?? null;
+}
+
+function mapChatTurnToHistoryTurn(turn: ChatTurn): ConversationHistoryTurn {
+  return {
+    id: turn.turn_id,
+    turn_seq: turn.turn_seq,
+    question_text: turn.question_text,
+    answer_text: turn.answer_text ?? null,
+    status: turn.turn_status === 'skipped' ? 'resolved' : turn.turn_status,
+  };
+}
+
+function mapConversationTurnToHistoryTurn(turn: ConversationTurn): ConversationHistoryTurn {
+  return {
+    id: turn.id,
+    turn_seq: turn.turn_seq,
+    question_text: turn.question_text,
+    answer_text: turn.answer_text,
+    status: turn.status,
+  };
+}
+
+function resolveModuleChatForPhase(
+  phaseId: PhaseId,
+  moduleChats: {
+    problem: ModuleChat | null;
+    solution: ModuleChat | null;
+    data_ai_privacy: ModuleChat | null;
+    medical_device_triage: ModuleChat | null;
+    resources_pilot_viability: ModuleChat | null;
+  },
+): ModuleChat | null {
+  switch (phaseId) {
+    case 'problem':
+      return moduleChats.problem;
+    case 'solution':
+      return moduleChats.solution;
+    case 'data_ai_privacy':
+      return moduleChats.data_ai_privacy;
+    case 'medical_device_triage':
+      return moduleChats.medical_device_triage;
+    case 'resources_pilot_viability':
+      return moduleChats.resources_pilot_viability;
+    default:
+      return null;
+  }
+}
+
+function resolveActiveModuleChatForHistory(params: {
+  currentPhaseId: PhaseId;
+  currentResourcesPilotViabilityQuestion: string;
+  currentMedicalDeviceTriageQuestion: string;
+  currentDataAiPrivacyQuestion: string;
+  currentSolutionQuestion: string;
+  problemModuleChat: ModuleChat | null;
+  solutionModuleChat: ModuleChat | null;
+  dataAiPrivacyModuleChat: ModuleChat | null;
+  medicalDeviceTriageModuleChat: ModuleChat | null;
+  resourcesPilotViabilityModuleChat: ModuleChat | null;
+}): ModuleChat | null {
+  if (
+    params.currentResourcesPilotViabilityQuestion ||
+    params.currentPhaseId === 'resources_pilot_viability'
+  ) {
+    return params.resourcesPilotViabilityModuleChat;
+  }
+
+  if (
+    params.currentMedicalDeviceTriageQuestion ||
+    params.currentPhaseId === 'medical_device_triage'
+  ) {
+    return params.medicalDeviceTriageModuleChat;
+  }
+
+  if (params.currentDataAiPrivacyQuestion || params.currentPhaseId === 'data_ai_privacy') {
+    return params.dataAiPrivacyModuleChat;
+  }
+
+  if (params.currentSolutionQuestion || params.currentPhaseId === 'solution') {
+    return params.solutionModuleChat;
+  }
+
+  return params.problemModuleChat;
+}
+
+export function deriveConversationHistoryForPhase(
+  phaseId: PhaseId,
+  params: {
+    auditTurns: ConversationTurn[];
+    problemModuleChat: ModuleChat | null;
+    solutionModuleChat: ModuleChat | null;
+    dataAiPrivacyModuleChat: ModuleChat | null;
+    medicalDeviceTriageModuleChat: ModuleChat | null;
+    resourcesPilotViabilityModuleChat: ModuleChat | null;
+  },
+): ConversationHistoryTurn[] {
+  if (!CONVERSATIONAL_PHASE_IDS.includes(phaseId)) {
+    return [];
+  }
+
+  const moduleChat = resolveModuleChatForPhase(phaseId, {
+    problem: params.problemModuleChat,
+    solution: params.solutionModuleChat,
+    data_ai_privacy: params.dataAiPrivacyModuleChat,
+    medical_device_triage: params.medicalDeviceTriageModuleChat,
+    resources_pilot_viability: params.resourcesPilotViabilityModuleChat,
+  });
+
+  if (moduleChat && moduleChat.turns.length > 0) {
+    return moduleChat.turns.map(mapChatTurnToHistoryTurn);
+  }
+
+  if (phaseId === 'problem') {
+    return params.auditTurns.map(mapConversationTurnToHistoryTurn);
+  }
+
+  return [];
+}
+
+export function deriveConversationHistoryByPhase(params: {
+  auditTurns: ConversationTurn[];
+  problemModuleChat: ModuleChat | null;
+  solutionModuleChat: ModuleChat | null;
+  dataAiPrivacyModuleChat: ModuleChat | null;
+  medicalDeviceTriageModuleChat: ModuleChat | null;
+  resourcesPilotViabilityModuleChat: ModuleChat | null;
+}): Partial<Record<PhaseId, ConversationHistoryTurn[]>> {
+  const historyByPhase: Partial<Record<PhaseId, ConversationHistoryTurn[]>> = {};
+
+  for (const phaseId of CONVERSATIONAL_PHASE_IDS) {
+    const turns = deriveConversationHistoryForPhase(phaseId, params);
+
+    if (turns.length > 0) {
+      historyByPhase[phaseId] = turns;
+    }
+  }
+
+  return historyByPhase;
+}
+
+export function deriveConversationHistoryTurns(params: {
+  auditTurns: ConversationTurn[];
+  currentPhaseId: PhaseId;
+  currentResourcesPilotViabilityQuestion: string;
+  currentMedicalDeviceTriageQuestion: string;
+  currentDataAiPrivacyQuestion: string;
+  currentSolutionQuestion: string;
+  problemModuleChat: ModuleChat | null;
+  solutionModuleChat: ModuleChat | null;
+  dataAiPrivacyModuleChat: ModuleChat | null;
+  medicalDeviceTriageModuleChat: ModuleChat | null;
+  resourcesPilotViabilityModuleChat: ModuleChat | null;
+}): ConversationHistoryTurn[] {
+  const activeModuleChat = resolveActiveModuleChatForHistory(params);
+
+  if (activeModuleChat && activeModuleChat.turns.length > 0) {
+    return activeModuleChat.turns.map(mapChatTurnToHistoryTurn);
+  }
+
+  if (params.currentPhaseId === 'problem' || !activeModuleChat) {
+    return params.auditTurns.map(mapConversationTurnToHistoryTurn);
+  }
+
+  return deriveConversationHistoryForPhase(params.currentPhaseId, params);
 }
 
 function isRetryableFailedConversationTurn(
@@ -966,6 +1147,27 @@ export function deriveSessionPresentation(
       resources_pilot_viability: latestResourcesPilotViabilitySection,
     },
   });
+  const conversationHistoryByPhase = deriveConversationHistoryByPhase({
+    auditTurns: audit.turns,
+    problemModuleChat,
+    solutionModuleChat,
+    dataAiPrivacyModuleChat,
+    medicalDeviceTriageModuleChat,
+    resourcesPilotViabilityModuleChat,
+  });
+  const conversationHistoryTurns = deriveConversationHistoryTurns({
+    auditTurns: audit.turns,
+    currentPhaseId: phaseProgress.currentPhaseId,
+    currentResourcesPilotViabilityQuestion,
+    currentMedicalDeviceTriageQuestion,
+    currentDataAiPrivacyQuestion,
+    currentSolutionQuestion,
+    problemModuleChat,
+    solutionModuleChat,
+    dataAiPrivacyModuleChat,
+    medicalDeviceTriageModuleChat,
+    resourcesPilotViabilityModuleChat,
+  });
 
   return {
     sessionId: audit.session.id,
@@ -1008,6 +1210,8 @@ export function deriveSessionPresentation(
       '',
     warnings: latestSnapshot?.warnings_json ?? [],
     turns: audit.turns,
+    conversationHistoryTurns,
+    conversationHistoryByPhase,
     latestRun,
     latestSnapshot,
     runCount: audit.runs.length,

@@ -11,6 +11,7 @@ import type {
   StructuredBrief,
 } from '../contracts/types';
 import type { AppConfig } from '../config/env';
+import { collectRecentQuestionTexts } from '../domain/conversation-question';
 import {
   buildProblemSectionSourceRefs,
   classifyProblemGapStatuses,
@@ -100,6 +101,11 @@ export class ProblemDefinitionService {
       diagnosis: turn.diagnosis_json,
     }));
 
+    const recentQuestions = collectRecentQuestionTexts({
+      resolvedTurns: recentTurns,
+      currentQuestionText: openTurn?.question_text,
+    });
+
     try {
       const modelTurn = await this.llmOrchestrator.runProblemDefinition({
         structuredBrief: session.latest_structured_brief_json,
@@ -111,7 +117,7 @@ export class ProblemDefinitionService {
         session.latest_structured_brief_json,
         modelTurn.output,
         openTurn?.answer_text ?? undefined,
-        { isInitialRun: command.trigger === 'start' },
+        { isInitialRun: command.trigger === 'start', recentQuestions },
       );
 
       if (
@@ -239,7 +245,7 @@ export class ProblemDefinitionService {
     brief: StructuredBrief,
     turn: ProblemDefinitionTurn,
     latestAnswer?: string,
-    options?: { isInitialRun?: boolean },
+    options?: { isInitialRun?: boolean; recentQuestions?: string[] },
   ) {
     return enforceTurnGuardrails(brief, turn, latestAnswer, options);
   }

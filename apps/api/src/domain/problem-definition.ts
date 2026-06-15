@@ -5,6 +5,10 @@ import type {
   ProposalSource,
   StructuredBrief,
 } from '../contracts/types';
+import {
+  ensureDistinctNextQuestion,
+  selectNonRepeatedQuestion,
+} from './conversation-question';
 
 const VAGUE_PATTERNS = [
   /^no lo se$/i,
@@ -342,40 +346,84 @@ export function evaluateCompletion(problemDefinition: ProblemDefinitionState): b
   );
 }
 
-export function buildFallbackQuestion(problemDefinition: ProblemDefinitionState): string {
+export function buildFallbackQuestionCandidates(
+  problemDefinition: ProblemDefinitionState,
+): string[] {
   const missing = computeMissingInformation(problemDefinition);
 
   if (missing.includes('problem_owner')) {
-    return '¿Qué persona o equipo vive hoy este problema y responde por sus consecuencias?';
+    return [
+      '¿Qué persona o equipo vive hoy este problema y responde por sus consecuencias?',
+      '¿Quién sufre directamente este problema en el día a día y quién responde por él?',
+      '¿Qué rol o equipo concreto está más afectado por este problema ahora mismo?',
+    ];
   }
 
   if (missing.includes('problem_statement')) {
-    return '¿Cuál es el problema concreto que ocurre hoy, sin describir todavía la solución deseada?';
+    return [
+      '¿Cuál es el problema concreto que ocurre hoy, sin describir todavía la solución deseada?',
+      '¿Qué situación problemática ocurre hoy en la práctica, sin hablar todavía de la solución?',
+      '¿Qué falla o fricción concreta estáis intentando resolver en el día a día?',
+    ];
   }
 
   if (missing.includes('evidence_of_problem')) {
-    return '¿Qué evidencia observable tienes de que este problema existe y genera impacto real?';
+    return [
+      '¿Qué evidencia observable tienes de que este problema existe y genera impacto real?',
+      '¿Qué señales, datos o ejemplos concretos muestran que este problema ocurre de verdad?',
+      '¿Qué ha pasado recientemente que demuestre que este problema importa?',
+    ];
   }
 
   if (missing.includes('scope')) {
-    return '¿En qué contexto exacto aparece este problema y qué casos quedarían fuera del alcance?';
+    return [
+      '¿En qué contexto exacto aparece este problema y qué casos quedarían fuera del alcance?',
+      '¿Dónde y cuándo ocurre este problema, y qué situaciones no entrarían en el alcance?',
+      '¿Qué frontera práctica separa lo que sí cubre este problema de lo que queda fuera?',
+    ];
   }
 
   if (missing.includes('current_alternatives')) {
-    return '¿Cómo se intenta resolver hoy este problema y qué limitaciones tienen esas alternativas actuales?';
+    return [
+      '¿Cómo se intenta resolver hoy este problema y qué limitaciones tienen esas alternativas actuales?',
+      '¿Qué hace el equipo hoy cuando aparece este problema y por qué no basta?',
+      '¿Qué alternativas o workarounds existen ahora y qué les falta?',
+    ];
   }
 
   if (missing.includes('assumptions')) {
-    return '¿Qué supuesto importante estáis dando por cierto hoy y todavía no habéis validado?';
+    return [
+      '¿Qué supuesto importante estáis dando por cierto hoy y todavía no habéis validado?',
+      '¿Qué creéis que es verdad sobre este problema pero todavía no habéis comprobado?',
+      '¿Qué hipótesis sobre el problema sigue sin confirmarse?',
+    ];
   }
 
   const firstAmbiguity = problemDefinition.ambiguities_remaining[0];
 
   if (firstAmbiguity) {
-    return `¿Puedes concretar este punto que sigue ambiguo: ${firstAmbiguity}?`;
+    return [
+      `¿Puedes concretar este punto que sigue ambiguo: ${firstAmbiguity}?`,
+      `¿Podrías explicar con un ejemplo concreto qué quieres decir con: ${firstAmbiguity}?`,
+      `¿Qué detalle adicional aclararía este punto pendiente: ${firstAmbiguity}?`,
+    ];
   }
 
-  return '¿Qué detalle falta para que el problema quede claramente definido antes de hablar de soluciones?';
+  return [
+    '¿Qué detalle falta para que el problema quede claramente definido antes de hablar de soluciones?',
+    '¿Qué parte del problema sigue poco clara y conviene precisar ahora?',
+    '¿Qué ejemplo concreto ayudaría a cerrar la definición del problema?',
+  ];
+}
+
+export function buildFallbackQuestion(
+  problemDefinition: ProblemDefinitionState,
+  recentQuestions: string[] = [],
+): string {
+  return selectNonRepeatedQuestion(
+    buildFallbackQuestionCandidates(problemDefinition),
+    recentQuestions,
+  );
 }
 
 /**
@@ -571,7 +619,7 @@ export function enforceTurnGuardrails(
   brief: StructuredBrief,
   turn: ProblemDefinitionTurn,
   latestAnswer?: string,
-  options: { isInitialRun?: boolean } = {},
+  options: { isInitialRun?: boolean; recentQuestions?: string[] } = {},
 ): {
   turn: ProblemDefinitionTurn;
   warnings: string[];
@@ -581,6 +629,7 @@ export function enforceTurnGuardrails(
   latestAnswerWasVague: boolean;
 } {
   const warnings: string[] = [];
+  const recentQuestions = options.recentQuestions ?? [];
   const nextQuestion = enforceSingleQuestion(turn.next_question);
 
   const normalizedTurn: ProblemDefinitionTurn = {
@@ -609,7 +658,7 @@ export function enforceTurnGuardrails(
 
   if (nextQuestionContainsForbiddenTopic) {
     warnings.push('Model drifted into a forbidden topic; question was replaced with a fallback');
-    normalizedTurn.next_question = buildFallbackQuestion(updatedProblemDefinition);
+    normalizedTurn.next_question = buildFallbackQuestion(updatedProblemDefinition, recentQuestions);
   }
 
   const isComplete = evaluateCompletion(updatedProblemDefinition);
@@ -635,6 +684,7 @@ export function enforceTurnGuardrails(
     normalizedTurn.completion_reason = '';
     normalizedTurn.next_question = normalizedTurn.next_question || buildFallbackQuestion(
       initialRunHasOpenBlockingGaps ? problemStateFromBrief(brief) : updatedProblemDefinition,
+      recentQuestions,
     );
   }
 
@@ -642,12 +692,12 @@ export function enforceTurnGuardrails(
     warnings.push('Model marked the lane as done before completion criteria were met');
     normalizedTurn.agent_status = 'continue';
     normalizedTurn.completion_reason = '';
-    normalizedTurn.next_question = buildFallbackQuestion(updatedProblemDefinition);
+    normalizedTurn.next_question = buildFallbackQuestion(updatedProblemDefinition, recentQuestions);
   }
 
   if (normalizedTurn.agent_status !== 'done' && !normalizedTurn.next_question) {
     warnings.push('Model did not produce a usable next question; fallback question generated');
-    normalizedTurn.next_question = buildFallbackQuestion(updatedProblemDefinition);
+    normalizedTurn.next_question = buildFallbackQuestion(updatedProblemDefinition, recentQuestions);
   }
 
   if (normalizedTurn.agent_status === 'done') {
@@ -659,7 +709,20 @@ export function enforceTurnGuardrails(
     warnings.push('Latest answer was vague; clarification was narrowed');
     normalizedTurn.agent_status = 'continue';
     normalizedTurn.completion_reason = '';
-    normalizedTurn.next_question = buildFallbackQuestion(updatedProblemDefinition);
+    normalizedTurn.next_question = buildFallbackQuestion(updatedProblemDefinition, recentQuestions);
+  }
+
+  if (normalizedTurn.agent_status !== 'done' && normalizedTurn.next_question) {
+    const distinctQuestion = ensureDistinctNextQuestion({
+      nextQuestion: normalizedTurn.next_question,
+      recentQuestions,
+      fallbackCandidates: buildFallbackQuestionCandidates(updatedProblemDefinition),
+    });
+
+    if (distinctQuestion.wasRephrased) {
+      warnings.push('Next question repeated a previous turn; question was rephrased');
+      normalizedTurn.next_question = distinctQuestion.question;
+    }
   }
 
   return {

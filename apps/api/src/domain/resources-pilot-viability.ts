@@ -6,6 +6,10 @@ import type {
   ResourcesPilotViabilityTurn,
 } from '../contracts/types';
 import { enforceSingleQuestion, isVagueAnswer } from './problem-definition';
+import {
+  ensureDistinctNextQuestion,
+  selectNonRepeatedQuestion,
+} from './conversation-question';
 
 export const RESOURCES_PILOT_VIABILITY_WARNING =
   'This section is not a viability score, approval decision, ranking, or financial model.';
@@ -68,7 +72,8 @@ export type ResourcesPilotViabilityGuardrailInterventionReason =
   | 'forbidden_output_replaced'
   | 'vague_answer_reasked'
   | 'premature_completion_blocked'
-  | 'missing_question_fallback';
+  | 'missing_question_fallback'
+  | 'repeated_question_rephrased';
 
 export interface ResourcesPilotViabilityGuardrailIntervention {
   applied: boolean;
@@ -283,52 +288,108 @@ export function computeResourcesPilotViabilityMissingInformation(state: Resource
   return Array.from(new Set(missing));
 }
 
-export function buildResourcesPilotViabilityFallbackQuestion(state: ResourcesPilotViabilityState): string {
+export function buildResourcesPilotViabilityFallbackQuestionCandidates(
+  state: ResourcesPilotViabilityState,
+): string[] {
   const missing = computeResourcesPilotViabilityMissingInformation(state);
 
   if (missing.includes('human_resources')) {
-    return 'Who will run the pilot day to day, and what roles or availability are already committed?';
+    return [
+      'Who will run the pilot day to day, and what roles or availability are already committed?',
+      'Which people or roles would operate the pilot each day, and what capacity is already secured?',
+      'Who is expected to run the pilot in practice, and what staffing is already in place?',
+    ];
   }
 
   if (missing.includes('technical_resources')) {
-    return 'What technical resources are needed for the pilot and which of them are already available?';
+    return [
+      'What technical resources are needed for the pilot and which of them are already available?',
+      'Which systems, tools, or infrastructure does the pilot need, and what is already ready?',
+      'What technical setup is required, and which parts are already available today?',
+    ];
   }
 
   if (missing.includes('pilot_environment')) {
-    return 'Where would the pilot run, and what access, workflow, or setting constraints define that environment?';
+    return [
+      'Where would the pilot run, and what access, workflow, or setting constraints define that environment?',
+      'In which setting would the pilot take place, and what access or workflow limits apply there?',
+      'What environment is planned for the pilot, and what practical constraints shape it?',
+    ];
   }
 
   if (missing.includes('dependencies')) {
-    return 'What operational dependencies must be ready before the pilot can start, including any explicit non-blocking dependencies?';
+    return [
+      'What operational dependencies must be ready before the pilot can start, including any explicit non-blocking dependencies?',
+      'Which dependencies need to be in place before launch, and which ones are nice-to-have rather than blocking?',
+      'What must be ready operationally before the pilot starts, including dependencies that are not strictly blocking?',
+    ];
   }
 
   if (missing.includes('indicators_metrics')) {
-    return 'Which operational indicators or metrics would show whether the pilot is working as intended?';
+    return [
+      'Which operational indicators or metrics would show whether the pilot is working as intended?',
+      'What signals or metrics would tell you early whether the pilot is succeeding operationally?',
+      'How would the team know in practice whether the pilot is working?',
+    ];
   }
 
   if (missing.includes('constraints')) {
-    return 'What practical constraints could limit pilot execution, such as time, staffing, systems, sites, or access?';
+    return [
+      'What practical constraints could limit pilot execution, such as time, staffing, systems, sites, or access?',
+      'Which time, staffing, system, site, or access limits could restrict the pilot?',
+      'What real-world limits might slow down or constrain the pilot?',
+    ];
   }
 
   if (missing.includes('operational_risks')) {
-    return 'What operational risks could interrupt the pilot, and how would the team notice them early?';
+    return [
+      'What operational risks could interrupt the pilot, and how would the team notice them early?',
+      'Which operational risks could stop or derail the pilot, and what early warning signs would you watch for?',
+      'What could go wrong operationally during the pilot, and how would the team spot it quickly?',
+    ];
   }
 
   if (missing.includes('assumptions')) {
-    return 'What operational assumption still needs to be checked before the pilot plan is reliable?';
+    return [
+      'What operational assumption still needs to be checked before the pilot plan is reliable?',
+      'Which assumption about people, systems, or workflow still needs validation?',
+      'What are you assuming about the pilot that has not been confirmed yet?',
+    ];
   }
 
   if (missing.includes('uncertainties')) {
-    return 'What remaining operational uncertainty should be clarified before this pilot input section is complete?';
+    return [
+      'What remaining operational uncertainty should be clarified before this pilot input section is complete?',
+      'Which operational detail is still unclear and should be nailed down before moving on?',
+      'What open operational question still needs a concrete answer?',
+    ];
   }
 
   const firstUncertainty = state.uncertainties[0];
 
   if (firstUncertainty) {
-    return `Can you make this operational uncertainty more concrete: ${firstUncertainty}?`;
+    return [
+      `Can you make this operational uncertainty more concrete: ${firstUncertainty}?`,
+      `What concrete example would clarify this operational uncertainty: ${firstUncertainty}?`,
+      `What extra detail would close this open operational point: ${firstUncertainty}?`,
+    ];
   }
 
-  return 'What operational detail is still missing from the resources, pilot environment, dependencies, metrics, constraints, or risks?';
+  return [
+    'What operational detail is still missing from the resources, pilot environment, dependencies, metrics, constraints, or risks?',
+    'Which operational input still needs more detail before this section is complete?',
+    'What practical example would help complete the pilot readiness picture?',
+  ];
+}
+
+export function buildResourcesPilotViabilityFallbackQuestion(
+  state: ResourcesPilotViabilityState,
+  recentQuestions: string[] = [],
+): string {
+  return selectNonRepeatedQuestion(
+    buildResourcesPilotViabilityFallbackQuestionCandidates(state),
+    recentQuestions,
+  );
 }
 
 export function evaluateResourcesPilotViabilityCompletion(state: ResourcesPilotViabilityState): boolean {
@@ -486,6 +547,7 @@ export function containsForbiddenResourcesPilotViabilityOutput(value: unknown): 
 export function enforceResourcesPilotViabilityTurnGuardrails(
   turn: ResourcesPilotViabilityTurn,
   latestAnswer?: string,
+  options: { recentQuestions?: string[] } = {},
 ): {
   turn: ResourcesPilotViabilityTurn;
   warnings: string[];
@@ -495,6 +557,7 @@ export function enforceResourcesPilotViabilityTurnGuardrails(
   intervention: ResourcesPilotViabilityGuardrailIntervention;
 } {
   const warnings: string[] = [];
+  const recentQuestions = options.recentQuestions ?? [];
   const interventionReasons: ResourcesPilotViabilityGuardrailInterventionReason[] = [];
   const normalizedFields = new Set<string>();
   let fallbackQuestionApplied = false;
@@ -526,6 +589,7 @@ export function enforceResourcesPilotViabilityTurnGuardrails(
     normalizedTurn.completion_reason = '';
     normalizedTurn.next_question = buildResourcesPilotViabilityFallbackQuestion(
       normalizedTurn.updated_resources_pilot_viability,
+      recentQuestions,
     );
     fallbackQuestionApplied = true;
   }
@@ -537,6 +601,7 @@ export function enforceResourcesPilotViabilityTurnGuardrails(
     normalizedTurn.completion_reason = '';
     normalizedTurn.next_question = buildResourcesPilotViabilityFallbackQuestion(
       normalizedTurn.updated_resources_pilot_viability,
+      recentQuestions,
     );
     fallbackQuestionApplied = true;
   }
@@ -550,6 +615,7 @@ export function enforceResourcesPilotViabilityTurnGuardrails(
     normalizedTurn.completion_reason = '';
     normalizedTurn.next_question = buildResourcesPilotViabilityFallbackQuestion(
       normalizedTurn.updated_resources_pilot_viability,
+      recentQuestions,
     );
     fallbackQuestionApplied = true;
   }
@@ -559,6 +625,7 @@ export function enforceResourcesPilotViabilityTurnGuardrails(
     interventionReasons.push('missing_question_fallback');
     normalizedTurn.next_question = buildResourcesPilotViabilityFallbackQuestion(
       normalizedTurn.updated_resources_pilot_viability,
+      recentQuestions,
     );
     fallbackQuestionApplied = true;
   }
@@ -567,6 +634,23 @@ export function enforceResourcesPilotViabilityTurnGuardrails(
     normalizedTurn.next_question = '';
     normalizedTurn.completion_reason =
       normalizedTurn.completion_reason || 'resources pilot viability inputs sufficiently clarified';
+  }
+
+  if (normalizedTurn.agent_status !== 'done' && normalizedTurn.next_question) {
+    const distinctQuestion = ensureDistinctNextQuestion({
+      nextQuestion: normalizedTurn.next_question,
+      recentQuestions,
+      fallbackCandidates: buildResourcesPilotViabilityFallbackQuestionCandidates(
+        normalizedTurn.updated_resources_pilot_viability,
+      ),
+    });
+
+    if (distinctQuestion.wasRephrased) {
+      warnings.push('Next question repeated a previous turn; question was rephrased');
+      interventionReasons.push('repeated_question_rephrased');
+      normalizedTurn.next_question = distinctQuestion.question;
+      fallbackQuestionApplied = true;
+    }
   }
 
   return {

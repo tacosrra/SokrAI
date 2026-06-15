@@ -10,6 +10,7 @@ import type {
   SolutionDefinitionTurn,
 } from '../contracts/types';
 import type { AppConfig } from '../config/env';
+import { collectRecentQuestionTexts } from '../domain/conversation-question';
 import {
   buildSolutionFallbackQuestion,
   buildSolutionSectionSourceRefs,
@@ -95,6 +96,11 @@ export class SolutionDefinitionService {
         diagnosis: turn.diagnosis,
       }));
 
+    const recentQuestions = collectRecentQuestionTexts({
+      resolvedTurns: recentTurns,
+      currentQuestionText: activeTurn?.question_text,
+    });
+
     try {
       const modelTurn = await this.llmOrchestrator.runSolutionDefinition({
         structuredBrief: session.latest_structured_brief_json,
@@ -105,7 +111,7 @@ export class SolutionDefinitionService {
       const guarded = enforceSolutionTurnGuardrails(
         modelTurn.output,
         activeTurn?.answer_text,
-        { isInitialRun: command.trigger === 'start' },
+        { isInitialRun: command.trigger === 'start', recentQuestions },
       );
 
       if (

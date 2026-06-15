@@ -460,4 +460,31 @@ describe('problem definition domain rules', () => {
     expect(section.contentMarkdown).not.toContain('solucion');
     expect(section.warnings).toEqual([]);
   });
+
+  it('rephrases the next question when a vague answer would repeat the previous turn', () => {
+    const previousQuestion =
+      '¿Qué persona o equipo vive hoy este problema y responde por sus consecuencias?';
+    const vagueTurn: ProblemDefinitionTurn = {
+      agent_status: 'continue',
+      diagnosis: ['La respuesta sigue siendo vaga'],
+      updated_problem_definition: {
+        problem_owner: '',
+        problem_statement: 'El triaje inicial se retrasa',
+        evidence_of_problem: '',
+        scope: '',
+        current_alternatives: '',
+        assumptions: [],
+        ambiguities_remaining: [],
+      },
+      next_question: previousQuestion,
+      completion_reason: '',
+    };
+
+    const vague = enforceTurnGuardrails(baseBrief, vagueTurn, 'no lo se', {
+      recentQuestions: [previousQuestion],
+    });
+
+    expect(vague.turn.next_question).not.toBe(previousQuestion);
+    expect(vague.warnings).toContain('Latest answer was vague; clarification was narrowed');
+  });
 });

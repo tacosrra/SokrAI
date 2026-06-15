@@ -22,7 +22,7 @@ import {
 } from './lib/api';
 import { saveBlobDownload } from './lib/download';
 import { mapApiError } from './lib/feedback';
-import { deriveSessionPresentation } from './lib/session-view';
+import { deriveSessionPresentation, type PhaseId } from './lib/session-view';
 import { readLastSessionId, readRecentSessions, persistRecentSession } from './lib/storage';
 import { ContinueSessionPanel } from './components/ContinueSessionPanel';
 import { NewProposalPanel } from './components/NewProposalPanel';
@@ -311,6 +311,7 @@ export function App() {
   const [lastPdfExportSessionId, setLastPdfExportSessionId] = useState<string | null>(null);
   const [banner, setBanner] = useState<BannerState | null>(null);
   const [isSessionMenuOpen, setIsSessionMenuOpen] = useState(false);
+  const [viewingPhaseId, setViewingPhaseId] = useState<PhaseId | null>(null);
 
   useEffect(() => {
     const recent = readRecentSessions();
@@ -329,6 +330,10 @@ export function App() {
       });
     }
   }, []);
+
+  useEffect(() => {
+    setViewingPhaseId(null);
+  }, [activeAudit?.session.id]);
 
   async function loadSession(
     sessionId: string,
@@ -1318,6 +1323,9 @@ export function App() {
     : null;
 
   if (presentation && activeAudit) {
+    const activeViewingPhaseId = viewingPhaseId ?? presentation.phaseProgress.currentPhaseId;
+    const selectablePhaseIds = Object.keys(presentation.conversationHistoryByPhase) as PhaseId[];
+
     return (
       <div className="app-shell app-shell--workspace">
         <div className="app-shell__ambient" />
@@ -1342,8 +1350,18 @@ export function App() {
             <PhaseRail
               steps={presentation.phaseProgress.steps}
               currentPhaseId={presentation.phaseProgress.currentPhaseId}
+              selectedPhaseId={activeViewingPhaseId}
               completedPhases={presentation.phaseProgress.completedPhases}
               totalApplicablePhases={presentation.phaseProgress.totalApplicablePhases}
+              selectablePhaseIds={selectablePhaseIds}
+              onSelectPhase={(phaseId) => {
+                if (phaseId === presentation.phaseProgress.currentPhaseId) {
+                  setViewingPhaseId(null);
+                  return;
+                }
+
+                setViewingPhaseId(phaseId);
+              }}
             />
           </section>
 
@@ -1367,6 +1385,7 @@ export function App() {
               onStartMedicalDeviceTriage={handleStartMedicalDeviceTriage}
               onStartResourcesPilotViability={handleStartResourcesPilotViability}
               presentation={presentation}
+              viewingPhaseId={activeViewingPhaseId}
             />
           </section>
 

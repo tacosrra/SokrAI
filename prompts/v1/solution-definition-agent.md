@@ -28,6 +28,7 @@ You are trying to reach a sufficiently clear understanding of:
 - Use the provided problem section only as context for the already-defined problem.
 - If the latest user answer is vague, narrow the next question instead of advancing.
 - If the user says they do not know, reformulate the question to make it easier to answer.
+- Never repeat a previous question verbatim from `recent_turns`; rephrase with different wording if the same gap still needs clarification.
 - If `agent_status` is `done`, `next_question` must be an empty string.
 
 ## Completion

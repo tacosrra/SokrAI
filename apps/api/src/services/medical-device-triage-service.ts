@@ -13,6 +13,7 @@ import type {
   MedicalDeviceTriageTurn,
 } from '../contracts/types';
 import type { AppConfig } from '../config/env';
+import { collectRecentQuestionTexts } from '../domain/conversation-question';
 import {
   MEDICAL_DEVICE_TRIAGE_REVIEW_WARNING,
   buildMedicalDeviceFallbackQuestion,
@@ -246,6 +247,11 @@ export class MedicalDeviceTriageService {
           diagnosis: turn.diagnosis,
         }));
 
+      const recentQuestions = collectRecentQuestionTexts({
+        resolvedTurns: recentTurns,
+        currentQuestionText: activeTurn?.question_text,
+      });
+
       const modelTurn = await this.llmOrchestrator.runMedicalDeviceTriage({
         structuredBrief: session.latest_structured_brief_json,
         problemSection,
@@ -262,7 +268,11 @@ export class MedicalDeviceTriageService {
         recentTurns,
         latestAnswer: activeTurn?.answer_text,
       });
-      const guarded = enforceMedicalDeviceTriageTurnGuardrails(modelTurn.output, activeTurn?.answer_text);
+      const guarded = enforceMedicalDeviceTriageTurnGuardrails(
+        modelTurn.output,
+        activeTurn?.answer_text,
+        { recentQuestions },
+      );
 
       if (
         guarded.turn.agent_status !== 'done' &&

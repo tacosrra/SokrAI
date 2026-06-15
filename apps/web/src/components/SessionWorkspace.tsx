@@ -3,7 +3,8 @@ import { useState, useEffect, useRef } from 'react';
 import { SokrAiLogo } from './SokrAiLogoLoader';
 import { ThinkingDots } from './ThinkingDots';
 import type { BasicAlphaReport, SessionAuditView } from '../domain/contracts';
-import type { PhasePrimaryAction, SessionPresentation } from '../lib/session-view';
+import type { PhaseId, PhasePrimaryAction, SessionPresentation } from '../lib/session-view';
+import { getPhaseLabel } from '../lib/session-view';
 import { BasicAlphaReportPanel } from './BasicAlphaReportPanel';
 import { StatusBadge } from './StatusBadge';
 
@@ -26,6 +27,7 @@ interface SessionWorkspaceProps {
   onStartMedicalDeviceTriage: () => Promise<void>;
   onStartResourcesPilotViability: () => Promise<void>;
   presentation: SessionPresentation;
+  viewingPhaseId: PhaseId;
 }
 
 interface PrimaryPhaseAction {
@@ -82,21 +84,24 @@ export function SessionWorkspace({
   onStartMedicalDeviceTriage,
   onStartResourcesPilotViability,
   presentation,
+  viewingPhaseId,
 }: SessionWorkspaceProps) {
   const [reply, setReply] = useState('');
   const [feedback, setFeedback] = useState('');
   const [optimisticReply, setOptimisticReply] = useState<OptimisticReply | null>(null);
   const historyRef = useRef<HTMLDivElement>(null);
+  const isViewingHistoricalPhase = viewingPhaseId !== presentation.phaseProgress.currentPhaseId;
+  const historyTurns = presentation.conversationHistoryByPhase[viewingPhaseId] ?? [];
 
   useEffect(() => {
     setReply('');
     setFeedback('');
     setOptimisticReply(null);
-  }, [presentation.sessionId]);
+  }, [presentation.sessionId, viewingPhaseId]);
 
   useEffect(() => {
     if (!isReplying && optimisticReply) {
-      const wasPersisted = audit.turns.some(
+      const wasPersisted = historyTurns.some(
         (turn) => turn.answer_text?.trim() === optimisticReply.answerText,
       );
 
@@ -106,7 +111,7 @@ export function SessionWorkspace({
 
       setOptimisticReply(null);
     }
-  }, [isReplying, audit.turns, optimisticReply]);
+  }, [isReplying, historyTurns, optimisticReply]);
 
   useEffect(() => {
     const history = historyRef.current;
@@ -118,9 +123,14 @@ export function SessionWorkspace({
       top: history.scrollHeight,
       behavior: 'smooth',
     });
-  }, [optimisticReply, isReplying, presentation.currentQuestion, audit.turns.length]);
+  }, [optimisticReply, isReplying, presentation.currentQuestion, historyTurns.length, viewingPhaseId]);
 
   function resolveCurrentQuestionText(): string {
+    if (isViewingHistoricalPhase) {
+      const openTurn = historyTurns.find((turn) => !turn.answer_text?.trim());
+      return openTurn?.question_text ?? '';
+    }
+
     return (
       presentation.currentResourcesPilotViabilityQuestion ||
       presentation.currentMedicalDeviceTriageQuestion ||
@@ -141,8 +151,9 @@ export function SessionWorkspace({
 
     const submittedAnswer = reply.trim();
     const questionText = resolveCurrentQuestionText();
-    const openTurnSeq = audit.turns.find((turn) => !turn.answer_text?.trim())?.turn_seq;
-    const turnSeq = openTurnSeq ?? audit.turns.filter((turn) => Boolean(turn.answer_text?.trim())).length + 1;
+    const openTurnSeq = historyTurns.find((turn) => !turn.answer_text?.trim())?.turn_seq;
+    const turnSeq =
+      openTurnSeq ?? historyTurns.filter((turn) => Boolean(turn.answer_text?.trim())).length + 1;
 
     setOptimisticReply({
       questionText,
@@ -194,11 +205,12 @@ export function SessionWorkspace({
     turn.turn_status === 'awaiting_user',
   ) ?? false;
   const canReply =
-    canResourcesPilotViabilityReply ||
-    canMedicalDeviceTriageReply ||
-    canDataAiPrivacyReply ||
-    canSolutionReply ||
-    canProblemReply;
+    !isViewingHistoricalPhase &&
+    (canResourcesPilotViabilityReply ||
+      canMedicalDeviceTriageReply ||
+      canDataAiPrivacyReply ||
+      canSolutionReply ||
+      canProblemReply);
   const currentPhase = presentation.phaseProgress.steps.find((step) =>
     step.id === presentation.phaseProgress.currentPhaseId,
   ) ?? presentation.phaseProgress.steps[0];
@@ -301,21 +313,34 @@ export function SessionWorkspace({
   const isUnsupportedNonReportRecovery =
     currentPhase.primaryAction === 'recover' && currentPhase.id !== 'report';
 
-  const completedTurns = audit.turns
+  const completedTurns = historyTurns
     .filter((turn) => turn.status === 'resolved' && Boolean(turn.answer_text?.trim()))
     .sort((left, right) => left.turn_seq - right.turn_seq);
 
+  const openHistoryTurn = historyTurns.find(
+    (turn) =>
+      turn.status === 'awaiting_user' ||
+      turn.status === 'processing' ||
+      (turn.status === 'failed' && Boolean(turn.answer_text?.trim())),
+  );
+  const viewingPhaseQuestion = resolveCurrentQuestionText();
+
   const showCurrentQuestionInHistory =
-    completedTurns.length > 0 &&
-    Boolean(presentation.currentQuestion) &&
+    !isViewingHistoricalPhase &&
+    (completedTurns.length > 0 || Boolean(openHistoryTurn)) &&
+    Boolean(viewingPhaseQuestion) &&
     !isReplying &&
     !optimisticReply;
   const showQuestionCallout =
-    Boolean(presentation.currentQuestion) &&
+    !isViewingHistoricalPhase &&
+    Boolean(viewingPhaseQuestion) &&
     !showCurrentQuestionInHistory &&
     !(isReplying && optimisticReply);
   const hasHistoryContent =
-    completedTurns.length > 0 || Boolean(optimisticReply) || showCurrentQuestionInHistory;
+    completedTurns.length > 0 ||
+    Boolean(optimisticReply) ||
+    showCurrentQuestionInHistory ||
+    (isViewingHistoricalPhase && Boolean(openHistoryTurn));
 
   function renderAssistantAvatar() {
     return (
@@ -364,7 +389,7 @@ export function SessionWorkspace({
     );
   }
 
-  function renderTurnPair(turn: SessionAuditView['turns'][number]) {
+  function renderTurnPair(turn: (typeof historyTurns)[number]) {
     return (
       <div key={turn.id} className="message-pair">
         {renderAssistantMessage(turn.question_text, `SokrAI (Turno ${turn.turn_seq})`)}
@@ -395,13 +420,28 @@ export function SessionWorkspace({
       return null;
     }
 
-    const openTurn = audit.turns.find((turn) => !turn.answer_text?.trim());
+    const openTurn = historyTurns.find((turn) => !turn.answer_text?.trim());
     const turnSeq = openTurn?.turn_seq ?? completedTurns.length + 1;
-    const questionText = openTurn?.question_text ?? presentation.currentQuestion;
+    const questionText = openTurn?.question_text ?? viewingPhaseQuestion;
 
     return (
       <div className="message-pair message-pair--current">
         {renderAssistantMessage(questionText, `SokrAI (Turno ${turnSeq})`)}
+      </div>
+    );
+  }
+
+  function renderHistoricalOpenQuestion() {
+    if (!isViewingHistoricalPhase || !openHistoryTurn?.question_text || optimisticReply) {
+      return null;
+    }
+
+    return (
+      <div className="message-pair message-pair--current">
+        {renderAssistantMessage(
+          openHistoryTurn.question_text,
+          `SokrAI (Turno ${openHistoryTurn.turn_seq})`,
+        )}
       </div>
     );
   }
@@ -430,12 +470,22 @@ export function SessionWorkspace({
       </nav>
 
       {/* 1. Current Phase Header */}
-      <section className="phase-action-panel" aria-label="Fase actual">
+      <section className="phase-action-panel" aria-label={isViewingHistoricalPhase ? 'Fase en revisión' : 'Fase actual'}>
         <div className="phase-action-panel__main">
-          <span className="panel__eyebrow">Fase actual</span>
-          <h2>Fase actual: {currentPhase.label}</h2>
-          <p>{actionPanelText}</p>
-          {unsupportedRecoverAction && (
+          <span className="panel__eyebrow">
+            {isViewingHistoricalPhase ? 'Historial de fase' : 'Fase actual'}
+          </span>
+          <h2>
+            {isViewingHistoricalPhase
+              ? `Revisando: ${getPhaseLabel(viewingPhaseId)}`
+              : `Fase actual: ${currentPhase.label}`}
+          </h2>
+          <p>
+            {isViewingHistoricalPhase
+              ? 'Estás viendo el historial de esta fase. Selecciona la fase actual en el panel izquierdo para seguir respondiendo.'
+              : actionPanelText}
+          </p>
+          {unsupportedRecoverAction && !isViewingHistoricalPhase && (
             <div className="feedback feedback--error">
               Esta fase necesita recuperación. Revisa los detalles antes de continuar.
             </div>
@@ -454,12 +504,17 @@ export function SessionWorkspace({
           </div>
 
           {!hasHistoryContent ? (
-            <p className="empty-state text-center">Aún no hay respuestas guardadas en esta sesión.</p>
+            <p className="empty-state text-center">
+              {isViewingHistoricalPhase
+                ? 'Esta fase todavía no tiene conversación guardada.'
+                : 'Aún no hay respuestas guardadas en esta sesión.'}
+            </p>
           ) : (
             <div className="conversation-panel__messages">
               {completedTurns.map(renderTurnPair)}
               {renderPendingExchange()}
               {renderCurrentQuestionMessage()}
+              {renderHistoricalOpenQuestion()}
             </div>
           )}
         </div>
@@ -555,6 +610,13 @@ export function SessionWorkspace({
                 </button>
               </div>
             </form>
+          ) : isViewingHistoricalPhase ? (
+            <div className="empty-state">
+              <p>
+                Estás revisando el historial de {getPhaseLabel(viewingPhaseId)}. Selecciona la fase
+                actual en el panel izquierdo para seguir respondiendo.
+              </p>
+            </div>
           ) : (
             <div className="empty-state">
               {presentation.status === 'completed' && presentation.phaseProgress.isComplete ? (
@@ -567,7 +629,7 @@ export function SessionWorkspace({
                 <p>SokrAI no tiene un turno esperando respuesta en este momento.</p>
               )}
 
-              {primaryPhaseAction && (
+              {primaryPhaseAction && !isViewingHistoricalPhase && (
                 <div className="primary-action-container">
                   <button
                     className="button button--primary"

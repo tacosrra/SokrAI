@@ -6,6 +6,10 @@ import type {
   ProposalSource,
 } from '../contracts/types';
 import { enforceSingleQuestion, isVagueAnswer } from './problem-definition';
+import {
+  ensureDistinctNextQuestion,
+  selectNonRepeatedQuestion,
+} from './conversation-question';
 
 export const DATA_AI_PRIVACY_REVIEW_WARNING = 'requires competent human review';
 
@@ -72,7 +76,8 @@ export type DataAiPrivacyGuardrailInterventionReason =
   | 'forbidden_output_replaced'
   | 'vague_answer_reasked'
   | 'premature_completion_blocked'
-  | 'missing_question_fallback';
+  | 'missing_question_fallback'
+  | 'repeated_question_rephrased';
 
 export interface DataAiPrivacyGuardrailIntervention {
   applied: boolean;
@@ -255,56 +260,114 @@ export function computeDataAiPrivacyMissingInformation(state: DataAiPrivacyState
   return Array.from(new Set(missing));
 }
 
-export function buildDataAiPrivacyFallbackQuestion(state: DataAiPrivacyState): string {
+export function buildDataAiPrivacyFallbackQuestionCandidates(state: DataAiPrivacyState): string[] {
   const missing = computeDataAiPrivacyMissingInformation(state);
 
   if (missing.includes('personal_or_health_data')) {
-    return 'Que datos personales o de salud trataria la propuesta y quien los aportaria?';
+    return [
+      'Que datos personales o de salud trataria la propuesta y quien los aportaria?',
+      'Que tipo de datos sensibles entrarian en juego y quien los genera o custodia?',
+      'Que informacion personal o clinica usaria la propuesta en la practica?',
+    ];
   }
 
   if (missing.includes('data_sources')) {
-    return 'De que fuentes vendrian los datos y que datos quedarian fuera del alcance inicial?';
+    return [
+      'De que fuentes vendrian los datos y que datos quedarian fuera del alcance inicial?',
+      'De donde saldrian los datos en el piloto y que fuentes no se usarian al principio?',
+      'Que origenes de datos estan previstos y cuales quedan excluidos?',
+    ];
   }
 
   if (missing.includes('ai_system_role')) {
-    return 'Que papel tendria la IA en el flujo y que decisiones seguirian bajo revision humana?';
+    return [
+      'Que papel tendria la IA en el flujo y que decisiones seguirian bajo revision humana?',
+      'Que haria la IA de forma automatica y que pasos seguirian dependiendo de una persona?',
+      'En que punto del flujo interviene la IA y donde se mantiene supervision humana?',
+    ];
   }
 
   if (missing.includes('validation_evidence')) {
-    return 'Que evidencia o validacion existe hoy sobre datos, IA o funcionamiento previsto?';
+    return [
+      'Que evidencia o validacion existe hoy sobre datos, IA o funcionamiento previsto?',
+      'Que pruebas, pilotos o referencias respaldan hoy el uso previsto de datos o IA?',
+      'Que validacion concreta ya existe y que sigue pendiente?',
+    ];
   }
 
   if (missing.includes('privacy_governance')) {
-    return 'Que responsable o equipo revisaria privacidad, base de datos y uso secundario de la informacion?';
+    return [
+      'Que responsable o equipo revisaria privacidad, base de datos y uso secundario de la informacion?',
+      'Quien responderia por privacidad y gobernanza de datos en este piloto?',
+      'Que rol o comite revisaria el tratamiento y reutilizacion de la informacion?',
+    ];
   }
 
   if (missing.includes('cybersecurity_controls')) {
-    return 'Que controles de acceso, seguridad o trazabilidad estan previstos para esta primera version?';
+    return [
+      'Que controles de acceso, seguridad o trazabilidad estan previstos para esta primera version?',
+      'Como se controlaria el acceso, la trazabilidad y la seguridad de los datos?',
+      'Que medidas minimas de ciberseguridad estan contempladas al inicio?',
+    ];
   }
 
   if (missing.includes('regulatory_context')) {
-    return 'Que incertidumbre regulatoria concreta debe revisar una persona competente antes del piloto?';
+    return [
+      'Que incertidumbre regulatoria concreta debe revisar una persona competente antes del piloto?',
+      'Que duda regulatoria sigue abierta y requiere revision humana competente?',
+      'Que punto normativo o de cumplimiento sigue sin aclarar para el piloto?',
+    ];
   }
 
   if (missing.includes('human_review_plan')) {
-    return 'Quien haria la revision humana competente y en que punto del flujo se activaria?';
+    return [
+      'Quien haria la revision humana competente y en que punto del flujo se activaria?',
+      'Que persona o rol realizaria la supervision humana y cuando entraria en juego?',
+      'En que momento del flujo una persona competente revisaria la salida?',
+    ];
   }
 
   if (missing.includes('assumptions')) {
-    return 'Que supuesto sensible sobre datos, IA o privacidad sigue sin validar?';
+    return [
+      'Que supuesto sensible sobre datos, IA o privacidad sigue sin validar?',
+      'Que creéis verdad sobre datos o IA pero todavia no habeis comprobado?',
+      'Que hipotesis sobre privacidad o uso de datos sigue abierta?',
+    ];
   }
 
   if (missing.includes('uncertainties')) {
-    return 'Que incertidumbre sensible queda abierta y requiere revision humana competente?';
+    return [
+      'Que incertidumbre sensible queda abierta y requiere revision humana competente?',
+      'Que duda sobre datos, IA o privacidad conviene cerrar antes del piloto?',
+      'Que punto sensible sigue sin resolver para una revision humana competente?',
+    ];
   }
 
   const firstUncertainty = state.uncertainties[0];
 
   if (firstUncertainty) {
-    return `Puedes concretar esta incertidumbre antes de revision humana competente: ${firstUncertainty}?`;
+    return [
+      `Puedes concretar esta incertidumbre antes de revision humana competente: ${firstUncertainty}?`,
+      `Que ejemplo concreto aclararia esta incertidumbre: ${firstUncertainty}?`,
+      `Que detalle adicional cerraria este punto pendiente: ${firstUncertainty}?`,
+    ];
   }
 
-  return 'Que detalle falta para cerrar los gaps de datos, IA y privacidad sin emitir una decision definitiva?';
+  return [
+    'Que detalle falta para cerrar los gaps de datos, IA y privacidad sin emitir una decision definitiva?',
+    'Que parte de datos, IA o privacidad sigue poco clara y conviene precisar ahora?',
+    'Que ejemplo concreto ayudaria a cerrar los gaps de privacidad y datos?',
+  ];
+}
+
+export function buildDataAiPrivacyFallbackQuestion(
+  state: DataAiPrivacyState,
+  recentQuestions: string[] = [],
+): string {
+  return selectNonRepeatedQuestion(
+    buildDataAiPrivacyFallbackQuestionCandidates(state),
+    recentQuestions,
+  );
 }
 
 export function evaluateDataAiPrivacyCompletion(state: DataAiPrivacyState): boolean {
@@ -484,6 +547,7 @@ export function containsForbiddenDataAiPrivacyOutput(value: unknown): boolean {
 export function enforceDataAiPrivacyTurnGuardrails(
   turn: DataAiPrivacyTurn,
   latestAnswer?: string,
+  options: { recentQuestions?: string[] } = {},
 ): {
   turn: DataAiPrivacyTurn;
   warnings: string[];
@@ -493,6 +557,7 @@ export function enforceDataAiPrivacyTurnGuardrails(
   intervention: DataAiPrivacyGuardrailIntervention;
 } {
   const warnings: string[] = [];
+  const recentQuestions = options.recentQuestions ?? [];
   const interventionReasons: DataAiPrivacyGuardrailInterventionReason[] = [];
   const normalizedFields = new Set<string>();
   let fallbackQuestionApplied = false;
@@ -520,7 +585,10 @@ export function enforceDataAiPrivacyTurnGuardrails(
     }
     normalizedTurn.agent_status = 'continue';
     normalizedTurn.completion_reason = '';
-    normalizedTurn.next_question = buildDataAiPrivacyFallbackQuestion(normalizedTurn.updated_data_ai_privacy);
+    normalizedTurn.next_question = buildDataAiPrivacyFallbackQuestion(
+      normalizedTurn.updated_data_ai_privacy,
+      recentQuestions,
+    );
     fallbackQuestionApplied = true;
   }
 
@@ -529,7 +597,10 @@ export function enforceDataAiPrivacyTurnGuardrails(
     interventionReasons.push('vague_answer_reasked');
     normalizedTurn.agent_status = 'continue';
     normalizedTurn.completion_reason = '';
-    normalizedTurn.next_question = buildDataAiPrivacyFallbackQuestion(normalizedTurn.updated_data_ai_privacy);
+    normalizedTurn.next_question = buildDataAiPrivacyFallbackQuestion(
+      normalizedTurn.updated_data_ai_privacy,
+      recentQuestions,
+    );
     fallbackQuestionApplied = true;
   }
 
@@ -540,14 +611,20 @@ export function enforceDataAiPrivacyTurnGuardrails(
     interventionReasons.push('premature_completion_blocked');
     normalizedTurn.agent_status = 'continue';
     normalizedTurn.completion_reason = '';
-    normalizedTurn.next_question = buildDataAiPrivacyFallbackQuestion(normalizedTurn.updated_data_ai_privacy);
+    normalizedTurn.next_question = buildDataAiPrivacyFallbackQuestion(
+      normalizedTurn.updated_data_ai_privacy,
+      recentQuestions,
+    );
     fallbackQuestionApplied = true;
   }
 
   if (normalizedTurn.agent_status !== 'done' && !normalizedTurn.next_question) {
     warnings.push('Model did not produce a usable data AI privacy question; fallback question generated');
     interventionReasons.push('missing_question_fallback');
-    normalizedTurn.next_question = buildDataAiPrivacyFallbackQuestion(normalizedTurn.updated_data_ai_privacy);
+    normalizedTurn.next_question = buildDataAiPrivacyFallbackQuestion(
+      normalizedTurn.updated_data_ai_privacy,
+      recentQuestions,
+    );
     fallbackQuestionApplied = true;
   }
 
@@ -555,6 +632,23 @@ export function enforceDataAiPrivacyTurnGuardrails(
     normalizedTurn.next_question = '';
     normalizedTurn.completion_reason =
       normalizedTurn.completion_reason || 'data AI privacy gaps sufficiently clarified for human review';
+  }
+
+  if (normalizedTurn.agent_status !== 'done' && normalizedTurn.next_question) {
+    const distinctQuestion = ensureDistinctNextQuestion({
+      nextQuestion: normalizedTurn.next_question,
+      recentQuestions,
+      fallbackCandidates: buildDataAiPrivacyFallbackQuestionCandidates(
+        normalizedTurn.updated_data_ai_privacy,
+      ),
+    });
+
+    if (distinctQuestion.wasRephrased) {
+      warnings.push('Next question repeated a previous turn; question was rephrased');
+      interventionReasons.push('repeated_question_rephrased');
+      normalizedTurn.next_question = distinctQuestion.question;
+      fallbackQuestionApplied = true;
+    }
   }
 
   return {

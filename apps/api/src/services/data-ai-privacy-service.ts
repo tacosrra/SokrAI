@@ -9,6 +9,7 @@ import type {
   GeneratedSection,
 } from '../contracts/types';
 import type { AppConfig } from '../config/env';
+import { collectRecentQuestionTexts } from '../domain/conversation-question';
 import {
   buildDataAiPrivacyFallbackQuestion,
   buildDataAiPrivacySectionSourceRefs,
@@ -214,6 +215,11 @@ export class DataAiPrivacyService {
         diagnosis: turn.diagnosis,
       }));
 
+    const recentQuestions = collectRecentQuestionTexts({
+      resolvedTurns: recentTurns,
+      currentQuestionText: activeTurn?.question_text,
+    });
+
     try {
       const modelTurn = await this.llmOrchestrator.runDataAiPrivacyGap({
         structuredBrief: session.latest_structured_brief_json,
@@ -223,7 +229,11 @@ export class DataAiPrivacyService {
         recentTurns,
         latestAnswer: activeTurn?.answer_text,
       });
-      const guarded = enforceDataAiPrivacyTurnGuardrails(modelTurn.output, activeTurn?.answer_text);
+      const guarded = enforceDataAiPrivacyTurnGuardrails(
+        modelTurn.output,
+        activeTurn?.answer_text,
+        { recentQuestions },
+      );
 
       if (
         guarded.turn.agent_status !== 'done' &&
