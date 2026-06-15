@@ -1074,6 +1074,32 @@ describe('deriveSessionPresentation', () => {
     });
   });
 
+  it('treats an interrupted solution start as ready to retry', () => {
+    const orphanSolutionChat: ModuleChat = {
+      chat_id: 'chat-solution-orphan',
+      proposal_id: 'session-1',
+      module: 'solution',
+      chat_status: 'active',
+      active_turn_id: undefined,
+      warnings: [],
+      started_at: '2026-05-24T14:30:00.000Z',
+      completed_at: null,
+      turns: [],
+    };
+
+    const presentation = deriveSessionPresentation(resolvedProblemAudit({
+      generated_sections: [generatedSection('problem')],
+      module_chats: [completedModuleChat('problem'), orphanSolutionChat],
+    }));
+
+    expect(presentation.phaseProgress.currentPhaseId).toBe('solution');
+    expect(presentation.phaseProgress.steps.find((step) => step.id === 'solution')).toMatchObject({
+      status: 'ready',
+      primaryAction: 'start_solution',
+      explanation: 'El inicio de esta fase se interrumpió. Puedes reintentarlo.',
+    });
+  });
+
   it('requires an explicit audited fact for medical-device not-applicable', () => {
     const withoutExplicitFact = deriveSessionPresentation(resolvedProblemAudit({
       generated_sections: [

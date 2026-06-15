@@ -77,7 +77,7 @@ export function loadConfig(): AppConfig {
     aiModel: getString('AI_MODEL', ollamaModel),
     ollamaBaseUrl: getString('OLLAMA_BASE_URL', 'http://localhost:11434'),
     ollamaModel,
-    ollamaTimeoutMs: getNumber('OLLAMA_TIMEOUT_MS', 420000),
+    ollamaTimeoutMs: getNumber('OLLAMA_TIMEOUT_MS', 900000),
     ollamaKeepAlive: getString('OLLAMA_KEEP_ALIVE', '30m'),
     ollamaNumCtx: getNumber('OLLAMA_NUM_CTX', 4096),
     briefExtractionMaxChars: getNumber('BRIEF_EXTRACTION_MAX_CHARS', 10000),

@@ -557,8 +557,10 @@ export function SessionWorkspace({
             </form>
           ) : (
             <div className="empty-state">
-              {presentation.status === 'completed' ? (
+              {presentation.status === 'completed' && presentation.phaseProgress.isComplete ? (
                 <p>La sesión ya quedó marcada como completada.</p>
+              ) : presentation.status === 'completed' ? (
+                <p>La fase de problema quedó completada. Continúa con la siguiente fase cuando estés listo.</p>
               ) : presentation.status === 'blocked' || presentation.status === 'failed' ? (
                 <p>La sesión necesita revisión manual. Si fue un timeout del modelo, recarga la sesión e inténtalo de nuevo.</p>
               ) : (

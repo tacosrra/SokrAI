@@ -66,7 +66,7 @@
         "specifyBody": "json",
         "jsonBody": "={{ { request_id: ($node[\"Webhook_AgentProblemDefinition\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_AgentProblemDefinition\"].json.body?.request_id || $execution.id), workflow_version: $json.workflow_version, workflow_execution_id: $execution.id, session_id: $node[\"Webhook_AgentProblemDefinition\"].json.body.session_id, trigger: $node[\"Webhook_AgentProblemDefinition\"].json.body.trigger } }}",
         "options": {
-          "timeout": 450000,
+          "timeout": 960000,
           "response": {
             "response": {
               "fullResponse": true,

@@ -1,12 +1,14 @@
 services:
   postgres:
     container_name: postgres
+    pull_policy: always
     volumes:
       - sokrai_beta_postgres_data:/var/lib/postgresql/data
       - ./infra/docker/postgres/init:/docker-entrypoint-initdb.d:ro
 
   ollama:
     container_name: ollama
+    pull_policy: always
     dns:
       - ${BETA_OLLAMA_DNS_PRIMARY:-1.1.1.1}
       - ${BETA_OLLAMA_DNS_SECONDARY:-8.8.8.8}
@@ -15,6 +17,8 @@ services:
 
   api:
     container_name: api
+    image: sokrai-beta-api
+    pull_policy: build
     volumes:
       - ./apps/api/src:/app/apps/api/src:ro
       - ./contracts:/app/contracts:ro
@@ -24,6 +28,8 @@ services:
 
   web:
     container_name: web
+    image: sokrai-beta-web
+    pull_policy: build
     volumes:
       - ./apps/web/src:/app/apps/web/src:ro
       - ./apps/web/index.html:/app/apps/web/index.html:ro
@@ -31,6 +37,7 @@ services:
 
   n8n:
     container_name: n8n
+    pull_policy: always
 
 volumes:
   sokrai_beta_postgres_data:

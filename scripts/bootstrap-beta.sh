@@ -12,11 +12,8 @@ require_command mktemp
 require_docker_access
 ensure_beta_env_file
 
-log_step "Building beta images"
-docker_compose build api web
-
-log_step "Starting beta stack"
-docker_compose up -d postgres ollama api n8n web
+log_step "Building and starting beta stack"
+docker_compose up -d --build --force-recreate --pull missing
 
 log_step "Waiting for PostgreSQL"
 wait_for "postgres" 60 postgres_ready

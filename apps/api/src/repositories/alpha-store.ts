@@ -548,6 +548,21 @@ export class AlphaStore {
     return mapModuleChat(chat, await this.listChatTurns(chat.id, executor));
   }
 
+  async deleteModuleChat(
+    executor: SqlExecutor,
+    params: { chatId: string; proposalId: string },
+  ): Promise<void> {
+    const result = await runQuery(
+      executor,
+      'DELETE FROM module_chats WHERE id = $1 AND proposal_id = $2',
+      [params.chatId, params.proposalId],
+    );
+
+    if ((result.rowCount ?? 0) === 0) {
+      throw new AppError(404, 'chat_not_found', 'The requested module chat does not exist', false);
+    }
+  }
+
   async createChatTurn(
     executor: SqlExecutor,
     params: {

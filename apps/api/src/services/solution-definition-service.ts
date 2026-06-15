@@ -30,7 +30,7 @@ import type {
   RunSolutionDefinitionCommand,
   SolutionDefinitionRunResponse,
 } from './service-types';
-import { revertModuleReplyFailureForUserRetry } from './module-reply-failure-recovery';
+import { revertModuleReplyFailureForUserRetry, revertOrphanModuleStartFailure } from './module-reply-failure-recovery';
 
 export class SolutionDefinitionService {
   constructor(
@@ -825,19 +825,31 @@ export class SolutionDefinitionService {
               });
             }
           } else {
-            await this.alphaStore.appendAuditEvent(client, {
+            const revertedOrphanStart = await revertOrphanModuleStartFailure(client, this.alphaStore, {
               proposalId: lockedSession.id,
-              sessionId: lockedSession.id,
+              module: 'solution',
+              trigger: command.trigger,
+              error,
               runId: run.id,
-              turnId: undefined,
-              eventType: 'solution_agent_failed',
-              actorType: 'system',
               requestId: command.context.requestId,
-              payloadJson: {
-                error_code: error.errorCode,
-                reason: error.safeMessage,
-              },
+              failureAuditEventType: 'solution_agent_failed',
             });
+
+            if (!revertedOrphanStart) {
+              await this.alphaStore.appendAuditEvent(client, {
+                proposalId: lockedSession.id,
+                sessionId: lockedSession.id,
+                runId: run.id,
+                turnId: undefined,
+                eventType: 'solution_agent_failed',
+                actorType: 'system',
+                requestId: command.context.requestId,
+                payloadJson: {
+                  error_code: error.errorCode,
+                  reason: error.safeMessage,
+                },
+              });
+            }
           }
         });
     } catch (persistError) {

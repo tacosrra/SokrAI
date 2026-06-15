@@ -561,6 +561,22 @@ function readTriageStatus(value: unknown): string | null {
   );
 }
 
+function isOrphanModuleChat(chat: ModuleChat | null, activeQuestion: string): boolean {
+  if (!chat || activeQuestion.trim().length > 0) {
+    return false;
+  }
+
+  const hasOpenTurn = chat.turns.some(
+    (turn) => turn.turn_status === 'awaiting_user' || turn.turn_status === 'processing',
+  );
+
+  if (hasOpenTurn) {
+    return false;
+  }
+
+  return chat.chat_status === 'active' || chat.chat_status === 'waiting_for_user';
+}
+
 function deriveModulePhaseStep(params: {
   id: Exclude<PhaseId, 'intake' | 'report' | 'pdf_export'>;
   chat: ModuleChat | null;
@@ -610,6 +626,15 @@ function deriveModulePhaseStep(params: {
 
   if (params.forceComplete) {
     return createPhaseStep(params.id, 'complete', gapCounts);
+  }
+
+  if (isOrphanModuleChat(params.chat, params.activeQuestion)) {
+    return createPhaseStep(params.id, 'ready', {
+      ...gapCounts,
+      progress: params.problemProgressPercent,
+      primaryAction: params.readyAction,
+      explanation: 'El inicio de esta fase se interrumpió. Puedes reintentarlo.',
+    });
   }
 
   if (params.activeQuestion) {

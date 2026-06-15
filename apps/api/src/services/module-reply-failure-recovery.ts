@@ -66,3 +66,56 @@ export async function revertModuleReplyFailureForUserRetry(
 
   return true;
 }
+
+export async function revertOrphanModuleStartFailure(
+  client: PoolClient,
+  alphaStore: AlphaStore,
+  params: {
+    proposalId: string;
+    module: AlphaModule;
+    trigger: 'start' | 'reply';
+    error: AppError;
+    runId: string;
+    requestId: string;
+    failureAuditEventType: string;
+  },
+): Promise<boolean> {
+  if (params.trigger !== 'start' || !params.error.retryable) {
+    return false;
+  }
+
+  const chat = await alphaStore.findModuleChatByProposalAndModule(
+    params.proposalId,
+    params.module,
+    client,
+  );
+
+  if (!chat || chat.turns.length > 0) {
+    return false;
+  }
+
+  if (chat.chat_status !== 'active' && chat.chat_status !== 'waiting_for_user') {
+    return false;
+  }
+
+  await alphaStore.deleteModuleChat(client, {
+    chatId: chat.chat_id,
+    proposalId: params.proposalId,
+  });
+
+  await alphaStore.appendAuditEvent(client, {
+    proposalId: params.proposalId,
+    sessionId: params.proposalId,
+    runId: params.runId,
+    eventType: params.failureAuditEventType,
+    actorType: 'system',
+    requestId: params.requestId,
+    payloadJson: {
+      error_code: params.error.errorCode,
+      reason: params.error.safeMessage,
+      orphan_start_reverted: true,
+    },
+  });
+
+  return true;
+}

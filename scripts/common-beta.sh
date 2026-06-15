@@ -6,7 +6,24 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 BETA_ENV_FILE="${SOKRAI_BETA_ENV_FILE:-$REPO_ROOT/.env.beta}"
 COMPOSE_PROJECT_NAME="${SOKRAI_BETA_PROJECT_NAME:-sokrai-beta}"
-WORKFLOW_MARKER_FILE="/home/node/.n8n/.sokrai_workflows_bootstrapped"
+WORKFLOW_MARKER_FILE="/home/node/.n8n/.sokrai_workflows_bootstrapped_v2"
+BETA_WORKFLOW_FILES=(
+  proposal_start_v1.json
+  proposal_reply_v1.json
+  agent_problem_definition_v1.json
+  solution_start_v1.json
+  solution_reply_v1.json
+  agent_solution_definition_v1.json
+  data_ai_privacy_start_v1.json
+  data_ai_privacy_reply_v1.json
+  agent_data_ai_privacy_gap_v1.json
+  medical_device_triage_start_v1.json
+  medical_device_triage_reply_v1.json
+  agent_medical_device_triage_v1.json
+  resources_pilot_viability_start_v1.json
+  resources_pilot_viability_reply_v1.json
+  agent_resources_pilot_viability_v1.json
+)
 DOCKER_INSTALL_URL="https://docs.docker.com/get-started/introduction/get-docker-desktop/"
 WEB_UI_URL="http://localhost:3000"
 
@@ -228,6 +245,51 @@ publish_workflow() {
   docker_compose exec -T -u node n8n n8n publish:workflow --id="$workflow_id"
 }
 
+repair_duplicate_n8n_workflows() {
+  local workflow_file workflow_name canonical_id workflow_id duplicate_ids repaired=0
+
+  if ! n8n_ready; then
+    return 1
+  fi
+
+  duplicate_ids=()
+
+  while IFS='|' read -r workflow_id workflow_name; do
+    [[ -n "$workflow_id" && -n "$workflow_name" ]] || continue
+
+    canonical_id=""
+    for workflow_file in "${BETA_WORKFLOW_FILES[@]}"; do
+      if [[ "$(awk -F'"' '/^[[:space:]]*"name":[[:space:]]*"/ { print $4; exit }' "$REPO_ROOT/infra/n8n/workflows/$workflow_file")" == "$workflow_name" ]]; then
+        canonical_id="$(read_workflow_id "$REPO_ROOT/infra/n8n/workflows/$workflow_file")"
+        break
+      fi
+    done
+
+    [[ -n "$canonical_id" ]] || continue
+
+    if [[ "$canonical_id" != "$workflow_id" ]]; then
+      duplicate_ids+=("$workflow_id")
+    fi
+  done < <(docker_compose exec -T -u node n8n n8n list:workflow 2>/dev/null)
+
+  if ((${#duplicate_ids[@]} == 0)); then
+    return 1
+  fi
+
+  log_step "Removing ${#duplicate_ids[@]} duplicate n8n workflow(s)"
+
+  {
+    printf 'DELETE FROM webhook_entity WHERE "workflowId" IN ('
+    printf "'%s'," "${duplicate_ids[@]}"
+    printf '\b);\n'
+    printf 'DELETE FROM workflow_entity WHERE id IN ('
+    printf "'%s'," "${duplicate_ids[@]}"
+    printf '\b);\n'
+  } | docker_compose exec -T postgres psql -U sokrai_n8n -d sokrai_n8n -v ON_ERROR_STOP=1 >/dev/null
+
+  return 0
+}
+
 pull_ollama_model() {
   local model
   local retry_count
@@ -269,25 +331,34 @@ run_database_migrations() {
 }
 
 bootstrap_workflows() {
-  local workflow_files=(
-    proposal_start_v1.json
-    proposal_reply_v1.json
-    agent_problem_definition_v1.json
-  )
   local workflow_file
+  local repaired_duplicates=0
+
+  if repair_duplicate_n8n_workflows; then
+    repaired_duplicates=1
+  fi
 
   if docker_compose exec -T -u node n8n test -f "$WORKFLOW_MARKER_FILE" >/dev/null 2>&1; then
-    log_step "Skipping workflow import: already bootstrapped in this beta environment"
+    if [[ "$repaired_duplicates" -eq 1 ]]; then
+      log_step "Restarting n8n after removing duplicate workflows"
+      docker_compose restart n8n >/dev/null
+      wait_for "n8n" 60 n8n_ready
+    else
+      log_step "Skipping workflow import: already bootstrapped in this beta environment"
+    fi
+
     return
   fi
 
   log_step "Importing n8n workflows"
-  for workflow_file in "${workflow_files[@]}"; do
+  for workflow_file in "${BETA_WORKFLOW_FILES[@]}"; do
     docker_compose exec -T -u node n8n n8n import:workflow --input="/workflows/${workflow_file}"
   done
 
+  repair_duplicate_n8n_workflows >/dev/null || true
+
   log_step "Publishing imported workflows"
-  for workflow_file in "${workflow_files[@]}"; do
+  for workflow_file in "${BETA_WORKFLOW_FILES[@]}"; do
     publish_workflow "$REPO_ROOT/infra/n8n/workflows/$workflow_file"
   done
 

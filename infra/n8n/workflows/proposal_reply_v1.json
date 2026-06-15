@@ -140,7 +140,7 @@
         "specifyBody": "json",
         "jsonBody": "={{ { request_id: ($node[\"Webhook_ProposalReply\"].json.headers?.[\"x-request-id\"] || $node[\"Webhook_ProposalReply\"].json.body?.request_id || $execution.id), workflow_version: \"agent_problem_definition_v1\", workflow_execution_id: $execution.id, session_id: $node[\"HTTP_AppendReply\"].json.body.session_id, trigger: \"reply\" } }}",
         "options": {
-          "timeout": 450000,
+          "timeout": 960000,
           "response": {
             "response": {
               "fullResponse": true,

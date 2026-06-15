@@ -4,7 +4,24 @@ $ErrorActionPreference = 'Stop'
 $script:RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $script:BetaEnvFile = if ($env:SOKRAI_BETA_ENV_FILE) { $env:SOKRAI_BETA_ENV_FILE } else { Join-Path $script:RepoRoot '.env.beta' }
 $script:ComposeProjectName = if ($env:SOKRAI_BETA_PROJECT_NAME) { $env:SOKRAI_BETA_PROJECT_NAME } else { 'sokrai-beta' }
-$script:WorkflowMarkerFile = '/home/node/.n8n/.sokrai_workflows_bootstrapped'
+$script:WorkflowMarkerFile = '/home/node/.n8n/.sokrai_workflows_bootstrapped_v2'
+$script:BetaWorkflowFiles = @(
+  'proposal_start_v1.json',
+  'proposal_reply_v1.json',
+  'agent_problem_definition_v1.json',
+  'solution_start_v1.json',
+  'solution_reply_v1.json',
+  'agent_solution_definition_v1.json',
+  'data_ai_privacy_start_v1.json',
+  'data_ai_privacy_reply_v1.json',
+  'agent_data_ai_privacy_gap_v1.json',
+  'medical_device_triage_start_v1.json',
+  'medical_device_triage_reply_v1.json',
+  'agent_medical_device_triage_v1.json',
+  'resources_pilot_viability_start_v1.json',
+  'resources_pilot_viability_reply_v1.json',
+  'agent_resources_pilot_viability_v1.json'
+)
 $script:DockerInstallUrl = 'https://docs.docker.com/desktop/setup/install/windows-install/'
 $script:WebUiUrl = 'http://localhost:3000'
 $script:ComposeBaseArgs = @(
@@ -368,6 +385,66 @@ function Publish-Workflow {
   Invoke-DockerCompose exec -T -u node n8n n8n publish:workflow "--id=$workflowId"
 }
 
+function Get-CanonicalWorkflowIds {
+  $canonicalIds = @{}
+
+  foreach ($workflowFile in $script:BetaWorkflowFiles) {
+    $workflowPath = Join-Path $script:RepoRoot "infra/n8n/workflows/$workflowFile"
+    $workflow = Get-Content -LiteralPath $workflowPath -Raw | ConvertFrom-Json
+    $canonicalIds[[string]$workflow.name] = [string]$workflow.id
+  }
+
+  return $canonicalIds
+}
+
+function Repair-DuplicateN8nWorkflows {
+  if (-not (Test-N8nReady)) {
+    return $false
+  }
+
+  $canonicalIds = Get-CanonicalWorkflowIds
+  $duplicateIds = New-Object System.Collections.Generic.List[string]
+  $listOutput = Invoke-DockerCompose exec -T -u node n8n n8n list:workflow 2>$null
+
+  foreach ($line in $listOutput) {
+    if ([string]::IsNullOrWhiteSpace($line)) {
+      continue
+    }
+
+    $parts = $line -split '\|', 2
+    if ($parts.Count -ne 2) {
+      continue
+    }
+
+    $workflowId = $parts[0].Trim()
+    $workflowName = $parts[1].Trim()
+
+    if (-not $canonicalIds.ContainsKey($workflowName)) {
+      continue
+    }
+
+    if ($canonicalIds[$workflowName] -ne $workflowId) {
+      $duplicateIds.Add($workflowId) | Out-Null
+    }
+  }
+
+  if ($duplicateIds.Count -eq 0) {
+    return $false
+  }
+
+  Write-Step "Removing $($duplicateIds.Count) duplicate n8n workflow(s)"
+
+  $quotedIds = $duplicateIds | ForEach-Object { "'$_'" }
+  $idList = $quotedIds -join ', '
+  $sql = @"
+DELETE FROM webhook_entity WHERE "workflowId" IN ($idList);
+DELETE FROM workflow_entity WHERE id IN ($idList);
+"@
+
+  $sql | Invoke-DockerCompose exec -T postgres psql -U sokrai_n8n -d sokrai_n8n -v ON_ERROR_STOP=1 | Out-Null
+  return $true
+}
+
 function Invoke-OllamaModelPull {
   $model = Read-EnvValue -Path $script:BetaEnvFile -Key 'OLLAMA_MODEL'
   $retryCount = if ($env:SOKRAI_BETA_OLLAMA_PULL_RETRIES) { [int]$env:SOKRAI_BETA_OLLAMA_PULL_RETRIES } else { 3 }
@@ -420,24 +497,29 @@ function New-WorkflowMarker {
 }
 
 function Invoke-WorkflowBootstrap {
-  $workflowFiles = @(
-    'proposal_start_v1.json',
-    'proposal_reply_v1.json',
-    'agent_problem_definition_v1.json'
-  )
+  $repairedDuplicates = Repair-DuplicateN8nWorkflows
 
   if (Test-WorkflowMarker) {
-    Write-Step 'Skipping workflow import: already bootstrapped in this beta environment'
+    if ($repairedDuplicates) {
+      Write-Step 'Restarting n8n after removing duplicate workflows'
+      Invoke-DockerCompose restart n8n
+      Wait-For -Label 'n8n' -MaxAttempts 60 -Check ${function:Test-N8nReady}
+    } else {
+      Write-Step 'Skipping workflow import: already bootstrapped in this beta environment'
+    }
+
     return
   }
 
   Write-Step 'Importing n8n workflows'
-  foreach ($workflowFile in $workflowFiles) {
+  foreach ($workflowFile in $script:BetaWorkflowFiles) {
     Invoke-DockerCompose exec -T -u node n8n n8n import:workflow "--input=/workflows/$workflowFile"
   }
 
+  Repair-DuplicateN8nWorkflows | Out-Null
+
   Write-Step 'Publishing imported workflows'
-  foreach ($workflowFile in $workflowFiles) {
+  foreach ($workflowFile in $script:BetaWorkflowFiles) {
     Publish-Workflow -WorkflowFile (Join-Path $script:RepoRoot "infra/n8n/workflows/$workflowFile")
   }
   New-WorkflowMarker
