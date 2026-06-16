@@ -45,9 +45,9 @@
     "semantic_hash": "5b3b6c636029f968b03c46520beadded"
   },
   "apps/api/src/domain/gap-analysis.ts": {
-    "mtime": 1780690007.9173398,
-    "ast_hash": "8648841e9247b239b33ba29ad9c05d4e",
-    "semantic_hash": "8648841e9247b239b33ba29ad9c05d4e"
+    "mtime": 1781595234.327865,
+    "ast_hash": "14e3e19a3e01f292732c32769fdbc3d1",
+    "semantic_hash": ""
   },
   "apps/api/src/domain/intake.ts": {
     "mtime": 1778591531.2872455,
@@ -60,8 +60,8 @@
     "semantic_hash": ""
   },
   "apps/api/src/domain/problem-definition.ts": {
-    "mtime": 1781591648.0022056,
-    "ast_hash": "a17cb78d1d67c2c4d0254d2c07429fc6",
+    "mtime": 1781597251.914708,
+    "ast_hash": "22536375714272c34f8249d6212c5a5e",
     "semantic_hash": ""
   },
   "apps/api/src/domain/regulatory-profile.ts": {
@@ -245,13 +245,13 @@
     "semantic_hash": ""
   },
   "apps/web/src/App.tsx": {
-    "mtime": 1781591648.3981655,
-    "ast_hash": "139e8f740e3b5eff48efbb7652a5970d",
+    "mtime": 1781599902.4065573,
+    "ast_hash": "445e58b707ac88513319034c869adb1f",
     "semantic_hash": ""
   },
   "apps/web/src/components/BasicAlphaReportPanel.tsx": {
-    "mtime": 1781591648.3981655,
-    "ast_hash": "8cb9d2d13ab8cb67687d021c99878394",
+    "mtime": 1781595138.265801,
+    "ast_hash": "cbebd73124384eb9e827f39f7315b960",
     "semantic_hash": ""
   },
   "apps/web/src/components/ContinueSessionPanel.tsx": {
@@ -265,8 +265,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/SessionStatePanel.tsx": {
-    "mtime": 1781591648.3981655,
-    "ast_hash": "4670285006286cbfbbc4cca7ffef1a26",
+    "mtime": 1781595129.0630996,
+    "ast_hash": "8db6cd66b91ee51c6e08ba87b05d0a5d",
     "semantic_hash": ""
   },
   "apps/web/src/components/SessionWorkspace.tsx": {
@@ -285,8 +285,8 @@
     "semantic_hash": ""
   },
   "apps/web/src/components/local-demo-safety-notice.test.ts": {
-    "mtime": 1781591648.40229,
-    "ast_hash": "3855cbd2a283cb457d643a25d04e79b3",
+    "mtime": 1781595391.3983624,
+    "ast_hash": "f1952e8b9a79a369cbe90d7232ee3b70",
     "semantic_hash": ""
   },
   "apps/web/src/domain/contracts.ts": {
@@ -1095,9 +1095,9 @@
     "semantic_hash": "e0197d555c7680817c96dc314983b8cb"
   },
   "tests/unit/gap-analysis-domain.test.ts": {
-    "mtime": 1780690007.9384615,
-    "ast_hash": "34c5b73bc259907aedca2c28a1459ddc",
-    "semantic_hash": "34c5b73bc259907aedca2c28a1459ddc"
+    "mtime": 1781595146.414093,
+    "ast_hash": "364507ad9039fd13cce3ebcdd2fcea51",
+    "semantic_hash": ""
   },
   "tests/unit/intake-domain.test.ts": {
     "mtime": 1778591531.3032455,
@@ -1135,8 +1135,8 @@
     "semantic_hash": "5189fd28fa6c9b5a029e930c3f4d1891"
   },
   "tests/unit/problem-definition-domain.test.ts": {
-    "mtime": 1781591648.0846972,
-    "ast_hash": "c421e06de95e532e31a0cb4066db2ecb",
+    "mtime": 1781597159.0152414,
+    "ast_hash": "138bc3a1c1b68f8d419d0ff26aa3d9ca",
     "semantic_hash": ""
   },
   "tests/unit/regulatory-profile.test.ts": {
@@ -1360,8 +1360,8 @@
     "semantic_hash": ""
   },
   "prompts/v1/problem-definition-agent.md": {
-    "mtime": 1781591648.076448,
-    "ast_hash": "5b6c644627508013c67ec79a19f79e5c",
+    "mtime": 1781597292.4468787,
+    "ast_hash": "351415126b03ffd59938e9b47c0010b7",
     "semantic_hash": ""
   },
   "prompts/v1/resources-pilot-viability-agent.md": {
@@ -1425,12 +1425,12 @@
     "semantic_hash": ""
   },
   "apps/web/src/lib/user-facing-text.ts": {
-    "mtime": 1781591648.40229,
-    "ast_hash": "6517687899896fa733613774123facba",
+    "mtime": 1781595444.327535,
+    "ast_hash": "3f365480a94e9b24d0c89f923192cb3b",
     "semantic_hash": ""
   },
   "ollama_data/cache/model-recommendations.json": {
-    "mtime": 1781471348.4793658,
+    "mtime": 1781599866.0301323,
     "ast_hash": "",
     "semantic_hash": ""
   },
@@ -1485,13 +1485,13 @@
     "semantic_hash": ""
   },
   "apps/api/src/domain/conversation-question.ts": {
-    "mtime": 1781591648.0022056,
-    "ast_hash": "83c2243a2a68630f7da8007eb6110051",
+    "mtime": 1781597207.971028,
+    "ast_hash": "11a3f87c587787d5a0d044844f1f7b59",
     "semantic_hash": ""
   },
   "tests/unit/conversation-question.test.ts": {
-    "mtime": 1781591648.0805726,
-    "ast_hash": "7738da55c6efed714091e4dbb11d3c80",
+    "mtime": 1781597138.1168141,
+    "ast_hash": "12f8f9ae013632dc793acbf72f4bc7a7",
     "semantic_hash": ""
   },
   "tests/unit/prompt-service.test.ts": {
@@ -1502,6 +1502,16 @@
   "prompts/v1/language-policy.md": {
     "mtime": 1781591648.076448,
     "ast_hash": "e94532f0f53b86a340a664b6fa410cf6",
+    "semantic_hash": ""
+  },
+  "apps/web/src/App.test.ts": {
+    "mtime": 1781597336.8333263,
+    "ast_hash": "f0c5e706e2267892e1031330c4625718",
+    "semantic_hash": ""
+  },
+  "apps/web/src/styles.test.ts": {
+    "mtime": 1781598329.0168374,
+    "ast_hash": "0e83b2889e403f9c7738c2c43ed40a94",
     "semantic_hash": ""
   }
 }

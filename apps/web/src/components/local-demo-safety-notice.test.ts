@@ -885,6 +885,86 @@ describe('SessionStatePanel', () => {
     expect(html).toContain('Falta concretar qué evidencia muestra el problema.');
     expect(html).not.toContain('Falta describir cómo funcionaría la solución.');
   });
+
+  it('rewrites legacy English gap descriptions into clear user-facing Spanish cards', () => {
+    const ownerGap: AlphaGap = {
+      gap_id: 'gap-owner',
+      proposal_id: 'session-1',
+      module: 'problem',
+      gap_kind: 'ambiguous_information',
+      gap_status: 'open',
+      origin: 'structured_brief_ambiguity',
+      field: 'problem_owner',
+      description: 'The structured brief flags ambiguous information: Quién es el responsable operativo final',
+      absence: {
+        is_absent: false,
+        checked_fields: [],
+        reason: '',
+      },
+      source_refs: [],
+      audit_refs: [],
+      warnings: [],
+      created_at: createdAt,
+      updated_at: createdAt,
+    };
+    const assumptionGap: AlphaGap = {
+      gap_id: 'gap-assumptions',
+      proposal_id: 'session-1',
+      module: 'problem',
+      gap_kind: 'missing_information',
+      gap_status: 'open',
+      origin: 'structured_brief_field',
+      field: 'assumptions',
+      description: 'Major assumptions are missing from the structured brief.',
+      absence: {
+        is_absent: true,
+        checked_fields: ['assumptions'],
+        reason: 'Required information was not found in the available structured brief.',
+      },
+      source_refs: [],
+      audit_refs: [],
+      warnings: [],
+      created_at: createdAt,
+      updated_at: createdAt,
+    };
+    const humanReviewGap: AlphaGap = {
+      gap_id: 'gap-human-review',
+      proposal_id: 'session-1',
+      module: 'data_ai_privacy',
+      gap_kind: 'missing_information',
+      gap_status: 'open',
+      origin: 'system_rule',
+      field: 'human_review_plan',
+      description: 'Data AI privacy information gap for human review plan.',
+      absence: {
+        is_absent: true,
+        checked_fields: ['human_review_plan'],
+        reason: 'Data AI privacy field is not sufficiently clear yet.',
+      },
+      source_refs: [],
+      audit_refs: [],
+      warnings: [],
+      created_at: createdAt,
+      updated_at: createdAt,
+    };
+
+    const html = renderToStaticMarkup(
+      h(SessionStatePanel, {
+        presentation: deriveSessionPresentation({
+          ...workspaceAudit,
+          gaps: [ownerGap, assumptionGap, humanReviewGap],
+        }),
+      }),
+    );
+
+    expect(html).toContain('Falta aclarar quién será la persona o equipo responsable');
+    expect(html).toContain('responsable operativo final');
+    expect(html).toContain('Falta identificar qué supuestos importantes');
+    expect(html).toContain('Falta concretar quién revisará los resultados');
+    expect(html).not.toMatch(
+      /The resumen inicial|The structured brief|flags ambiguous|Major assumptions|human review plan/i,
+    );
+  });
 });
 
 describe('WorkflowLoadingPanel', () => {

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   collectRecentQuestionTexts,
   ensureDistinctNextQuestion,
+  isQuestionSemanticallyRepeated,
   normalizeQuestionForComparison,
   selectNonRepeatedQuestion,
   wasQuestionAskedBefore,
@@ -22,6 +23,16 @@ describe('conversation-question', () => {
     expect(wasQuestionAskedBefore('Que equipo responde hoy por este problema?', [previous])).toBe(
       true,
     );
+  });
+
+  it('detects semantically repeated clarification questions', () => {
+    const previous =
+      '¿Cuáles son los datos específicos que necesitaría el asistente para mejorar la eficiencia del proceso de admisión y cómo se manejarían estos datos durante el piloto?';
+    const next =
+      '¿Cuáles serían los datos específicos que necesitaría el asistente para mejorar la eficiencia del proceso de admisión y cómo se manejarían estos datos durante el piloto en un portátil local sin conexión con sistemas hospitalarios?';
+
+    expect(isQuestionSemanticallyRepeated(next, previous)).toBe(true);
+    expect(wasQuestionAskedBefore(next, [previous])).toBe(true);
   });
 
   it('collects resolved and current question texts', () => {

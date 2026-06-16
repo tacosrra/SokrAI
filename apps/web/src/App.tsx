@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { BasicAlphaReport, ProposalStartRequest, RecentSession, SessionAuditView } from './domain/contracts';
 import {
@@ -42,6 +42,7 @@ interface BannerState {
   text: string;
 }
 
+const TOAST_DISMISS_MS = 6500;
 const START_SESSION_TIMEOUT_MS = readTimeout('VITE_START_SESSION_TIMEOUT_MS', 960000);
 const REPLY_SESSION_TIMEOUT_MS = readTimeout('VITE_REPLY_SESSION_TIMEOUT_MS', 540000);
 const REQUEST_RECOVERY_TIMEOUT_MS = readTimeout(
@@ -236,58 +237,60 @@ function ModeCard({
       onClick={() => onSelect(mode)}
       aria-pressed={isSelected}
     >
-      <div className="mode-card__check" aria-hidden="true">
-        <span />
-      </div>
+      <div className="mode-card__top">
+        <div className="mode-card__icon" aria-hidden="true">
+          {mode === 'start' ? (
+            <svg viewBox="0 0 24 24" fill="none">
+              <path
+                d="M4 6.75A2.75 2.75 0 0 1 6.75 4h6.5A2.75 2.75 0 0 1 16 6.75v2.5A2.75 2.75 0 0 1 13.25 12h-3.7l-3.07 2.6a.75.75 0 0 1-1.23-.57V12.6A2.74 2.74 0 0 1 4 10.25v-3.5Z"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M10 16.75h3.45l3.08 2.59a.75.75 0 0 0 1.22-.57V16.6A2.74 2.74 0 0 0 20 14.25v-3.5A2.75 2.75 0 0 0 17.25 8H17"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" fill="none">
+              <path
+                d="M12 5.25a6.75 6.75 0 1 0 6.08 9.67"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+              <path
+                d="M12 8.5V12l2.5 1.75"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M15.5 5.5H19v3.5"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M19 5.5 15.5 9"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+            </svg>
+          )}
+        </div>
 
-      <div className="mode-card__icon" aria-hidden="true">
-        {mode === 'start' ? (
-          <svg viewBox="0 0 24 24" fill="none">
-            <path
-              d="M4 6.75A2.75 2.75 0 0 1 6.75 4h6.5A2.75 2.75 0 0 1 16 6.75v2.5A2.75 2.75 0 0 1 13.25 12h-3.7l-3.07 2.6a.75.75 0 0 1-1.23-.57V12.6A2.74 2.74 0 0 1 4 10.25v-3.5Z"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M10 16.75h3.45l3.08 2.59a.75.75 0 0 0 1.22-.57V16.6A2.74 2.74 0 0 0 20 14.25v-3.5A2.75 2.75 0 0 0 17.25 8H17"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        ) : (
-          <svg viewBox="0 0 24 24" fill="none">
-            <path
-              d="M12 5.25a6.75 6.75 0 1 0 6.08 9.67"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-            />
-            <path
-              d="M12 8.5V12l2.5 1.75"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M15.5 5.5H19v3.5"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <path
-              d="M19 5.5 15.5 9"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-            />
-          </svg>
-        )}
+        <div className="mode-card__check" aria-hidden="true">
+          <span />
+        </div>
       </div>
 
       <div className="mode-card__body">
@@ -303,7 +306,23 @@ function ModeCard({
   );
 }
 
+function BannerMessage({ banner }: { banner: BannerState }) {
+  const role = banner.tone === 'error' ? 'alert' : 'status';
+
+  return (
+    <div
+      className={`toast-notification toast-notification--${banner.tone}`}
+      role={role}
+      aria-atomic="true"
+    >
+      {banner.text}
+    </div>
+  );
+}
+
 export function App() {
+  const phaseNavigationRef = useRef<HTMLElement | null>(null);
+  const workspaceShellRef = useRef<HTMLElement | null>(null);
   const [activeAudit, setActiveAudit] = useState<SessionAuditView | null>(null);
   const [activeReport, setActiveReport] = useState<BasicAlphaReport | null>(null);
   const [reportLoadError, setReportLoadError] = useState<string | null>(null);
@@ -342,6 +361,52 @@ export function App() {
   useEffect(() => {
     setViewingPhaseId(null);
   }, [activeAudit?.session.id]);
+
+  useEffect(() => {
+    const phaseNavigation = phaseNavigationRef.current;
+    const workspaceShell = workspaceShellRef.current;
+
+    if (!phaseNavigation || !workspaceShell) {
+      return;
+    }
+
+    const setWorkspaceRowHeight = () => {
+      const phaseRailHeight = phaseNavigation.getBoundingClientRect().height;
+
+      if (phaseRailHeight > 0) {
+        workspaceShell.style.setProperty('--workspace-row-height', `${Math.ceil(phaseRailHeight)}px`);
+      }
+    };
+
+    setWorkspaceRowHeight();
+    window.addEventListener('resize', setWorkspaceRowHeight);
+
+    if (typeof ResizeObserver === 'undefined') {
+      return () => {
+        window.removeEventListener('resize', setWorkspaceRowHeight);
+      };
+    }
+
+    const observer = new ResizeObserver(setWorkspaceRowHeight);
+    observer.observe(phaseNavigation);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', setWorkspaceRowHeight);
+    };
+  }, [activeAudit?.session.id, viewingPhaseId]);
+
+  useEffect(() => {
+    if (!banner || banner.tone === 'info') {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setBanner((currentBanner) => (currentBanner === banner ? null : currentBanner));
+    }, TOAST_DISMISS_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [banner]);
 
   async function loadSession(
     sessionId: string,
@@ -1351,12 +1416,12 @@ export function App() {
           onNewProposalClick={handleStartFreshSession}
         />
 
-        {banner ? <div className={`flash-banner flash-banner--${banner.tone}`}>{banner.text}</div> : null}
+        {banner ? <BannerMessage banner={banner} /> : null}
 
         {/* Workspace Layout */}
-        <main className="workspace-shell">
+        <main className="workspace-shell" ref={workspaceShellRef}>
           {/* 2. Row 2: phase-navigation left, main-chat center, guidance-panel right */}
-          <section className="phase-navigation-column">
+          <section className="phase-navigation-column" ref={phaseNavigationRef}>
             <PhaseRail
               steps={presentation.phaseProgress.steps}
               currentPhaseId={presentation.phaseProgress.currentPhaseId}
@@ -1438,7 +1503,7 @@ export function App() {
 
       </header>
 
-      {banner ? <div className={`flash-banner flash-banner--${banner.tone}`}>{banner.text}</div> : null}
+      {banner ? <BannerMessage banner={banner} /> : null}
 
       <main className="mode-page">
         <nav className="mode-breadcrumbs" aria-label="Información del producto">
@@ -1489,11 +1554,13 @@ export function App() {
         </section>
 
         <section className="detail-shell">
-          {isSubmittingStart ? (
-            <WorkflowLoadingPanel kind="start" />
-          ) : selectedMode === 'start' ? (
-            <NewProposalPanel isSubmitting={isSubmittingStart} onSubmit={handleStart} />
-          ) : (
+          {isSubmittingStart ? <WorkflowLoadingPanel kind="start" /> : null}
+
+          {selectedMode === 'start' ? (
+            <div hidden={isSubmittingStart}>
+              <NewProposalPanel isSubmitting={isSubmittingStart} onSubmit={handleStart} />
+            </div>
+          ) : isSubmittingStart ? null : (
             <ContinueSessionPanel
               defaultSessionId={defaultSessionId}
               isLoading={isLoadingSession}

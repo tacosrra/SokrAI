@@ -74,6 +74,29 @@ describe('gap analysis domain rules', () => {
     );
   });
 
+  it('writes initial gap descriptions in descriptive Spanish for users', () => {
+    const gaps = detectInitialGapCandidates({
+      structuredBrief: {
+        ...baseBrief,
+        missing_information: ['No hay metricas suficientes para evaluar el primer momento'],
+        ambiguities: ['No esta claro quien responde como problem_owner'],
+      },
+      sources: [proposalSource],
+    });
+
+    expect(gaps.map((gap) => gap.description)).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('Falta aportar evidencia concreta de que el problema existe'),
+        expect.stringContaining('Falta aclarar quien sera la persona o equipo responsable'),
+        expect.stringContaining('Falta completar esta informacion de la propuesta inicial'),
+        expect.stringContaining('Conviene confirmar que el usuario destinatario indicado coincide'),
+      ]),
+    );
+    expect(gaps.map((gap) => gap.description).join(' ')).not.toMatch(
+      /The structured brief|flags ambiguous|flags missing|is missing from/i,
+    );
+  });
+
   it('dedupes duplicate missing information by module, field, and kind', () => {
     const gaps = detectInitialGapCandidates({
       structuredBrief: {

@@ -55,31 +55,36 @@ const PROBLEM_FIELD_RULES: FieldRule[] = [
     module: 'problem',
     field: 'problem_owner',
     question: 'Que persona o equipo vive hoy este problema y responde por sus consecuencias?',
-    description: 'The problem owner is missing from the structured brief.',
+    description:
+      'Falta aclarar quien sera la persona o equipo responsable de operar esta propuesta, tomar decisiones y responder por sus resultados.',
   },
   {
     module: 'problem',
     field: 'problem_statement',
     question: 'Cual es el problema concreto que ocurre hoy, sin describir todavia la solucion deseada?',
-    description: 'The concrete problem statement is missing from the structured brief.',
+    description:
+      'Falta describir el problema actual con palabras concretas, separado de la solucion que se quiere construir.',
   },
   {
     module: 'problem',
     field: 'evidence_of_problem',
     question: 'Que evidencia observable tienes de que este problema existe y genera impacto real?',
-    description: 'Observable evidence of the problem is missing from the structured brief.',
+    description:
+      'Falta aportar evidencia concreta de que el problema existe, como datos, ejemplos, frecuencia, impacto o incidencias observadas.',
   },
   {
     module: 'problem',
     field: 'scope',
     question: 'En que contexto exacto aparece este problema y que casos quedarian fuera del alcance?',
-    description: 'The problem scope is missing from the structured brief.',
+    description:
+      'Falta delimitar el alcance: donde ocurre el problema, que casos incluye y que queda fuera del primer analisis.',
   },
   {
     module: 'problem',
     field: 'current_alternatives',
     question: 'Como se intenta resolver hoy este problema y que limitaciones tienen esas alternativas actuales?',
-    description: 'Current alternatives are missing from the structured brief.',
+    description:
+      'Falta explicar como se gestiona hoy el problema y por que las alternativas actuales no son suficientes.',
   },
 ];
 
@@ -88,7 +93,7 @@ const SOLUTION_FIELD_RULES: FieldRule[] = [
     module: 'solution',
     field: 'target_user',
     question: 'Que usuario o equipo usara directamente la solucion propuesta?',
-    description: 'The direct target user is missing from the structured brief.',
+    description: 'Falta confirmar quien usara directamente la solucion propuesta.',
   },
 ];
 
@@ -97,7 +102,7 @@ const ARRAY_FIELD_RULES: FieldRule[] = [
     module: 'problem',
     field: 'assumptions',
     question: 'Que supuesto importante estais dando por cierto hoy y todavia no habeis validado?',
-    description: 'Major assumptions are missing from the structured brief.',
+    description: 'Falta identificar que supuestos importantes todavia no se han validado.',
   },
 ];
 
@@ -250,7 +255,7 @@ function detectMissingInformationGaps(brief: StructuredBrief): InitialGapCandida
         module: 'problem' as const,
         field: 'missing_information' as keyof StructuredBrief,
         question: buildGapQuestionHint('missing_information', 'problem'),
-        description: `The structured brief flags missing information: ${item}`,
+        description: `Falta completar esta informacion de la propuesta inicial: ${item}`,
       };
 
       return makeMissingCandidate(rule, 'structured_brief_missing_information', rule.description);
@@ -272,7 +277,7 @@ function detectAmbiguityGaps(brief: StructuredBrief): InitialGapCandidate[] {
         gap_status: 'open',
         origin: 'structured_brief_ambiguity',
         field,
-        description: `The structured brief flags ambiguous information: ${item}`,
+        description: buildAmbiguityDescription(field, item),
         absence: presentAbsence(),
         question_hint: buildGapQuestionHint(field, module),
         source_refs: [],
@@ -296,7 +301,8 @@ function detectSourceConfirmationGaps(brief: StructuredBrief, sources: ProposalS
       gap_status: 'open',
       origin: 'proposal_source',
       field: 'target_user',
-      description: 'The target user is present and should be confirmed against the submitted source material.',
+      description:
+        'Conviene confirmar que el usuario destinatario indicado coincide con el material aportado.',
       absence: presentAbsence(),
       question_hint: buildGapQuestionHint('target_user', 'solution'),
       source_refs: [primarySource],
@@ -321,13 +327,28 @@ function makeMissingCandidate(
     absence: {
       is_absent: true,
       checked_fields: [String(rule.field)],
-      reason: 'Required information was not found in the available structured brief.',
+      reason: 'No se encontro esta informacion en el resumen inicial disponible.',
     },
     question_hint: rule.question,
     source_refs: [],
     audit_refs: [],
     warnings: [],
   };
+}
+
+function buildAmbiguityDescription(field: string, item: string): string {
+  const fieldSpecificIntro = gapDescriptionForField(field);
+
+  if (fieldSpecificIntro) {
+    return `${fieldSpecificIntro} Punto detectado: ${item}`;
+  }
+
+  return `Falta aclarar una parte de la propuesta inicial que puede interpretarse de varias formas: ${item}`;
+}
+
+function gapDescriptionForField(field: string): string | null {
+  return [...PROBLEM_FIELD_RULES, ...SOLUTION_FIELD_RULES, ...ARRAY_FIELD_RULES]
+    .find((rule) => rule.field === field)?.description ?? null;
 }
 
 function findRuleForText(text: string): FieldRule | undefined {

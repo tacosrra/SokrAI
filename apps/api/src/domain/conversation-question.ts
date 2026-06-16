@@ -8,6 +8,114 @@ export function normalizeQuestionForComparison(question: string): string {
     .trim();
 }
 
+const QUESTION_STOPWORDS = new Set([
+  'acerca',
+  'actual',
+  'ahora',
+  'algo',
+  'algun',
+  'alguna',
+  'algunas',
+  'algunos',
+  'ante',
+  'antes',
+  'asi',
+  'cada',
+  'como',
+  'con',
+  'concreto',
+  'concretar',
+  'cual',
+  'cuales',
+  'cuando',
+  'debe',
+  'deben',
+  'deberia',
+  'deberian',
+  'del',
+  'desde',
+  'despues',
+  'detalle',
+  'dia',
+  'donde',
+  'durante',
+  'ese',
+  'eso',
+  'esta',
+  'este',
+  'estos',
+  'estas',
+  'hay',
+  'hoy',
+  'las',
+  'los',
+  'mas',
+  'mismo',
+  'para',
+  'parte',
+  'pero',
+  'podria',
+  'podrias',
+  'por',
+  'porque',
+  'punto',
+  'puede',
+  'puedes',
+  'que',
+  'quedaria',
+  'quedarian',
+  'quien',
+  'seria',
+  'serian',
+  'sigue',
+  'sin',
+  'sobre',
+  'son',
+  'sus',
+  'tambien',
+  'todavia',
+  'una',
+  'unas',
+  'uno',
+  'unos',
+]);
+
+function contentTokenSet(question: string): Set<string> {
+  return new Set(
+    normalizeQuestionForComparison(question)
+      .split(' ')
+      .filter((token) => token.length > 2 && !QUESTION_STOPWORDS.has(token)),
+  );
+}
+
+export function isQuestionSemanticallyRepeated(question: string, previousQuestion: string): boolean {
+  const normalized = normalizeQuestionForComparison(question);
+  const normalizedPrevious = normalizeQuestionForComparison(previousQuestion);
+
+  if (!normalized || !normalizedPrevious) {
+    return false;
+  }
+
+  if (normalized === normalizedPrevious) {
+    return true;
+  }
+
+  const currentTokens = contentTokenSet(question);
+  const previousTokens = contentTokenSet(previousQuestion);
+  const minimumTokenCount = Math.min(currentTokens.size, previousTokens.size);
+
+  if (minimumTokenCount < 4) {
+    return false;
+  }
+
+  const intersectionCount = Array.from(currentTokens).filter((token) => previousTokens.has(token)).length;
+  const unionCount = new Set([...currentTokens, ...previousTokens]).size;
+  const containment = intersectionCount / minimumTokenCount;
+  const jaccard = intersectionCount / unionCount;
+
+  return intersectionCount >= 4 && (containment >= 0.72 || jaccard >= 0.52);
+}
+
 export function wasQuestionAskedBefore(question: string, recentQuestions: string[]): boolean {
   const normalized = normalizeQuestionForComparison(question);
 
@@ -15,9 +123,7 @@ export function wasQuestionAskedBefore(question: string, recentQuestions: string
     return false;
   }
 
-  return recentQuestions.some(
-    (previous) => normalizeQuestionForComparison(previous) === normalized,
-  );
+  return recentQuestions.some((previous) => isQuestionSemanticallyRepeated(question, previous));
 }
 
 export function collectRecentQuestionTexts(params: {

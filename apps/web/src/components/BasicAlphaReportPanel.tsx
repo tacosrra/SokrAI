@@ -10,7 +10,7 @@ import {
   formatSourceKind,
   SECTION_LABELS,
 } from '../lib/report-view';
-import { toUserFacingText } from '../lib/user-facing-text';
+import { describeGapForUser, toUserFacingText } from '../lib/user-facing-text';
 import { StatusBadge } from './StatusBadge';
 
 interface BasicAlphaReportPanelProps {
@@ -120,7 +120,7 @@ function GapList({ gaps }: { gaps: AlphaGap[] }) {
             <span>{formatGapKind(gap.gap_kind)}</span>
           </div>
           <strong>{formatFieldLabel(gap.field)}</strong>
-          <p>{toUserFacingText(gap.description)}</p>
+          <p>{describeGapForUser(gap)}</p>
           {gap.question_hint ? (
             <em>Para avanzar: {toUserFacingText(gap.question_hint)}</em>
           ) : null}

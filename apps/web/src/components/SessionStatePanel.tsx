@@ -1,6 +1,6 @@
 import type { AlphaGap } from '../domain/contracts';
 import type { SessionPresentation } from '../lib/session-view';
-import { toUserFacingText } from '../lib/user-facing-text';
+import { describeGapForUser } from '../lib/user-facing-text';
 
 interface SessionStatePanelProps {
   presentation: SessionPresentation;
@@ -172,7 +172,7 @@ export function SessionStatePanel({
                       <span>{formatGapModule(gap.module)}</span>
                       <em>{formatGapStatus(gap)}</em>
                     </div>
-                    <p>{toUserFacingText(gap.description)}</p>
+                    <p>{describeGapForUser(gap)}</p>
                   </div>
                 </li>
               );

@@ -185,6 +185,50 @@ describe('problem definition domain rules', () => {
     expect(guarded.updatedProblemDefinition.ambiguities_remaining).toEqual([]);
   });
 
+  it('completes instead of repeating a pilot data question after a concrete local-data answer', () => {
+    const previousDataQuestion =
+      '¿Cuáles son los datos específicos que necesitaría el asistente para mejorar la eficiencia del proceso de admisión y cómo se manejarían estos datos durante el piloto?';
+    const stalePilotData =
+      'Definir qué datos específicos deben recogerse durante el piloto.';
+    const turn: ProblemDefinitionTurn = {
+      agent_status: 'continue',
+      diagnosis: ['El modelo vuelve a preguntar por datos del piloto ya respondidos.'],
+      updated_problem_definition: {
+        ...completeProblemDefinition,
+        problem_statement:
+          'El proceso de admision se retrasa porque la informacion administrativa inicial llega incompleta y exige revision manual.',
+        evidence_of_problem:
+          'El piloto medira esperas superiores a 30 minutos, quejas simuladas, llamadas internas y correcciones humanas.',
+        scope:
+          'Piloto local de admision en urgencias con datos sinteticos y sin conexion a sistemas hospitalarios.',
+        current_alternatives:
+          'El equipo prepara manualmente resumenes, hace llamadas internas y escala casos cuando falta informacion.',
+        ambiguities_remaining: [stalePilotData],
+      },
+      next_question:
+        '¿Cuáles serían los datos específicos que necesitaría el asistente para mejorar la eficiencia del proceso de admisión y cómo se manejarían estos datos durante el piloto en un portátil local sin conexión con sistemas hospitalarios?',
+      completion_reason: '',
+    };
+    const latestAnswer = [
+      'Durante el piloto deberian recogerse solo los datos minimos necesarios para comprobar si el asistente mejora el proceso.',
+      'Cada caso tendria un identificador sintetico, hora simulada de llegada, hora de recepcion de la informacion inicial, hora de inicio del resumen, hora de resumen listo y hora de revision humana.',
+      'Tambien se registraria si la informacion inicial estaba completa, que dato faltaba, si fue necesaria una llamada interna, el motivo de la llamada, si coincidio con cambio de turno, si la espera supero 30 minutos, si hubo queja simulada por demora y si el caso tuvo que escalarse.',
+      'Para evaluar calidad se guardaria si el resumen fue aceptado, corregido o rechazado y que tipo de correccion hizo admision.',
+      'Todos los datos serian sinteticos, guardados localmente en el portatil del piloto, sin nombres, telefonos, documentos, historias clinicas, datos reales de pacientes ni conexion con sistemas hospitalarios.',
+    ].join(' ');
+
+    const guarded = enforceTurnGuardrails(baseBrief, turn, latestAnswer, {
+      recentQuestions: [previousDataQuestion],
+    });
+
+    expect(guarded.updatedProblemDefinition.ambiguities_remaining).toEqual([]);
+    expect(guarded.turn.agent_status).toBe('done');
+    expect(guarded.turn.next_question).toBe('');
+    expect(guarded.warnings).toContain(
+      'Next question repeated an already answered topic; completing problem definition',
+    );
+  });
+
   it('blocks premature initial completion when intake still has important problem gaps', () => {
     const demoBrief: StructuredBrief = {
       ...baseBrief,

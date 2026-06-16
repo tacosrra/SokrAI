@@ -7,6 +7,7 @@ import type {
 } from '../contracts/types';
 import {
   ensureDistinctNextQuestion,
+  isQuestionSemanticallyRepeated,
   selectNonRepeatedQuestion,
 } from './conversation-question';
 
@@ -176,6 +177,82 @@ function removeResolvedStaleAmbiguities(
     'human confirmation',
   ];
 
+  const pilotDataAmbiguityTerms = [
+    'datos especificos',
+    'specific data',
+    'datos concretos',
+    'datos minimos',
+    'minimum data',
+    'datos deben recogerse',
+    'data should be collected',
+    'datos durante el piloto',
+    'data during the pilot',
+    'necesitaria el asistente',
+    'assistant would need',
+    'manejarian estos datos',
+    'data would be handled',
+  ];
+  const pilotDataFieldTerms = [
+    'identificador',
+    'identifier',
+    'sintetico',
+    'synthetic',
+    'hora',
+    'time',
+    'llegada',
+    'arrival',
+    'informacion inicial',
+    'initial information',
+    'estado de la admision',
+    'admission status',
+    'dato faltaba',
+    'missing datum',
+    'informacion estaba completa',
+    'complete information',
+    'llamada interna',
+    'internal call',
+    'cambio de turno',
+    'shift change',
+    'espera',
+    'waiting',
+    '30 minutos',
+    '30 minutes',
+    'queja',
+    'complaint',
+    'escalar',
+    'escalate',
+    'correccion',
+    'correction',
+    'aceptado',
+    'accepted',
+    'rechazado',
+    'rejected',
+    'revision humana',
+    'human review',
+  ];
+  const pilotDataHandlingTerms = [
+    'sintetico',
+    'synthetic',
+    'guardados localmente',
+    'stored locally',
+    'localmente',
+    'locally',
+    'portatil',
+    'laptop',
+    'sin conexion',
+    'offline',
+    'sin sistemas hospitalarios',
+    'no hospital systems',
+    'sin nombres',
+    'no names',
+    'sin datos reales',
+    'no real data',
+    'datos reales de pacientes',
+    'real patient data',
+    'historias clinicas',
+    'clinical records',
+  ];
+
   const filteredAmbiguities = problemDefinition.ambiguities_remaining.filter((ambiguity) => {
     const normalizedAmbiguity = normalizeForSearch(ambiguity);
 
@@ -195,6 +272,14 @@ function removeResolvedStaleAmbiguities(
       ) &&
       countContainedTerms(explicitEvidence, minimumDataTerms) >= 2 &&
       containsAny(explicitEvidence, workflowChangeTerms)
+    ) {
+      return false;
+    }
+
+    if (
+      containsAny(ambiguity, pilotDataAmbiguityTerms) &&
+      countContainedTerms(explicitEvidence, pilotDataFieldTerms) >= 4 &&
+      countContainedTerms(explicitEvidence, pilotDataHandlingTerms) >= 2
     ) {
       return false;
     }
@@ -249,10 +334,29 @@ function isResolvedStaleProblemQuestion(
     'bottleneck',
     'datos minimos',
     'minimum data',
+    'datos especificos',
+    'specific data',
+    'datos concretos',
+    'datos durante el piloto',
+    'recogerse',
+    'necesitaria el asistente',
+    'assistant would need',
+    'manejarian estos datos',
+    'data would be handled',
+    'portatil local',
+    'local laptop',
+    'sistemas hospitalarios',
+    'hospital systems',
     'parte del flujo',
     'workflow',
     'flujo',
   ]);
+}
+
+function wasNextQuestionAlreadyCovered(nextQuestion: string, recentQuestions: string[]): boolean {
+  return recentQuestions.some((recentQuestion) =>
+    isQuestionSemanticallyRepeated(nextQuestion, recentQuestion),
+  );
 }
 
 function isInternalSource(source: ProposalSource): boolean {
@@ -698,6 +802,23 @@ export function enforceTurnGuardrails(
   if (normalizedTurn.agent_status !== 'done' && !normalizedTurn.next_question) {
     warnings.push('Model did not produce a usable next question; fallback question generated');
     normalizedTurn.next_question = buildFallbackQuestion(updatedProblemDefinition, recentQuestions);
+  }
+
+  if (
+    normalizedTurn.agent_status !== 'done' &&
+    isComplete &&
+    latestAnswer &&
+    !latestAnswerIsVague &&
+    normalizedTurn.next_question &&
+    (
+      wasNextQuestionAlreadyCovered(normalizedTurn.next_question, recentQuestions) ||
+      isResolvedStaleProblemQuestion(normalizedTurn.next_question, updatedProblemDefinition, latestAnswer)
+    )
+  ) {
+    warnings.push('Next question repeated an already answered topic; completing problem definition');
+    normalizedTurn.agent_status = 'done';
+    normalizedTurn.next_question = '';
+    normalizedTurn.completion_reason = 'problem sufficiently defined';
   }
 
   if (normalizedTurn.agent_status === 'done') {

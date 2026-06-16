@@ -27,6 +27,8 @@ You are trying to reach a sufficiently clear understanding of:
 - If the latest user answer is vague, narrow the next question instead of advancing.
 - If the user says they do not know, reformulate the question to make it easier to answer.
 - Never repeat a previous question verbatim from `recent_turns`; rephrase with different wording if the same gap still needs clarification.
+- If the latest user answer materially answers the current gap, remove that gap from `ambiguities_remaining` and advance to the next unresolved gap or mark the lane done.
+- Do not ask a semantically equivalent follow-up just because the wording can change. Ask again only for one specific missing detail.
 - If `agent_status` is `done`, `next_question` must be an empty string.
 
 ## Completion
