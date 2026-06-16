@@ -173,11 +173,19 @@ function readTimeout(name: string, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
-function formatSessionDate(value: string) {
-  return new Date(value).toLocaleString('es-ES', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  });
+function normalizeProposalLookup(value: string): string {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return '';
+  }
+
+  try {
+    const parsedUrl = new URL(trimmed);
+    return parsedUrl.searchParams.get('session') ?? trimmed;
+  } catch {
+    return trimmed;
+  }
 }
 
 function hasDataAiPrivacyRecoveryArtifacts(audit: SessionAuditView): boolean {
@@ -325,7 +333,7 @@ export function App() {
 
     if (fromUrl) {
       void loadSession(fromUrl, {
-        successMessage: 'Sesión cargada desde la URL.',
+        successMessage: 'Propuesta cargada desde el enlace.',
         skipBannerOnStart: true,
       });
     }
@@ -339,10 +347,12 @@ export function App() {
     sessionId: string,
     options?: { successMessage?: string; skipBannerOnStart?: boolean; suppressSuccessBanner?: boolean },
   ): Promise<SessionAuditView | null> {
+    const lookupId = normalizeProposalLookup(sessionId);
+
     if (!options?.skipBannerOnStart) {
       setBanner({
         tone: 'info',
-        text: `Recuperando la sesión ${sessionId} desde la API de inspección…`,
+        text: 'Recuperando la propuesta guardada...',
       });
     }
 
@@ -350,7 +360,7 @@ export function App() {
     setReportLoadError(null);
 
     try {
-      const audit = await fetchSessionAudit(sessionId);
+      const audit = await fetchSessionAudit(lookupId);
       setActiveAudit(audit);
       setRecentSessions(persistRecentSession(audit));
       setDefaultSessionId(audit.session.id);
@@ -363,7 +373,7 @@ export function App() {
         setActiveReport(await loadReportIfAvailable(audit.session.id, audit));
         setReportLoadError(null);
       } catch (error) {
-        loadedReportError = `Sesión ${audit.session.id} cargada, pero no se pudo recuperar o preparar el informe Alpha: ${mapApiError(error)}`;
+        loadedReportError = `La propuesta se ha cargado, pero el informe todavía no está disponible. ${mapApiError(error)}`;
         setActiveReport((currentReport) =>
           currentReport?.proposal_id === audit.session.id ? currentReport : null
         );
@@ -380,7 +390,7 @@ export function App() {
           tone: 'success',
           text:
             options?.successMessage ??
-            `Sesión ${audit.session.id} cargada con ${audit.turns.length} turnos persistidos.`,
+            'Propuesta cargada. Puedes continuar desde el punto en que se quedó.',
         });
       }
 
@@ -436,7 +446,7 @@ export function App() {
     setIsComposingReport(true);
     setBanner({
       tone: 'info',
-      text: 'Componiendo el informe Alpha para habilitar la descarga PDF…',
+      text: 'Preparando el informe para revisión...',
     });
 
     try {
@@ -445,7 +455,7 @@ export function App() {
       setReportLoadError(null);
       setBanner({
         tone: 'success',
-        text: 'Informe Alpha preparado. Ya puedes descargar el PDF.',
+        text: 'Informe preparado. Ya puedes revisarlo y descargar el PDF.',
       });
     } catch (error) {
       const message = mapApiError(error);
@@ -470,7 +480,7 @@ export function App() {
 
       setBanner({
         tone: 'success',
-        text: `PDF preparado. Export ID: ${result.exportId ?? 'sin cabecera'}.`,
+        text: 'PDF preparado. La descarga se ha iniciado en este navegador.',
       });
     } catch (error) {
       setBanner({
@@ -592,7 +602,7 @@ export function App() {
     setIsSubmittingStart(true);
     setBanner({
       tone: 'info',
-      text: 'Propuesta enviada. Preparando structured brief y primer diagnóstico del lane…',
+      text: 'Propuesta enviada. Preparando tu primera pregunta...',
     });
 
     try {
@@ -601,7 +611,7 @@ export function App() {
         request_id: requestId,
       });
       await loadSession(result.session_id, {
-        successMessage: `Sesión ${result.session_id} creada. Structured brief y siguiente pregunta listos.`,
+        successMessage: 'Propuesta creada. Ya puedes responder a la primera pregunta.',
         skipBannerOnStart: true,
       });
     } catch (error) {
@@ -610,14 +620,14 @@ export function App() {
           tone: 'info',
           text:
             error.errorCode === 'request_timeout'
-              ? `La llamada inicial venció en el navegador. Recuperando el resultado del workflow para request_id ${requestId}…`
-              : `La respuesta inicial llegó con un formato inesperado. Intentando recuperar la sesión real con request_id ${requestId}…`,
+              ? 'Este primer paso está tardando más de lo esperado. Intentando recuperar el resultado...'
+              : 'La respuesta no ha llegado de forma completa. Intentando recuperar la propuesta...',
         });
 
         try {
           const sessionId = await recoverTimedOutRequest(requestId, 'proposal_start');
           await loadSession(sessionId, {
-            successMessage: `Sesión ${sessionId} recuperada tras completar el workflow fuera del tiempo de espera inicial.`,
+            successMessage: 'Propuesta recuperada. Puedes continuar con la entrevista.',
             skipBannerOnStart: true,
           });
           return;
@@ -648,7 +658,7 @@ export function App() {
     setIsReplying(true);
     setBanner({
       tone: 'info',
-      text: 'Respuesta enviada. Generando el siguiente diagnóstico y actualizando el estado de la sesión…',
+      text: 'Guardando tu respuesta y preparando el siguiente paso...',
     });
 
     try {
@@ -659,7 +669,7 @@ export function App() {
       });
 
       await loadSession(result.session_id, {
-        successMessage: `Turno procesado. Agent status: ${result.agent_status}.`,
+        successMessage: 'Respuesta guardada. La propuesta se ha actualizado.',
         skipBannerOnStart: true,
       });
     } catch (error) {
@@ -668,21 +678,21 @@ export function App() {
           tone: 'info',
           text:
             error.errorCode === 'request_timeout'
-              ? `La llamada del turno venció en el navegador. Recuperando el resultado del workflow para request_id ${requestId}…`
-              : `La respuesta del turno llegó con un formato inesperado. Intentando recuperar el estado real con request_id ${requestId}…`,
+              ? 'Este paso está tardando más de lo esperado. Intentando recuperar el resultado...'
+              : 'La respuesta no ha llegado de forma completa. Intentando recuperar la propuesta...',
         });
 
         try {
           const sessionId = await recoverTimedOutRequest(requestId, 'proposal_reply');
           await loadSession(sessionId, {
-            successMessage: 'Turno recuperado tras completar el workflow fuera del tiempo de espera inicial.',
+            successMessage: 'Respuesta recuperada. Puedes continuar con la entrevista.',
             skipBannerOnStart: true,
           });
           return;
         } catch (recoveryError) {
           try {
             await loadSession(activeAudit.session.id, {
-              successMessage: 'Se recuperó el estado de la sesión directamente desde la API tras expirar la llamada del navegador.',
+              successMessage: 'Se ha recuperado la propuesta. Revisa la pregunta actual antes de responder.',
               skipBannerOnStart: true,
             });
             return;
@@ -716,7 +726,7 @@ export function App() {
     setIsReplying(true);
     setBanner({
       tone: 'info',
-      text: 'Iniciando el carril de solución y generando la primera pregunta…',
+      text: 'Abriendo la fase de solución y preparando la primera pregunta...',
     });
 
     try {
@@ -726,7 +736,7 @@ export function App() {
       });
 
       await loadSession(result.session_id, {
-        successMessage: `Carril de solución iniciado. Agent status: ${result.agent_status}.`,
+        successMessage: 'Fase de solución preparada. Responde a la nueva pregunta cuando puedas.',
         skipBannerOnStart: true,
       });
     } catch (error) {
@@ -735,21 +745,21 @@ export function App() {
           tone: 'info',
           text:
             error.errorCode === 'request_timeout'
-              ? `La llamada para iniciar solución venció en el navegador. Recuperando el resultado del workflow para request_id ${requestId}…`
-              : `La respuesta de inicio de solución llegó con un formato inesperado. Intentando recuperar el estado real con request_id ${requestId}…`,
+              ? 'La fase de solución está tardando más de lo esperado. Intentando recuperar el resultado...'
+              : 'No hemos recibido la fase de solución completa. Intentando recuperarla...',
         });
 
         try {
           const sessionId = await recoverTimedOutRequest(requestId, 'solution_start');
           await loadSession(sessionId, {
-            successMessage: 'Carril de solución recuperado tras completar el workflow fuera del tiempo de espera inicial.',
+            successMessage: 'Fase de solución recuperada. Puedes continuar.',
             skipBannerOnStart: true,
           });
           return;
         } catch (recoveryError) {
           try {
             await loadSession(activeAudit.session.id, {
-              successMessage: 'Se recuperó el estado de la sesión directamente desde la API tras expirar el inicio de solución.',
+              successMessage: 'Se ha recuperado la propuesta. Revisa el estado antes de continuar.',
               skipBannerOnStart: true,
             });
             return;
@@ -783,7 +793,7 @@ export function App() {
     setIsReplying(true);
     setBanner({
       tone: 'info',
-      text: 'Respuesta de solución enviada. Actualizando el carril y sus fuentes internas…',
+      text: 'Guardando la respuesta sobre la solución...',
     });
 
     try {
@@ -794,7 +804,7 @@ export function App() {
       });
 
       await loadSession(result.session_id, {
-        successMessage: `Turno de solución procesado. Agent status: ${result.agent_status}.`,
+        successMessage: 'Respuesta de solución guardada. La propuesta se ha actualizado.',
         skipBannerOnStart: true,
       });
     } catch (error) {
@@ -803,21 +813,21 @@ export function App() {
           tone: 'info',
           text:
             error.errorCode === 'request_timeout'
-              ? `La llamada del turno de solución venció en el navegador. Recuperando el resultado del workflow para request_id ${requestId}…`
-              : `La respuesta del turno de solución llegó con un formato inesperado. Intentando recuperar el estado real con request_id ${requestId}…`,
+              ? 'Este paso está tardando más de lo esperado. Intentando recuperar el resultado...'
+              : 'No hemos recibido la actualización completa. Intentando recuperarla...',
         });
 
         try {
           const sessionId = await recoverTimedOutRequest(requestId, 'solution_reply');
           await loadSession(sessionId, {
-            successMessage: 'Turno de solución recuperado tras completar el workflow fuera del tiempo de espera inicial.',
+            successMessage: 'Respuesta de solución recuperada. Puedes continuar.',
             skipBannerOnStart: true,
           });
           return;
         } catch (recoveryError) {
           try {
             await loadSession(activeAudit.session.id, {
-              successMessage: 'Se recuperó el estado de la sesión directamente desde la API tras expirar el turno de solución.',
+              successMessage: 'Se ha recuperado la propuesta. Revisa el estado antes de continuar.',
               skipBannerOnStart: true,
             });
             return;
@@ -851,7 +861,7 @@ export function App() {
     setIsReplying(true);
     setBanner({
       tone: 'info',
-      text: 'Iniciando el modulo de datos/IA/privacidad y generando la primera pregunta…',
+      text: 'Abriendo la fase de datos y privacidad...',
     });
 
     try {
@@ -862,7 +872,7 @@ export function App() {
       });
 
       await loadSession(result.session_id, {
-        successMessage: `Modulo datos/IA/privacidad iniciado. Agent status: ${result.agent_status}.`,
+        successMessage: 'Fase de datos y privacidad preparada. Responde a la nueva pregunta cuando puedas.',
         skipBannerOnStart: true,
       });
     } catch (error) {
@@ -871,14 +881,14 @@ export function App() {
           tone: 'info',
           text:
             error.errorCode === 'request_timeout'
-              ? `La llamada para iniciar datos/IA/privacidad vencio en el navegador. Recuperando el resultado del workflow para request_id ${requestId}…`
-              : `La respuesta de inicio de datos/IA/privacidad llego con un formato inesperado. Intentando recuperar el estado real con request_id ${requestId}…`,
+              ? 'La fase de datos y privacidad está tardando más de lo esperado. Intentando recuperar el resultado...'
+              : 'No hemos recibido la fase completa. Intentando recuperarla...',
         });
 
         try {
           const sessionId = await recoverTimedOutRequest(requestId, 'data_ai_privacy_start');
           await loadSession(sessionId, {
-            successMessage: 'Modulo datos/IA/privacidad recuperado tras completar el workflow fuera del tiempo de espera inicial.',
+            successMessage: 'Fase de datos y privacidad recuperada. Puedes continuar.',
             skipBannerOnStart: true,
           });
           return;
@@ -892,7 +902,7 @@ export function App() {
             if (recoveredAudit && hasDataAiPrivacyRecoveryArtifacts(recoveredAudit)) {
               setBanner({
                 tone: 'success',
-                text: 'Se recupero el estado de datos/IA/privacidad directamente desde la API tras expirar el inicio.',
+                text: 'Se ha recuperado la fase de datos y privacidad. Puedes continuar.',
               });
               return;
             }
@@ -926,7 +936,7 @@ export function App() {
     setIsReplying(true);
     setBanner({
       tone: 'info',
-      text: 'Respuesta de datos/IA/privacidad enviada. Actualizando gaps, incertidumbre y revision humana…',
+      text: 'Guardando la respuesta sobre datos y privacidad...',
     });
 
     try {
@@ -937,7 +947,7 @@ export function App() {
       });
 
       await loadSession(result.session_id, {
-        successMessage: `Turno datos/IA/privacidad procesado. Agent status: ${result.agent_status}.`,
+        successMessage: 'Respuesta de datos y privacidad guardada. La propuesta se ha actualizado.',
         skipBannerOnStart: true,
       });
     } catch (error) {
@@ -946,21 +956,21 @@ export function App() {
           tone: 'info',
           text:
             error.errorCode === 'request_timeout'
-              ? `La llamada del turno datos/IA/privacidad vencio en el navegador. Recuperando el resultado del workflow para request_id ${requestId}…`
-              : `La respuesta del turno datos/IA/privacidad llego con un formato inesperado. Intentando recuperar el estado real con request_id ${requestId}…`,
+              ? 'Este paso está tardando más de lo esperado. Intentando recuperar el resultado...'
+              : 'No hemos recibido la actualización completa. Intentando recuperarla...',
         });
 
         try {
           const sessionId = await recoverTimedOutRequest(requestId, 'data_ai_privacy_reply');
           await loadSession(sessionId, {
-            successMessage: 'Turno datos/IA/privacidad recuperado tras completar el workflow fuera del tiempo de espera inicial.',
+            successMessage: 'Respuesta de datos y privacidad recuperada. Puedes continuar.',
             skipBannerOnStart: true,
           });
           return;
         } catch (recoveryError) {
           try {
             await loadSession(activeAudit.session.id, {
-              successMessage: 'Se recupero el estado de la sesion directamente desde la API tras expirar el turno datos/IA/privacidad.',
+              successMessage: 'Se ha recuperado la propuesta. Revisa el estado antes de continuar.',
               skipBannerOnStart: true,
             });
             return;
@@ -994,7 +1004,7 @@ export function App() {
     setIsReplying(true);
     setBanner({
       tone: 'info',
-      text: 'Iniciando medical-device triage para registrar gaps/questions/uncertainty…',
+      text: 'Abriendo la revisión sanitaria y regulatoria...',
     });
 
     try {
@@ -1005,7 +1015,7 @@ export function App() {
       });
 
       await loadSession(result.session_id, {
-        successMessage: `Medical-device triage procesado. Agent status: ${result.agent_status}.`,
+        successMessage: 'Revisión sanitaria preparada. Responde a la nueva pregunta cuando puedas.',
         skipBannerOnStart: true,
       });
     } catch (error) {
@@ -1014,14 +1024,14 @@ export function App() {
           tone: 'info',
           text:
             error.errorCode === 'request_timeout'
-              ? `La llamada para iniciar medical-device triage vencio en el navegador. Recuperando el resultado del workflow para request_id ${requestId}…`
-              : `La respuesta de inicio de medical-device triage llego con un formato inesperado. Intentando recuperar el estado real con request_id ${requestId}…`,
+              ? 'La revisión sanitaria está tardando más de lo esperado. Intentando recuperar el resultado...'
+              : 'No hemos recibido la revisión completa. Intentando recuperarla...',
         });
 
         try {
           const sessionId = await recoverTimedOutRequest(requestId, 'medical_device_triage_start');
           await loadSession(sessionId, {
-            successMessage: 'Medical-device triage recuperado tras completar el workflow fuera del tiempo de espera inicial.',
+            successMessage: 'Revisión sanitaria recuperada. Puedes continuar.',
             skipBannerOnStart: true,
           });
           return;
@@ -1035,7 +1045,7 @@ export function App() {
             if (recoveredAudit && hasMedicalDeviceTriageRecoveryArtifacts(recoveredAudit)) {
               setBanner({
                 tone: 'success',
-                text: 'Se recupero el estado de medical-device triage directamente desde la API tras expirar el inicio.',
+                text: 'Se ha recuperado la revisión sanitaria. Puedes continuar.',
               });
               return;
             }
@@ -1069,7 +1079,7 @@ export function App() {
     setIsReplying(true);
     setBanner({
       tone: 'info',
-      text: 'Respuesta de medical-device triage enviada. Actualizando gaps/questions/uncertainty…',
+      text: 'Guardando la respuesta de revisión sanitaria...',
     });
 
     try {
@@ -1080,7 +1090,7 @@ export function App() {
       });
 
       await loadSession(result.session_id, {
-        successMessage: `Turno medical-device triage procesado. Agent status: ${result.agent_status}.`,
+        successMessage: 'Respuesta de revisión sanitaria guardada. La propuesta se ha actualizado.',
         skipBannerOnStart: true,
       });
     } catch (error) {
@@ -1089,14 +1099,14 @@ export function App() {
           tone: 'info',
           text:
             error.errorCode === 'request_timeout'
-              ? `La llamada del turno medical-device triage vencio en el navegador. Recuperando el resultado del workflow para request_id ${requestId}…`
-              : `La respuesta del turno medical-device triage llego con un formato inesperado. Intentando recuperar el estado real con request_id ${requestId}…`,
+              ? 'Este paso está tardando más de lo esperado. Intentando recuperar el resultado...'
+              : 'No hemos recibido la actualización completa. Intentando recuperarla...',
         });
 
         try {
           const sessionId = await recoverTimedOutRequest(requestId, 'medical_device_triage_reply');
           await loadSession(sessionId, {
-            successMessage: 'Turno medical-device triage recuperado tras completar el workflow fuera del tiempo de espera inicial.',
+            successMessage: 'Respuesta de revisión sanitaria recuperada. Puedes continuar.',
             skipBannerOnStart: true,
           });
           return;
@@ -1110,7 +1120,7 @@ export function App() {
             if (recoveredAudit && hasCompletedMedicalDeviceTriageRequest(recoveredAudit, requestId)) {
               setBanner({
                 tone: 'success',
-                text: 'Se recupero el estado de medical-device triage directamente desde la API tras expirar el turno.',
+                text: 'Se ha recuperado la revisión sanitaria. Puedes continuar.',
               });
               return;
             }
@@ -1144,7 +1154,7 @@ export function App() {
     setIsReplying(true);
     setBanner({
       tone: 'info',
-      text: 'Iniciando recursos/piloto para recoger insumos operativos minimos…',
+      text: 'Abriendo la fase de piloto y recursos...',
     });
 
     try {
@@ -1154,7 +1164,7 @@ export function App() {
       });
 
       await loadSession(result.session_id, {
-        successMessage: `Recursos/piloto iniciado. Agent status: ${result.agent_status}.`,
+        successMessage: 'Fase de piloto y recursos preparada. Responde a la nueva pregunta cuando puedas.',
         skipBannerOnStart: true,
       });
     } catch (error) {
@@ -1163,14 +1173,14 @@ export function App() {
           tone: 'info',
           text:
             error.errorCode === 'request_timeout'
-              ? `La llamada para iniciar recursos/piloto vencio en el navegador. Recuperando el resultado del workflow para request_id ${requestId}…`
-              : `La respuesta de inicio de recursos/piloto llego con un formato inesperado. Intentando recuperar el estado real con request_id ${requestId}…`,
+              ? 'La fase de piloto y recursos está tardando más de lo esperado. Intentando recuperar el resultado...'
+              : 'No hemos recibido la fase completa. Intentando recuperarla...',
         });
 
         try {
           const sessionId = await recoverTimedOutRequest(requestId, 'resources_pilot_viability_start');
           await loadSession(sessionId, {
-            successMessage: 'Recursos/piloto recuperado tras completar el workflow fuera del tiempo de espera inicial.',
+            successMessage: 'Fase de piloto y recursos recuperada. Puedes continuar.',
             skipBannerOnStart: true,
           });
           return;
@@ -1184,7 +1194,7 @@ export function App() {
             if (recoveredAudit && hasResourcesPilotViabilityRecoveryArtifacts(recoveredAudit)) {
               setBanner({
                 tone: 'success',
-                text: 'Se recupero el estado de recursos/piloto directamente desde la API tras expirar el inicio.',
+                text: 'Se ha recuperado la fase de piloto y recursos. Puedes continuar.',
               });
               return;
             }
@@ -1218,7 +1228,7 @@ export function App() {
     setIsReplying(true);
     setBanner({
       tone: 'info',
-      text: 'Respuesta de recursos/piloto enviada. Actualizando insumos operativos persistidos…',
+      text: 'Guardando la respuesta sobre piloto y recursos...',
     });
 
     try {
@@ -1229,7 +1239,7 @@ export function App() {
       });
 
       await loadSession(result.session_id, {
-        successMessage: `Turno recursos/piloto procesado. Agent status: ${result.agent_status}.`,
+        successMessage: 'Respuesta de piloto y recursos guardada. La propuesta se ha actualizado.',
         skipBannerOnStart: true,
       });
     } catch (error) {
@@ -1238,14 +1248,14 @@ export function App() {
           tone: 'info',
           text:
             error.errorCode === 'request_timeout'
-              ? `La llamada del turno recursos/piloto vencio en el navegador. Recuperando el resultado del workflow para request_id ${requestId}…`
-              : `La respuesta del turno recursos/piloto llego con un formato inesperado. Intentando recuperar el estado real con request_id ${requestId}…`,
+              ? 'Este paso está tardando más de lo esperado. Intentando recuperar el resultado...'
+              : 'No hemos recibido la actualización completa. Intentando recuperarla...',
         });
 
         try {
           const sessionId = await recoverTimedOutRequest(requestId, 'resources_pilot_viability_reply');
           await loadSession(sessionId, {
-            successMessage: 'Turno recursos/piloto recuperado tras completar el workflow fuera del tiempo de espera inicial.',
+            successMessage: 'Respuesta de piloto y recursos recuperada. Puedes continuar.',
             skipBannerOnStart: true,
           });
           return;
@@ -1259,7 +1269,7 @@ export function App() {
             if (recoveredAudit && hasCompletedResourcesPilotViabilityRequest(recoveredAudit, requestId)) {
               setBanner({
                 tone: 'success',
-                text: 'Se recupero el estado de recursos/piloto directamente desde la API tras expirar el turno.',
+                text: 'Se ha recuperado la fase de piloto y recursos. Puedes continuar.',
               });
               return;
             }
@@ -1390,7 +1400,7 @@ export function App() {
           </section>
 
           <aside className="workspace-insights guidance-panel-column">
-            <SessionStatePanel audit={activeAudit} presentation={presentation} />
+            <SessionStatePanel presentation={presentation} />
           </aside>
         </main>
 
@@ -1420,9 +1430,9 @@ export function App() {
             <SokrAiLogo size="md" />
           </div>
           <div className="brand-copy">
-            <span className="brand-copy__eyebrow">SokrAI v1</span>
-            <strong>Problem Definition Console</strong>
-            <span className="brand-copy__meta">Intake, structured brief y entrevista resumible.</span>
+            <span className="brand-copy__eyebrow">SokrAI</span>
+            <strong>Propuestas para revisión humana</strong>
+            <span className="brand-copy__meta">Entrevista guiada para ideas sanitarias y operativas.</span>
           </div>
         </div>
 
@@ -1431,12 +1441,10 @@ export function App() {
       {banner ? <div className={`flash-banner flash-banner--${banner.tone}`}>{banner.text}</div> : null}
 
       <main className="mode-page">
-        <nav className="mode-breadcrumbs" aria-label="breadcrumbs">
-          <span>SokrAI</span>
-          <span>/</span>
-          <span>Problem Definition</span>
-          <span>/</span>
-          <span>Interview mode</span>
+        <nav className="mode-breadcrumbs" aria-label="Información del producto">
+          <span>Propuesta en preparación</span>
+          <span>Revisión humana recomendada</span>
+          <span>Sin datos reales de pacientes</span>
         </nav>
 
         <section className="mode-hero">
@@ -1450,33 +1458,33 @@ export function App() {
             </div>
           </div>
 
-          <span className="panel__eyebrow">AI evaluator ready</span>
-          <h1>Selecciona cómo abrir la entrevista de maduración</h1>
+          <span className="panel__eyebrow">Espacio local de maduración</span>
+          <h1>Mejora tu propuesta con SokrAI</h1>
           <p>
-            La propuesta nueva crea la sesión y deja la primera pregunta lista. Si ya tienes
-            un `session_id`, puedes reabrir el chat sin perder el contexto.
+            Responde unas preguntas guiadas para convertir tu idea en una propuesta clara,
+            revisable y lista para compartir.
           </p>
         </section>
 
         <section className="mode-grid" aria-label="modes">
           <ModeCard
             activeMode={selectedMode}
-            callout="Recomendado para contexto nuevo y PDFs"
-            cta="Crear sesión"
-            description="Empieza con una propuesta estructurada y deja que la v1 construya el brief inicial antes del primer turno socrático."
+            callout="Desde una idea, texto o PDF"
+            cta="Empezar"
+            description="Crea una propuesta y recibe una primera pregunta para aclarar el problema antes de avanzar."
             mode="start"
             onSelect={setSelectedMode}
-            title="Nueva propuesta"
+            title="Empezar nueva propuesta"
           />
 
           <ModeCard
             activeMode={selectedMode}
-            callout={defaultSessionId ? 'Última sesión detectada automáticamente' : 'Ideal para demos y reanudación'}
-            cta="Abrir sesión"
-            description="Retoma una conversación existente con su historial real de turnos, snapshots, runs y checklist del problema."
+            callout={defaultSessionId ? 'Propuesta anterior detectada' : 'Con enlace o código guardado'}
+            cta="Continuar"
+            description="Retoma una propuesta anterior y sigue desde la pregunta pendiente."
             mode="resume"
             onSelect={setSelectedMode}
-            title="Continuar sesión"
+            title="Continuar una propuesta"
           />
         </section>
 

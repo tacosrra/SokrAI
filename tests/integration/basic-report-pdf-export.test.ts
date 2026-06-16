@@ -56,7 +56,7 @@ describe('Basic Alpha report PDF export integration', () => {
     expect(response.statusCode).toBe(200);
     expect(secondResponse.statusCode).toBe(200);
     expect(response.headers['content-type']).toContain('application/pdf');
-    expect(response.headers['content-disposition']).toMatch(/^attachment; filename="sokrai-report-/);
+    expect(response.headers['content-disposition']).toMatch(/^attachment; filename="sokrai-informe-/);
     expect(pdfBytes.subarray(0, 4).toString('utf8')).toBe('%PDF');
     expect(exportId).toMatch(/^[0-9a-f-]{36}$/);
     expect(secondExportId).toMatch(/^[0-9a-f-]{36}$/);

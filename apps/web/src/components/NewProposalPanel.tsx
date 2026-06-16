@@ -83,48 +83,53 @@ export function NewProposalPanel({
     <section className="panel proposal-panel">
       <div className="panel__eyebrow">Nueva propuesta</div>
       <div className="panel__heading">
-        <h2>Prepara el contexto antes del primer turno</h2>
+        <h2>Cuéntanos la idea que quieres mejorar</h2>
         <p>
-          Resume el objetivo, el contexto y la evidencia disponible. Esta información se convertirá en un resumen estructurado y se usará para generar la primera pregunta del agente.
+          Añade solo la información necesaria para empezar. SokrAI preparará una primera pregunta
+          y te guiará paso a paso.
         </p>
+      </div>
+
+      <div className="safety-note">
+        No introduzcas datos reales de pacientes. SokrAI prepara material para revisión humana y
+        no toma decisiones clínicas, legales ni regulatorias.
       </div>
 
       <form className="proposal-form" onSubmit={handleSubmit}>
         <label className="field">
-          <span className="field__label">Título del proyecto</span>
+          <span className="field__label">Nombre de la propuesta</span>
           <input
             className="field__control"
             type="text"
             value={form.projectTitle}
             onChange={(event) => updateField('projectTitle', event.target.value)}
-            placeholder="Ej. Triage IA en Urgencias"
+            placeholder="Ej. Apoyo a admisión en Urgencias"
             disabled={isSubmitting}
-            autoFocus
           />
         </label>
 
         <label className="field">
-          <span className="field__label">Objetivo</span>
+          <span className="field__label">Qué quieres aclarar</span>
           <textarea
             className="field__control field__control--medium"
             value={form.goal}
             onChange={(event) => updateField('goal', event.target.value)}
-            placeholder="Madurar la definición del problema antes de evaluar una solución."
+            placeholder="Quiero ordenar la idea antes de presentarla a revisión interna."
             disabled={isSubmitting}
           />
         </label>
 
         <label className="field">
-          <span className="field__label">Contexto de la propuesta</span>
+          <span className="field__label">Describe la idea inicial</span>
           <textarea
             className="field__control field__control--large"
             value={form.proposalText}
             onChange={(event) => updateField('proposalText', event.target.value)}
-            placeholder="Describe el contexto, el problema actual, la evidencia y el alcance."
+            placeholder="Explica qué problema quieres resolver, quién lo vive, qué señales lo muestran y qué se está haciendo ahora."
             disabled={isSubmitting}
           />
           <span className="field__hint">
-            Ruta principal para la v1. Prioriza hechos, señales observables y quién sufre el problema.
+            Prioriza hechos observables. Si todavía no sabes algo, dilo claramente.
           </span>
         </label>
 
@@ -135,13 +140,13 @@ export function NewProposalPanel({
               className="field__control field__control--medium"
               value={form.documentText}
               onChange={(event) => updateField('documentText', event.target.value)}
-              placeholder="Pega texto adicional si ya extraíste un documento fuera de la app."
+              placeholder="Pega notas, actas o fragmentos útiles si ya los tienes preparados."
               disabled={isSubmitting}
             />
           </label>
 
           <div className="field field--file">
-            <span className="field__label">PDF opcional</span>
+            <span className="field__label">Documento opcional</span>
             <label className="file-dropzone">
               <input
                 type="file"
@@ -150,10 +155,10 @@ export function NewProposalPanel({
                 disabled={isSubmitting || fileBusy}
               />
               <span className="file-dropzone__title">
-                {fileBusy ? 'Convirtiendo PDF…' : form.fileName || 'Selecciona un PDF con texto extraíble'}
+                {fileBusy ? 'Preparando el documento...' : form.fileName || 'Selecciona un PDF con texto'}
               </span>
               <span className="file-dropzone__meta">
-                Se convierte a base64 en el navegador y se envía sin romper el contrato oficial.
+                Usa documentos sin datos personales reales. Los PDF escaneados pueden no leerse bien.
               </span>
             </label>
           </div>
@@ -163,9 +168,10 @@ export function NewProposalPanel({
 
         <div className="form-actions">
           <button className="button button--primary" type="submit" disabled={isSubmitting || fileBusy}>
-            {isSubmitting ? 'Cargando primer diagnóstico…' : 'Crear sesión de maduración'}
+            {isSubmitting ? 'Preparando la primera pregunta...' : 'Empezar nueva propuesta'}
           </button>
           <p className="form-actions__hint">
+            Después de empezar, SokrAI te hará una pregunta concreta para aclarar el problema.
           </p>
         </div>
       </form>

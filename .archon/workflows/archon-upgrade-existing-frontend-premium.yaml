@@ -1,4 +1,4 @@
-name: archon-upgrade-existing-frontend-premium-v1-codex-compatible
+name: archon-upgrade-existing-frontend-premium
 
 description: |
   Codex-compatible workflow to audit an existing frontend, inspect it in Chrome,

@@ -21,37 +21,37 @@ export function WorkspaceTopBar({
   onNewProposalClick,
 }: WorkspaceTopBarProps) {
   const getSyncStatusText = () => {
-    if (isLoadingSession) return 'Recuperando sesión...';
-    if (isReplying) return 'Pensando...';
+    if (isLoadingSession) return 'Recuperando propuesta...';
+    if (isReplying) return 'Preparando siguiente paso...';
     if (isComposingReport) return 'Preparando informe...';
-    if (isDownloadingReportPdf) return 'Exportando PDF...';
-    return 'Sesión sincronizada';
+    if (isDownloadingReportPdf) return 'Descargando PDF...';
+    return 'Propuesta guardada';
   };
 
   const projectTitle = presentation?.projectTitle || 'Cargando propuesta...';
   const currentPhaseLabel = presentation?.phaseProgress?.currentPhaseLabel || '';
 
+  const isBusy = isLoadingSession || isReplying || isComposingReport || isDownloadingReportPdf;
+
   return (
     <header className="app-topbar workspace-topbar">
-      <div className="workspace-topbar__brand">
-        <div className="brand-mark">
-          <SokrAiLogo size="md" />
+      <div className="workspace-topbar__project-block">
+        <div className="brand-mark workspace-topbar__mark">
+          <SokrAiLogo size="sm" />
         </div>
-        <div className="brand-copy">
-          <span className="brand-copy__eyebrow">SokrAI v1</span>
-          <strong>SokrAI proposal interview</strong>
-          <span className="brand-copy__meta">
-            {presentation ? `Fase: ${currentPhaseLabel}` : 'Maduración guiada de propuestas sanitarias.'}
-          </span>
+        <div className="workspace-topbar__copy">
+          <span className="brand-copy__eyebrow">SokrAI</span>
+          <h1 className="project-title-top">{projectTitle}</h1>
+          <p>
+            {presentation ? `Fase: ${currentPhaseLabel}` : 'Maduración guiada'}
+            <span className="workspace-topbar__meta-separator">·</span>
+            <span className="sync-badge sync-badge--inline" aria-live="polite">
+              <span className={`sync-badge__dot ${isBusy ? 'sync-badge__dot--busy' : 'sync-badge__dot--idle'}`} />
+              <span>{getSyncStatusText()}</span>
+            </span>
+          </p>
         </div>
       </div>
-
-      {presentation && (
-        <div className="workspace-topbar__project">
-          <span className="project-eyebrow">Propuesta</span>
-          <h1 className="project-title-top">{projectTitle}</h1>
-        </div>
-      )}
 
       <div className="workspace-topbar__actions">
         <button
@@ -59,7 +59,7 @@ export function WorkspaceTopBar({
           type="button"
           onClick={onChangeSessionClick}
         >
-          Cambiar sesión
+          Cambiar propuesta
         </button>
 
         <button
@@ -69,11 +69,6 @@ export function WorkspaceTopBar({
         >
           Nueva propuesta
         </button>
-
-        <div className="workspace-topbar__action sync-badge" aria-live="polite">
-          <span className={`sync-badge__dot ${isLoadingSession || isReplying || isComposingReport || isDownloadingReportPdf ? 'sync-badge__dot--busy' : 'sync-badge__dot--idle'}`} />
-          <span>{getSyncStatusText()}</span>
-        </div>
       </div>
     </header>
   );

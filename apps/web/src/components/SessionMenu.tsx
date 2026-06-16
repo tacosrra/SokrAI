@@ -1,5 +1,5 @@
 import type { RecentSession } from '../domain/contracts';
-import { StatusBadge, sessionTone } from './StatusBadge';
+import { StatusBadge, sessionStatusLabel, sessionTone } from './StatusBadge';
 
 interface SessionMenuProps {
   isOpen: boolean;
@@ -42,8 +42,8 @@ export function SessionMenu({
       <dialog className="session-menu-drawer" open onClick={(e) => e.stopPropagation()}>
         <header className="session-menu-drawer__header">
           <div>
-            <h2>Cambiar sesión</h2>
-            <p>Abre otra conversación sin perder el estado de esta pantalla.</p>
+            <h2>Cambiar propuesta</h2>
+            <p>Abre una propuesta anterior o vuelve al trabajo que tenías guardado.</p>
           </div>
           <button className="button button--secondary button--sm" type="button" onClick={onClose}>
             Cerrar
@@ -51,33 +51,33 @@ export function SessionMenu({
         </header>
 
         <section className="session-menu-drawer__section">
-          <h3>Buscar por Session ID</h3>
+          <h3>Buscar por enlace o código</h3>
           <form className="session-menu-drawer__form" onSubmit={handleManualSubmit}>
             <label className="field">
-              <span className="field__label">Session ID</span>
+              <span className="field__label">Enlace o código de propuesta</span>
               <input
-                className="field__control field__control--code"
+                className="field__control"
                 type="text"
                 value={sessionLookupId}
                 onChange={(e) => setSessionLookupId(e.target.value)}
-                placeholder="85cf3299-4fc3-4770-9944-6049d97e7b59"
+                placeholder="Pega aquí el enlace guardado"
                 disabled={isLoadingSession}
               />
             </label>
             <button className="button button--secondary" type="submit" disabled={isLoadingSession}>
-              {isLoadingSession ? 'Consultando...' : 'Abrir sesión'}
+              {isLoadingSession ? 'Recuperando...' : 'Abrir propuesta'}
             </button>
           </form>
         </section>
 
         <section className="session-menu-drawer__section">
-          <h3>Sesiones recientes</h3>
+          <h3>Propuestas recientes</h3>
           <p className="session-menu-drawer__section-desc">
-            Guardadas en este navegador para volver al punto de la demo.
+            Guardadas en este navegador para volver al punto donde lo dejaste.
           </p>
 
           {recentSessions.length === 0 ? (
-            <p className="empty-state">Aún no hay sesiones recientes guardadas en este navegador.</p>
+            <p className="empty-state">Aún no hay propuestas recientes guardadas en este navegador.</p>
           ) : (
             <div className="session-menu-drawer__list">
               {recentSessions.map((session) => (
@@ -98,10 +98,10 @@ export function SessionMenu({
                   <p>{session.goal}</p>
                   <div className="session-menu-drawer__item-meta">
                     <StatusBadge
-                      label={session.status.replaceAll('_', ' ')}
+                      label={sessionStatusLabel(session.status)}
                       tone={sessionTone(session.status)}
                     />
-                    <span>{session.currentQuestion || 'Sin pregunta abierta'}</span>
+                    <span>{session.currentQuestion || 'Sin pregunta pendiente'}</span>
                   </div>
                 </button>
               ))}

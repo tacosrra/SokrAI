@@ -10,6 +10,21 @@ export function StatusBadge({ label, tone }: StatusBadgeProps) {
   return <span className={`status-badge status-badge--${tone}`}>{label}</span>;
 }
 
+export function sessionStatusLabel(status: SessionStatus): string {
+  switch (status) {
+    case 'active':
+      return 'En preparación';
+    case 'waiting_for_user':
+      return 'Pendiente de respuesta';
+    case 'completed':
+      return 'Completada';
+    case 'blocked':
+      return 'Necesita revisión';
+    case 'failed':
+      return 'No disponible';
+  }
+}
+
 export function sessionTone(status: SessionStatus): StatusBadgeProps['tone'] {
   switch (status) {
     case 'completed':

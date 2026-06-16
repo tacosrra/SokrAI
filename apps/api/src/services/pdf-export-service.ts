@@ -127,7 +127,7 @@ export class PdfExportService {
     return {
       exportId,
       templateVersion: BASIC_REPORT_PDF_TEMPLATE_VERSION,
-      fileName: buildReportPdfFileName(report.structured_brief.project_title, report.report_id),
+      fileName: buildReportPdfFileName(report.structured_brief.project_title),
       contentType: 'application/pdf',
       pdf,
       metadata,
@@ -226,15 +226,14 @@ async function renderPdf(
   }
 }
 
-function buildReportPdfFileName(projectTitle: string, reportId: string): string {
+function buildReportPdfFileName(projectTitle: string): string {
   const safeTitle = projectTitle
     .normalize('NFKD')
     .replace(/[^\w\s-]/g, '')
     .trim()
     .replace(/\s+/g, '-')
     .toLowerCase()
-    .slice(0, 80) || 'basic-alpha-report';
-  const safeReportId = reportId.replace(/[^\w-]/g, '').slice(0, 64);
+    .slice(0, 80) || 'informe-propuesta';
 
-  return `sokrai-report-${safeTitle}-${safeReportId}.pdf`;
+  return `sokrai-informe-${safeTitle}.pdf`;
 }

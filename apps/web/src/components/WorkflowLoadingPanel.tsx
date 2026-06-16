@@ -20,8 +20,15 @@ export function WorkflowLoadingPanel({ kind }: WorkflowLoadingPanelProps) {
           <p>{copy.description}</p>
         </div>
 
-        <div className="workflow-loading-panel__logo" aria-hidden="true">
-          <SokrAiLogoLoader size="lg" />
+        <div className="workflow-loading-panel__visual" aria-hidden="true">
+          <div className="workflow-loading-panel__logo">
+            <SokrAiLogoLoader size="lg" />
+          </div>
+          <div className="workflow-loading-panel__pulse">
+            <span />
+            <span />
+            <span />
+          </div>
         </div>
       </div>
 

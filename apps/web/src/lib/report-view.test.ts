@@ -117,11 +117,14 @@ describe('deriveReportPresentation', () => {
   it('groups current gaps and exposes compact counts', () => {
     const presentation = deriveReportPresentation(report);
 
-    expect(presentation.status).toBe('needs revision');
+    expect(presentation.reportStatusLabel).toBe('Pendiente de validar');
     expect(presentation.sourceCount).toBe(1);
-    expect(presentation.auditRefCount).toBe(2);
+    expect(presentation.activeGapCount).toBe(1);
+    expect(presentation.resolvedGapCount).toBe(1);
     expect(presentation.openGaps.map((gap) => gap.gap_id)).toEqual(['gap-1']);
     expect(presentation.gapGroups.map((group) => group.status)).toEqual(['open', 'resolved']);
+    expect(presentation.sectionSummaries.map((section) => section.label)).toContain('Datos, IA y privacidad');
+    expect(presentation.reviewChecklist.map((item) => item.label)).toContain('Revisión humana requerida');
   });
 
   it('uses only the report payload and has no audit-run raw output dependency', () => {

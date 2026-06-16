@@ -12,7 +12,7 @@ describe('mapApiError', () => {
       true,
     );
 
-    expect(mapApiError(error)).toContain('Ollama agotó el tiempo máximo');
+    expect(mapApiError(error)).toContain('El asistente local no ha podido completar este paso.');
   });
 
   it('keeps the browser timeout distinct from model timeouts', () => {
@@ -23,7 +23,7 @@ describe('mapApiError', () => {
       true,
     );
 
-    expect(mapApiError(error)).toContain('navegador agotó el tiempo');
+    expect(mapApiError(error)).toContain('Este paso está tardando más de lo esperado.');
   });
 
   it('explains when the proxy returns HTML instead of JSON', () => {
@@ -34,7 +34,7 @@ describe('mapApiError', () => {
       false,
     );
 
-    expect(mapApiError(error)).toContain('recibió HTML');
+    expect(mapApiError(error)).toContain('No se ha podido leer la respuesta del servicio local.');
   });
 
   it('explains when timeout recovery also expires', () => {
@@ -45,7 +45,7 @@ describe('mapApiError', () => {
       true,
     );
 
-    expect(mapApiError(error)).toContain('tampoco pudo recuperar');
+    expect(mapApiError(error)).toContain('No hemos podido confirmar el resultado final.');
   });
 
   it('explains when active recovery still cannot find the request id', () => {
@@ -56,7 +56,7 @@ describe('mapApiError', () => {
       false,
     );
 
-    expect(mapApiError(error)).toContain('no encontró ningún rastro persistido');
+    expect(mapApiError(error)).toContain('No hemos encontrado este paso en el servicio local.');
   });
 
   it('explains text-only PDF extraction failures', () => {
@@ -67,7 +67,7 @@ describe('mapApiError', () => {
       false,
     );
 
-    expect(mapApiError(error)).toContain('solo soporta PDFs con texto');
+    expect(mapApiError(error)).toContain('No se ha podido extraer texto del PDF.');
   });
 
   it('explains empty PDF extraction results', () => {
@@ -78,15 +78,15 @@ describe('mapApiError', () => {
       false,
     );
 
-    expect(mapApiError(error)).toContain('no contiene texto extraíble');
+    expect(mapApiError(error)).toContain('El PDF no contiene texto seleccionable.');
   });
 });
 
 describe('getWorkflowLoadingCopy', () => {
-  it('explains that the first diagnosis chains multiple backend steps', () => {
+  it('explains that the first question is being prepared', () => {
     const copy = getWorkflowLoadingCopy('start');
 
-    expect(copy.title).toContain('primer diagnóstico');
+    expect(copy.title).toContain('primera pregunta');
     expect(copy.steps).toHaveLength(3);
   });
 });

@@ -4,11 +4,11 @@ import { StatusBadge, phaseTone } from './StatusBadge';
 interface PhaseRailProps {
   steps: PhaseStep[];
   currentPhaseId: string;
-  selectedPhaseId: string;
+  selectedPhaseId?: string;
   completedPhases: number;
   totalApplicablePhases: number;
-  selectablePhaseIds: PhaseId[];
-  onSelectPhase: (phaseId: PhaseId) => void;
+  selectablePhaseIds?: PhaseId[];
+  onSelectPhase?: (phaseId: PhaseId) => void;
 }
 
 function phaseStatusLabel(status: string): string {
@@ -35,16 +35,16 @@ function phaseStatusLabel(status: string): string {
 export function PhaseRail({
   steps,
   currentPhaseId,
-  selectedPhaseId,
+  selectedPhaseId = currentPhaseId,
   completedPhases,
   totalApplicablePhases,
-  selectablePhaseIds,
+  selectablePhaseIds = [],
   onSelectPhase,
 }: PhaseRailProps) {
   return (
     <nav className="panel phase-rail" aria-label="Fases de la propuesta">
       <div className="phase-rail__header">
-        <h3>Camino de maduración</h3>
+        <h3>Progreso de la propuesta</h3>
         <span className="phase-rail__progress-summary">
           {completedPhases}/{totalApplicablePhases} fases completas
         </span>
@@ -54,7 +54,7 @@ export function PhaseRail({
         {steps.map((step, index) => {
           const isCurrent = step.id === currentPhaseId;
           const isSelected = step.id === selectedPhaseId;
-          const isSelectable = selectablePhaseIds.includes(step.id as PhaseId);
+          const isSelectable = Boolean(onSelectPhase) && selectablePhaseIds.includes(step.id as PhaseId);
 
           return (
             <li
@@ -74,7 +74,7 @@ export function PhaseRail({
                   type="button"
                   className="phase-rail__button"
                   aria-pressed={isSelected}
-                  onClick={() => onSelectPhase(step.id as PhaseId)}
+                  onClick={() => onSelectPhase?.(step.id as PhaseId)}
                 >
                   <div className="phase-rail__item-main">
                     <span className="phase-rail__item-index">{index + 1}</span>
@@ -83,7 +83,7 @@ export function PhaseRail({
                   <div className="phase-rail__item-status">
                     <StatusBadge label={phaseStatusLabel(step.status)} tone={phaseTone(step.status)} />
                     {isCurrent ? (
-                      <span className="current-action-chip">Acción actual</span>
+                      <span className="current-action-chip">Paso actual</span>
                     ) : isSelected ? (
                       <span className="current-action-chip current-action-chip--history">Historial</span>
                     ) : null}
@@ -98,7 +98,7 @@ export function PhaseRail({
                   <div className="phase-rail__item-status">
                     <StatusBadge label={phaseStatusLabel(step.status)} tone={phaseTone(step.status)} />
                     {isCurrent ? (
-                      <span className="current-action-chip">Acción actual</span>
+                      <span className="current-action-chip">Paso actual</span>
                     ) : null}
                   </div>
                 </div>

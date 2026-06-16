@@ -6,7 +6,6 @@ import type { BasicAlphaReport, SessionAuditView } from '../domain/contracts';
 import type { PhaseId, PhasePrimaryAction, SessionPresentation } from '../lib/session-view';
 import { getPhaseLabel } from '../lib/session-view';
 import { BasicAlphaReportPanel } from './BasicAlphaReportPanel';
-import { StatusBadge } from './StatusBadge';
 
 interface SessionWorkspaceProps {
   audit: SessionAuditView;
@@ -27,7 +26,7 @@ interface SessionWorkspaceProps {
   onStartMedicalDeviceTriage: () => Promise<void>;
   onStartResourcesPilotViability: () => Promise<void>;
   presentation: SessionPresentation;
-  viewingPhaseId: PhaseId;
+  viewingPhaseId?: PhaseId;
 }
 
 interface PrimaryPhaseAction {
@@ -42,27 +41,6 @@ interface OptimisticReply {
   questionText: string;
   answerText: string;
   turnSeq: number;
-}
-
-function phaseStatusLabel(status: string): string {
-  switch (status) {
-    case 'complete':
-      return 'Completada';
-    case 'current':
-      return 'Actual';
-    case 'ready':
-      return 'Lista';
-    case 'locked':
-      return 'Bloqueada';
-    case 'not_applicable':
-      return 'No aplica';
-    case 'recovering':
-      return 'Recuperando';
-    case 'error':
-      return 'Revisar';
-    default:
-      return status;
-  }
 }
 
 export function SessionWorkspace({
@@ -90,14 +68,15 @@ export function SessionWorkspace({
   const [feedback, setFeedback] = useState('');
   const [optimisticReply, setOptimisticReply] = useState<OptimisticReply | null>(null);
   const historyRef = useRef<HTMLDivElement>(null);
-  const isViewingHistoricalPhase = viewingPhaseId !== presentation.phaseProgress.currentPhaseId;
-  const historyTurns = presentation.conversationHistoryByPhase[viewingPhaseId] ?? [];
+  const activeViewingPhaseId = viewingPhaseId ?? presentation.phaseProgress.currentPhaseId;
+  const isViewingHistoricalPhase = activeViewingPhaseId !== presentation.phaseProgress.currentPhaseId;
+  const historyTurns = presentation.conversationHistoryByPhase[activeViewingPhaseId] ?? [];
 
   useEffect(() => {
     setReply('');
     setFeedback('');
     setOptimisticReply(null);
-  }, [presentation.sessionId, viewingPhaseId]);
+  }, [presentation.sessionId, activeViewingPhaseId]);
 
   useEffect(() => {
     if (!isReplying && optimisticReply) {
@@ -119,11 +98,26 @@ export function SessionWorkspace({
       return;
     }
 
-    history.scrollTo({
-      top: history.scrollHeight,
-      behavior: 'smooth',
-    });
-  }, [optimisticReply, isReplying, presentation.currentQuestion, historyTurns.length, viewingPhaseId]);
+    if (typeof history.scrollTo === 'function') {
+      history.scrollTo({
+        top: history.scrollHeight,
+        behavior: 'smooth',
+      });
+      return;
+    }
+
+    history.scrollTop = history.scrollHeight;
+  }, [
+    optimisticReply,
+    isReplying,
+    presentation.currentQuestion,
+    presentation.currentSolutionQuestion,
+    presentation.currentDataAiPrivacyQuestion,
+    presentation.currentMedicalDeviceTriageQuestion,
+    presentation.currentResourcesPilotViabilityQuestion,
+    historyTurns.length,
+    activeViewingPhaseId,
+  ]);
 
   function resolveCurrentQuestionText(): string {
     if (isViewingHistoricalPhase) {
@@ -214,7 +208,6 @@ export function SessionWorkspace({
   const currentPhase = presentation.phaseProgress.steps.find((step) =>
     step.id === presentation.phaseProgress.currentPhaseId,
   ) ?? presentation.phaseProgress.steps[0];
-  const reportPhase = presentation.phaseProgress.steps.find((step) => step.id === 'report');
   const pdfPhase = presentation.phaseProgress.steps.find((step) => step.id === 'pdf_export');
   const canDownloadPdf = pdfPhase?.primaryAction === 'download_pdf';
   const primaryPhaseAction: PrimaryPhaseAction | null = (() => {
@@ -222,32 +215,32 @@ export function SessionWorkspace({
       case 'start_solution':
         return {
           kind: currentPhase.primaryAction,
-          label: 'Iniciar solución',
-          busyLabel: 'Procesando…',
+          label: 'Empezar solución',
+          busyLabel: 'Preparando...',
           isBusy: isReplying,
           onClick: () => void onStartSolution(),
         };
       case 'start_data_ai_privacy':
         return {
           kind: currentPhase.primaryAction,
-          label: 'Iniciar datos/IA/privacidad',
-          busyLabel: 'Procesando…',
+          label: 'Revisar datos y privacidad',
+          busyLabel: 'Preparando...',
           isBusy: isReplying,
           onClick: () => void onStartDataAiPrivacy(),
         };
       case 'start_medical_device_triage':
         return {
           kind: currentPhase.primaryAction,
-          label: 'Iniciar medical-device triage',
-          busyLabel: 'Procesando…',
+          label: 'Revisar aspectos sanitarios',
+          busyLabel: 'Preparando...',
           isBusy: isReplying,
           onClick: () => void onStartMedicalDeviceTriage(),
         };
       case 'start_resources_pilot_viability':
         return {
           kind: currentPhase.primaryAction,
-          label: 'Iniciar recursos/piloto',
-          busyLabel: 'Procesando…',
+          label: 'Preparar piloto y recursos',
+          busyLabel: 'Preparando...',
           isBusy: isReplying,
           onClick: () => void onStartResourcesPilotViability(),
         };
@@ -259,22 +252,12 @@ export function SessionWorkspace({
         return {
           kind: currentPhase.primaryAction,
           label: 'Preparar informe',
-          busyLabel: 'Preparando informe…',
+          busyLabel: 'Preparando informe...',
           isBusy: isComposingReport,
           onClick: () => void onComposeReport(audit.session.id),
         };
       case 'download_pdf':
-        if (!report) {
-          return null;
-        }
-
-        return {
-          kind: currentPhase.primaryAction,
-          label: 'Exportar PDF',
-          busyLabel: 'Exportando PDF…',
-          isBusy: isDownloadingReportPdf,
-          onClick: () => void onDownloadReportPdf(audit.session.id),
-        };
+        return null;
       case 'recover':
         if (currentPhase.id !== 'report' || report) {
           return null;
@@ -283,7 +266,7 @@ export function SessionWorkspace({
         return {
           kind: currentPhase.primaryAction,
           label: 'Reintentar informe',
-          busyLabel: 'Preparando informe…',
+          busyLabel: 'Preparando informe...',
           isBusy: isComposingReport,
           onClick: () => void onComposeReport(audit.session.id),
         };
@@ -303,15 +286,7 @@ export function SessionWorkspace({
     currentPhaseReportLoadError ||
     currentPhase.lockedReason ||
     currentPhase.explanation;
-  const reportPanelCanDownloadPdf =
-    canDownloadPdf && primaryPhaseAction?.kind !== 'download_pdf';
-
-  const currentPhaseHasVisibleAction =
-    (Boolean(primaryPhaseAction) && currentPhase.primaryAction !== 'recover') ||
-    currentPhase.primaryAction === 'answer_question';
-
-  const isUnsupportedNonReportRecovery =
-    currentPhase.primaryAction === 'recover' && currentPhase.id !== 'report';
+  const reportPanelCanDownloadPdf = canDownloadPdf;
 
   const completedTurns = historyTurns
     .filter((turn) => turn.status === 'resolved' && Boolean(turn.answer_text?.trim()))
@@ -367,7 +342,7 @@ export function SessionWorkspace({
   function renderUserMessage(text: string) {
     return (
       <article className="message message--user">
-        <div className="message__avatar">TÚ</div>
+        <div className="message__avatar">Tú</div>
         <div className="message__bubble">
           <div className="message__meta">Tu respuesta</div>
           <p>{text}</p>
@@ -392,7 +367,7 @@ export function SessionWorkspace({
   function renderTurnPair(turn: (typeof historyTurns)[number]) {
     return (
       <div key={turn.id} className="message-pair">
-        {renderAssistantMessage(turn.question_text, `SokrAI (Turno ${turn.turn_seq})`)}
+        {renderAssistantMessage(turn.question_text, `Pregunta ${turn.turn_seq}`)}
         {renderUserMessage(turn.answer_text ?? '')}
       </div>
     );
@@ -407,7 +382,7 @@ export function SessionWorkspace({
       <div className="message-pair message-pair--pending">
         {renderAssistantMessage(
           optimisticReply.questionText,
-          `SokrAI (Turno ${optimisticReply.turnSeq})`,
+          `Pregunta ${optimisticReply.turnSeq}`,
         )}
         {renderUserMessage(optimisticReply.answerText)}
         {isReplying ? renderThinkingMessage() : null}
@@ -426,7 +401,7 @@ export function SessionWorkspace({
 
     return (
       <div className="message-pair message-pair--current">
-        {renderAssistantMessage(questionText, `SokrAI (Turno ${turnSeq})`)}
+        {renderAssistantMessage(questionText, `Pregunta ${turnSeq}`)}
       </div>
     );
   }
@@ -440,7 +415,7 @@ export function SessionWorkspace({
       <div className="message-pair message-pair--current">
         {renderAssistantMessage(
           openHistoryTurn.question_text,
-          `SokrAI (Turno ${openHistoryTurn.turn_seq})`,
+          `Pregunta ${openHistoryTurn.turn_seq}`,
         )}
       </div>
     );
@@ -448,28 +423,6 @@ export function SessionWorkspace({
 
   return (
     <section className="conversation-shell">
-      {/* Compatibility selectors for existing tests */}
-      <nav className="phase-navigator" aria-label="Camino de fases de la propuesta" style={{ display: 'none' }}>
-        <ol className="phase-navigator__list">
-          {presentation.phaseProgress.steps.map((step) => {
-            const isCurrent = step.id === currentPhase.id;
-            const hasAction = isCurrent && currentPhaseHasVisibleAction && !isUnsupportedNonReportRecovery;
-            const shouldShowCompletada = step.status === 'complete' || step.status === 'not_applicable';
-            return (
-              <li key={step.id} className="phase-step" aria-current={isCurrent ? 'step' : undefined}>
-                <strong>{step.label}</strong>
-                <span>{phaseStatusLabel(step.status)}</span>
-                <span>{shouldShowCompletada ? 'Completada' : step.status === 'locked' ? 'Bloqueada' : step.status === 'current' ? 'Actual' : ''}</span>
-                {hasAction && (
-                  <span className="phase-step__action">Acción actual</span>
-                )}
-              </li>
-            );
-          })}
-        </ol>
-      </nav>
-
-      {/* 1. Current Phase Header */}
       <section className="phase-action-panel" aria-label={isViewingHistoricalPhase ? 'Fase en revisión' : 'Fase actual'}>
         <div className="phase-action-panel__main">
           <span className="panel__eyebrow">
@@ -477,7 +430,7 @@ export function SessionWorkspace({
           </span>
           <h2>
             {isViewingHistoricalPhase
-              ? `Revisando: ${getPhaseLabel(viewingPhaseId)}`
+              ? `Revisando: ${getPhaseLabel(activeViewingPhaseId)}`
               : `Fase actual: ${currentPhase.label}`}
           </h2>
           <p>
@@ -487,7 +440,7 @@ export function SessionWorkspace({
           </p>
           {unsupportedRecoverAction && !isViewingHistoricalPhase && (
             <div className="feedback feedback--error">
-              Esta fase necesita recuperación. Revisa los detalles antes de continuar.
+              Esta fase necesita revisarse antes de continuar.
             </div>
           )}
         </div>
@@ -507,7 +460,7 @@ export function SessionWorkspace({
             <p className="empty-state text-center">
               {isViewingHistoricalPhase
                 ? 'Esta fase todavía no tiene conversación guardada.'
-                : 'Aún no hay respuestas guardadas en esta sesión.'}
+                : 'Aún no hay respuestas guardadas en esta propuesta.'}
             </p>
           ) : (
             <div className="conversation-panel__messages">
@@ -523,51 +476,16 @@ export function SessionWorkspace({
         <section className="question-callout" aria-label="Pregunta actual">
           <span className="question-callout__label">Pregunta actual</span>
           <p className="question-text">
-            {presentation.currentQuestion || 'SokrAI no tiene un turno esperando respuesta en este momento.'}
+            {presentation.currentQuestion || 'SokrAI no tiene una pregunta pendiente en este momento.'}
           </p>
         </section>
         ) : null}
-
-        {/* Compatibility indicators for specific phase locks / tests */}
-        <div style={{ display: 'none' }}>
-          {currentPhase.id === 'solution' && (
-            <div>Completa la fase de solución antes de revisar datos, IA y privacidad.</div>
-          )}
-          {currentPhase.id === 'data_ai_privacy' && (
-            <div>
-              <div>Completa datos/IA/privacidad y el triaje medical-device antes de recursos/piloto.</div>
-              <div>Faltan fases previas: Datos / IA / privacidad, Medical-device triage, Recursos / piloto / viabilidad.</div>
-            </div>
-          )}
-          {presentation.phaseProgress.steps.some(s => s.id === 'medical_device_triage' && s.status === 'not_applicable') && (
-            <div>
-              <div>Medical-device triage</div>
-              <div>No aplica</div>
-            </div>
-          )}
-          {unsupportedRecoverAction ? (
-            <div>Esta fase necesita recuperación, pero esta pantalla solo permite reintentar el informe Alpha. Revisa el estado antes de continuar.</div>
-          ) : (
-            currentPhase.primaryAction === 'recover' && (
-              <div>Esta fase necesita recuperación, pero esta pantalla solo permite reintentar el informe Alpha. Revisa el estado antes de continuar.</div>
-            )
-          )}
-          {isUnsupportedNonReportRecovery && (
-            <div>Esta fase necesita recuperación, pero esta pantalla solo permite reintentar el informe Alpha. Revisa el estado antes de continuar.</div>
-          )}
-          {currentPhase.id === 'report' && (
-            <div>Informe Alpha</div>
-          )}
-          {currentPhase.id === 'pdf_export' && (
-            <div>Fase actual: PDF / export</div>
-          )}
-        </div>
 
         <div className="conversation-panel__composer">
           <div className="composer-card__header">
             <div>
               <span className="panel__eyebrow">Tu respuesta</span>
-              <h2>Siguiente intervención</h2>
+              <h2>Responde a la pregunta actual</h2>
             </div>
           </div>
 
@@ -579,13 +497,13 @@ export function SessionWorkspace({
                 onChange={(event) => setReply(event.target.value)}
                 placeholder={
                   presentation.currentResourcesPilotViabilityQuestion
-                    ? 'Describe equipo, recursos tecnicos, entorno piloto, dependencias, metricas, restricciones y riesgos operativos.'
+                    ? 'Describe equipo, recursos técnicos, entorno piloto, dependencias, indicadores, restricciones y riesgos operativos.'
                     : presentation.currentMedicalDeviceTriageQuestion
-                    ? 'Describe uso previsto, papel clinico, evidencia faltante, incertidumbre y revision humana competente.'
+                    ? 'Describe el uso previsto, el papel clínico u operativo, la evidencia pendiente y quién debería revisarlo.'
                     : presentation.currentDataAiPrivacyQuestion
-                    ? 'Describe datos tratados, fuentes, rol de IA, controles, validacion y revision humana competente.'
+                    ? 'Describe los datos tratados, sus fuentes, el papel de la IA, los controles y la revisión humana prevista.'
                     : presentation.currentSolutionQuestion
-                    ? 'Describe que hace la solucion, quien la usa, como funciona y que limites tiene.'
+                    ? 'Describe qué haría la solución, quién la usaría, cómo funcionaría y qué límites tendría.'
                     : 'Describe quién vive el problema, la evidencia concreta, el alcance y las alternativas actuales.'
                 }
                 disabled={isReplying}
@@ -596,13 +514,13 @@ export function SessionWorkspace({
               <div className="composer-card__actions">
                 <p className="composer-hint">
                   {presentation.currentMedicalDeviceTriageQuestion
-                    ? 'Registra gaps, preguntas e incertidumbre; no clasifiques ni emitas dictamen.'
+                    ? 'No emitas clasificaciones ni dictámenes. Deja claro qué necesita revisión competente.'
                     : presentation.currentResourcesPilotViabilityQuestion
-                    ? 'Responde con insumos operativos concretos; no incluyas score, aprobación, ranking ni modelo financiero.'
+                    ? 'Responde con información operativa concreta. No incluyas aprobaciones, rankings ni modelos financieros.'
                     : presentation.currentDataAiPrivacyQuestion
-                    ? 'Responde con gaps, incertidumbre y revisión humana competente; no emitas decisiones definitivas.'
+                    ? 'Describe incertidumbres y controles. No emitas decisiones definitivas.'
                     : presentation.currentSolutionQuestion
-                    ? 'Responde con información operativa sobre la solución, sin entrar en costes o regulación.'
+                    ? 'Responde con información operativa sobre la solución, sin cerrar costes ni regulación.'
                     : 'Responde con información concreta, verificable y centrada en el problema.'}
                 </p>
                 <button className="button button--primary" type="submit" disabled={isReplying}>
@@ -613,20 +531,20 @@ export function SessionWorkspace({
           ) : isViewingHistoricalPhase ? (
             <div className="empty-state">
               <p>
-                Estás revisando el historial de {getPhaseLabel(viewingPhaseId)}. Selecciona la fase
+                Estás revisando el historial de {getPhaseLabel(activeViewingPhaseId)}. Selecciona la fase
                 actual en el panel izquierdo para seguir respondiendo.
               </p>
             </div>
           ) : (
             <div className="empty-state">
               {presentation.status === 'completed' && presentation.phaseProgress.isComplete ? (
-                <p>La sesión ya quedó marcada como completada.</p>
+                <p>La propuesta está completada y lista para revisión.</p>
               ) : presentation.status === 'completed' ? (
-                <p>La fase de problema quedó completada. Continúa con la siguiente fase cuando estés listo.</p>
+                <p>Esta fase ya está completada. Continúa con la siguiente fase cuando esté disponible.</p>
               ) : presentation.status === 'blocked' || presentation.status === 'failed' ? (
-                <p>La sesión necesita revisión manual. Si fue un timeout del modelo, recarga la sesión e inténtalo de nuevo.</p>
+                <p>La propuesta necesita revisión antes de continuar. Recárgala o vuelve a intentarlo.</p>
               ) : (
-                <p>SokrAI no tiene un turno esperando respuesta en este momento.</p>
+                <p>SokrAI no tiene una pregunta pendiente en este momento.</p>
               )}
 
               {primaryPhaseAction && !isViewingHistoricalPhase && (
@@ -650,6 +568,7 @@ export function SessionWorkspace({
         <section className="downstream-report-container">
           <BasicAlphaReportPanel
             report={report}
+            generatedSections={audit.generated_sections}
             canDownloadPdf={reportPanelCanDownloadPdf}
             isDownloadingPdf={isDownloadingReportPdf}
             onDownloadPdf={() => onDownloadReportPdf(audit.session.id)}

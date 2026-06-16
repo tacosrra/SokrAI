@@ -12,30 +12,30 @@ interface WorkflowLoadingCopy {
 
 const WORKFLOW_LOADING_COPY: Record<WorkflowOperationKind, WorkflowLoadingCopy> = {
   start: {
-    eyebrow: 'Primer diagnóstico en curso',
-    title: 'Preparando el primer diagnóstico',
+    eyebrow: 'Preparando la entrevista',
+    title: 'Preparando tu primera pregunta',
     description:
-      'La propuesta ya se ha enviado al flujo real. SokrAI está validando el payload, construyendo el structured brief y generando la primera pregunta socrática.',
+      'SokrAI está leyendo la información que has aportado y preparando una primera pregunta útil para mejorar la propuesta.',
     steps: [
-      'Validar el envío y abrir la sesión persistida.',
-      'Extraer el structured brief con el contrato JSON de v1.',
-      'Generar el primer diagnóstico y la siguiente pregunta del lane.',
+      'Organizar el contexto inicial de la propuesta.',
+      'Detectar qué información necesita aclararse primero.',
+      'Preparar una pregunta concreta para continuar.',
     ],
     note:
-      'El primer turno puede tardar más que una respuesta normal porque encadena extracción inicial y la primera ejecución del agente.',
+      'Este primer paso puede tardar algo más que una respuesta normal porque abre el trabajo guiado.',
   },
   reply: {
-    eyebrow: 'Turno en curso',
-    title: 'Generando el siguiente diagnóstico',
+    eyebrow: 'Respuesta recibida',
+    title: 'Preparando la siguiente pregunta',
     description:
-      'La respuesta ya se envió al workflow real. SokrAI está actualizando la sesión, recalculando el estado y preparando la siguiente pregunta o el cierre.',
+      'SokrAI está guardando tu respuesta, actualizando la propuesta y preparando el siguiente paso.',
     steps: [
-      'Persistir la respuesta del usuario en la sesión.',
-      'Ejecutar el lane problem_definition_agent con el contexto actualizado.',
-      'Devolver el siguiente estado, diagnóstico y pregunta.',
+      'Guardar tu respuesta.',
+      'Actualizar lo que ya está claro y lo que falta.',
+      'Preparar la siguiente pregunta o el cierre de la fase.',
     ],
     note:
-      'Este turno suele ser más corto que el arranque inicial, pero sigue dependiendo de n8n, Fastify y Ollama.',
+      'Puedes dejar esta pantalla abierta mientras se completa el paso.',
   },
 };
 
@@ -45,53 +45,48 @@ export function getWorkflowLoadingCopy(kind: WorkflowOperationKind): WorkflowLoa
 
 export function mapApiError(error: unknown): string {
   if (!(error instanceof ApiError)) {
-    return 'Ha ocurrido un error inesperado en el frontend.';
+    return 'Ha ocurrido un error inesperado. Vuelve a intentarlo.';
   }
 
   switch (error.errorCode) {
     case 'invalid_response_contract':
-      return 'La respuesta del backend no coincide con el contrato esperado. Lo más habitual aquí es que web, API y workflows estén en versiones distintas o que falte reiniciar/reconstruir servicios tras los cambios.';
     case 'unexpected_html_response':
-      return 'El frontend recibió HTML donde esperaba JSON. Suele indicar que el proxy apunta al servicio incorrecto o que n8n devolvió una página intermedia o de login en vez del webhook/API.';
+      return 'No se ha podido leer la respuesta del servicio local. Reinicia los servicios y vuelve a intentarlo.';
     case 'session_not_found':
-      return 'No existe una sesión con ese `session_id`. Comprueba el valor o crea una nueva sesión.';
+      return 'No hemos podido encontrar esta propuesta. Puede que el enlace sea antiguo o que el servicio local se haya reiniciado.';
     case 'invalid_request_recovery':
-      return 'La API devolvió un estado de recuperación inconsistente con la petición original. Revisa n8n, API y el contrato de inspección.';
+      return 'No se ha podido recuperar este paso de forma fiable. Vuelve a cargar la propuesta o intenta de nuevo.';
     case 'ollama_timeout':
-      return 'Ollama agotó el tiempo máximo configurado antes de devolver una respuesta. Revisa carga del modelo, memoria disponible o sube `OLLAMA_TIMEOUT_MS` si tu máquina es lenta.';
     case 'ollama_unreachable':
-      return 'La API no puede alcanzar Ollama. Revisa el contenedor o servicio local y la URL configurada.';
     case 'ollama_request_failed':
-      return 'Ollama devolvió un error al ejecutar el turno. Revisa los logs de n8n, API y Ollama.';
     case 'ollama_invalid_response':
-      return 'Ollama respondió con un payload inválido. Revisa compatibilidad del modelo con el formato JSON exigido por la v1.';
     case 'invalid_model_json':
     case 'invalid_model_json_after_repair':
-      return 'El modelo respondió, pero no pudo cumplir el contrato JSON del turno. Revisa prompts, modelo y guardrails.';
+      return 'El asistente local no ha podido completar este paso. Vuelve a intentarlo con una respuesta más concreta.';
     case 'request_timeout':
-      return 'El navegador agotó el tiempo de espera de la llamada. El workflow puede seguir ejecutándose; revisa n8n, API y Ollama.';
+      return 'Este paso está tardando más de lo esperado. El proceso puede seguir en marcha; espera unos segundos y vuelve a cargar la propuesta.';
     case 'request_recovery_timeout':
-      return 'La UI agotó la espera y tampoco pudo recuperar el resultado final del workflow. Revisa n8n, API y Ollama con el `request_id` de la petición.';
+      return 'No hemos podido confirmar el resultado final. Vuelve a cargar la propuesta antes de responder de nuevo.';
     case 'request_not_found_after_recovery':
-      return 'La API no encontró ningún rastro persistido para ese `request_id`, incluso tras la recuperación activa. Suele indicar que la petición nunca llegó correctamente al backend o al workflow.';
+      return 'No hemos encontrado este paso en el servicio local. Vuelve al inicio o crea una nueva propuesta.';
     case 'session_blocked':
-      return 'La sesión quedó bloqueada por un límite del flujo. Si fue un fallo temporal del modelo, vuelve a enviar la respuesta; si persiste, revisa los logs del backend.';
+      return 'La propuesta necesita revisión antes de continuar. Vuelve a cargarla o intenta responder de nuevo.';
     case 'reply_processing_failed':
-      return 'La respuesta del usuario se guardó, pero el workflow falló antes de completar el siguiente turno.';
+      return 'Tu respuesta se ha guardado, pero no se ha podido preparar la siguiente pregunta.';
     case 'network_error':
-      return 'No se pudo contactar con los servicios locales. Revisa el proxy del frontend, n8n y la API.';
+      return 'El servicio local no está disponible. Comprueba que SokrAI está arrancado y vuelve a intentarlo.';
     case 'internal_error':
-      return 'La API devolvió un error inesperado. Revisa los logs de Fastify, n8n y Ollama.';
+      return 'No se ha podido completar este paso por un error del servicio local. Vuelve a intentarlo.';
     case 'invalid_pdf_file':
     case 'unsupported_document_type':
-      return 'El tipo de documento no está soportado en esta v1. Usa un PDF con texto extraíble o pega el texto de apoyo.';
+      return 'Este documento no se puede usar aquí. Sube un PDF con texto seleccionable o pega el texto en el formulario.';
     case 'invalid_pdf_payload':
-      return 'El PDF no es válido para la v1. Usa un PDF con texto extraíble.';
+      return 'El PDF no se ha podido leer. Usa un PDF con texto seleccionable.';
     case 'empty_document':
-      return 'El PDF no contiene texto extraíble para esta v1.';
+      return 'El PDF no contiene texto seleccionable. Pega el contenido en el campo de apoyo.';
     case 'pdf_extraction_failed':
-      return 'No se pudo extraer texto del PDF. Esta v1 solo soporta PDFs con texto, no documentos escaneados u OCR.';
+      return 'No se ha podido extraer texto del PDF. Si es un documento escaneado, pega el texto manualmente.';
     default:
-      return error.message;
+      return 'No se ha podido completar este paso. Vuelve a intentarlo.';
   }
 }

@@ -752,7 +752,7 @@ describe('deriveSessionPresentation', () => {
     });
     expect(presentation.phaseProgress.steps.find((step) => step.id === 'resources_pilot_viability')).toMatchObject({
       status: 'locked',
-      lockedReason: 'Completa datos/IA/privacidad y el triaje medical-device antes de recursos/piloto.',
+      lockedReason: 'Completa datos, privacidad y revisión sanitaria antes del piloto.',
       primaryAction: 'none',
     });
   });
@@ -924,7 +924,7 @@ describe('deriveSessionPresentation', () => {
 
     expect(presentation.phaseProgress.steps.find((step) => step.id === 'report')).toMatchObject({
       status: 'locked',
-      lockedReason: expect.stringContaining('Datos / IA / privacidad'),
+      lockedReason: expect.stringContaining('Datos y privacidad'),
     });
   });
 
@@ -1083,7 +1083,7 @@ describe('deriveSessionPresentation', () => {
       active_turn_id: undefined,
       warnings: [],
       started_at: '2026-05-24T14:30:00.000Z',
-      completed_at: null,
+      completed_at: undefined,
       turns: [],
     };
 
@@ -1094,7 +1094,7 @@ describe('deriveSessionPresentation', () => {
 
     expect(presentation.phaseProgress.currentPhaseId).toBe('solution');
     expect(presentation.phaseProgress.steps.find((step) => step.id === 'solution')).toMatchObject({
-      status: 'ready',
+      status: 'current',
       primaryAction: 'start_solution',
       explanation: 'El inicio de esta fase se interrumpió. Puedes reintentarlo.',
     });

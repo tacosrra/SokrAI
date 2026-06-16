@@ -179,36 +179,36 @@ const PHASE_ORDER: PhaseId[] = [
 
 const PHASE_DETAILS: Record<PhaseId, Pick<PhaseStep, 'label' | 'explanation'>> = {
   intake: {
-    label: 'Intake / propuesta',
-    explanation: 'Contexto inicial normalizado y listo para guiar la entrevista.',
+    label: 'Inicio',
+    explanation: 'Contexto inicial preparado para empezar la entrevista guiada.',
   },
   problem: {
     label: 'Problema',
-    explanation: 'Aclara quién vive el problema, evidencia, alcance y alternativas actuales.',
+    explanation: 'Aclara quién vive el problema, qué evidencia existe y qué alcance tiene.',
   },
   solution: {
     label: 'Solución',
-    explanation: 'Describe qué cambiaría, quién la usaría, cómo funcionaría y sus límites.',
+    explanation: 'Describe qué cambiaría, quién usaría la solución, cómo funcionaría y qué límites tendría.',
   },
   data_ai_privacy: {
-    label: 'Datos / IA / privacidad',
-    explanation: 'Identifica datos sensibles, rol de IA, controles, validación y revisión humana.',
+    label: 'Datos y privacidad',
+    explanation: 'Identifica datos tratados, uso de IA, controles, validación y revisión humana.',
   },
   medical_device_triage: {
-    label: 'Medical-device triage',
-    explanation: 'Registra señales o incertidumbre que requieren revisión competente.',
+    label: 'Revisión sanitaria',
+    explanation: 'Recoge incertidumbres sanitarias o regulatorias para que una persona competente las revise.',
   },
   resources_pilot_viability: {
-    label: 'Recursos / piloto / viabilidad',
-    explanation: 'Captura recursos, dependencias, entorno piloto, métricas y riesgos operativos.',
+    label: 'Piloto y recursos',
+    explanation: 'Captura recursos, dependencias, entorno piloto, indicadores y riesgos operativos.',
   },
   report: {
     label: 'Informe',
-    explanation: 'Prepara el resumen estructurado para revisión antes de exportar.',
+    explanation: 'Prepara material claro y revisable antes de exportarlo.',
   },
   pdf_export: {
-    label: 'PDF / export',
-    explanation: 'Genera el artefacto local de demo cuando el informe está listo.',
+    label: 'Exportación',
+    explanation: 'Descarga el PDF cuando el informe está listo para compartir.',
   },
 };
 
@@ -340,7 +340,7 @@ function deriveProblemProgress(
     },
     {
       id: 'brief',
-      label: 'Structured brief',
+      label: 'Resumen inicial',
       state: 'complete',
     },
     {
@@ -368,7 +368,7 @@ function deriveProblemProgress(
       totalItems,
       title: 'Definición del problema completada',
       description:
-        'La sesión cerró el carril y dejó todas las categorías listas para revisión.',
+        'La fase de problema quedó cerrada y las categorías principales están listas para revisión.',
       steps,
     };
   }
@@ -380,7 +380,7 @@ function deriveProblemProgress(
       totalItems,
       title: 'Categorías clave ya cubiertas',
       description:
-        'La información troncal está presente; queda cerrar el turno o completar el lane.',
+        'La información troncal está presente. Queda cerrar la fase o completar la siguiente pregunta.',
       steps,
     };
   }
@@ -392,7 +392,7 @@ function deriveProblemProgress(
     completedItems,
     totalItems,
     title: `${completedItems} de ${totalItems} categorías definidas`,
-    description: `Faltan ${remainingItems} categorías por aclarar antes de cerrar el carril.`,
+    description: `Faltan ${remainingItems} categorías por aclarar antes de cerrar la fase.`,
     steps,
   };
 }
@@ -775,7 +775,7 @@ function deriveModulePhaseStep(params: {
   if (params.notApplicable) {
     return createPhaseStep(params.id, 'not_applicable', {
       ...gapCounts,
-      explanation: 'El triaje auditado indicó que esta fase no aplica para la propuesta.',
+      explanation: 'La información disponible indica que esta fase no aplica a esta propuesta.',
     });
   }
 
@@ -801,7 +801,7 @@ function deriveModulePhaseStep(params: {
     return createPhaseStep(params.id, 'error', {
       ...gapCounts,
       primaryAction: 'recover',
-      explanation: 'La fase necesita revisión o recuperación antes de continuar.',
+      explanation: 'Esta fase necesita revisarse antes de continuar.',
     });
   }
 
@@ -893,7 +893,7 @@ function derivePhaseProgress(input: {
     chat: input.moduleChats.solution,
     section: input.sections.solution,
     prerequisiteComplete: problemComplete,
-    lockedReason: 'Completa la fase de problema antes de iniciar solución.',
+    lockedReason: 'Completa la fase de problema antes de iniciar la solución.',
     activeQuestion: input.currentSolutionQuestion,
     readyAction: 'start_solution',
   });
@@ -903,7 +903,7 @@ function derivePhaseProgress(input: {
     chat: input.moduleChats.data_ai_privacy,
     section: input.sections.data_ai_privacy,
     prerequisiteComplete: solutionComplete,
-    lockedReason: 'Completa la fase de solución antes de revisar datos, IA y privacidad.',
+    lockedReason: 'Completa la solución antes de revisar datos y privacidad.',
     activeQuestion: input.currentDataAiPrivacyQuestion,
     readyAction: 'start_data_ai_privacy',
   });
@@ -913,7 +913,7 @@ function derivePhaseProgress(input: {
     chat: input.moduleChats.medical_device_triage,
     section: input.sections.medical_device_triage,
     prerequisiteComplete: dataComplete,
-    lockedReason: 'Completa datos, IA y privacidad antes del triaje medical-device.',
+    lockedReason: 'Completa datos y privacidad antes de la revisión sanitaria.',
     activeQuestion: input.currentMedicalDeviceTriageQuestion,
     readyAction: 'start_medical_device_triage',
     notApplicable: medicalNotApplicable,
@@ -924,7 +924,7 @@ function derivePhaseProgress(input: {
     chat: input.moduleChats.resources_pilot_viability,
     section: input.sections.resources_pilot_viability,
     prerequisiteComplete: dataComplete && medicalComplete,
-    lockedReason: 'Completa datos/IA/privacidad y el triaje medical-device antes de recursos/piloto.',
+    lockedReason: 'Completa datos, privacidad y revisión sanitaria antes del piloto.',
     activeQuestion: input.currentResourcesPilotViabilityQuestion,
     readyAction: 'start_resources_pilot_viability',
   });
@@ -982,7 +982,7 @@ function derivePhaseProgress(input: {
           ? 'current'
           : 'ready';
   const pdfExport = createPhaseStep('pdf_export', pdfStatus, {
-    lockedReason: pdfStatus === 'locked' ? 'Prepara el informe antes de exportar PDF.' : null,
+    lockedReason: pdfStatus === 'locked' ? 'Prepara el informe antes de exportar el PDF.' : null,
     primaryAction: pdfStatus === 'ready' || pdfStatus === 'current' ? 'download_pdf' : 'none',
   });
 

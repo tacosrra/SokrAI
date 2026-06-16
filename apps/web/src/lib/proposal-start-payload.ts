@@ -21,15 +21,15 @@ export function buildProposalStartPayload(
   const documentText = form.documentText.trim();
 
   if (!projectTitle) {
-    return { ok: false, error: '`project_title` es obligatorio.' };
+    return { ok: false, error: 'Pon un nombre breve para reconocer esta propuesta.' };
   }
 
   if (!goal) {
-    return { ok: false, error: '`goal` es obligatorio.' };
+    return { ok: false, error: 'Resume qué quieres aclarar o mejorar con SokrAI.' };
   }
 
   if (!proposalText && !documentText && !form.file) {
-    return { ok: false, error: 'Debes aportar texto de propuesta, `document_text` o un PDF.' };
+    return { ok: false, error: 'Añade una descripción de la idea, texto de apoyo o un PDF antes de empezar.' };
   }
 
   return {
