@@ -23,7 +23,7 @@ import {
 import { saveBlobDownload } from './lib/download';
 import { mapApiError } from './lib/feedback';
 import { deriveSessionPresentation, type PhaseId } from './lib/session-view';
-import { readLastSessionId, readRecentSessions, persistRecentSession } from './lib/storage';
+import { readLastSessionId, readRecentSessions, persistRecentSession, removeRecentSession } from './lib/storage';
 import { ContinueSessionPanel } from './components/ContinueSessionPanel';
 import { NewProposalPanel } from './components/NewProposalPanel';
 import { SessionStatePanel } from './components/SessionStatePanel';
@@ -43,6 +43,7 @@ interface BannerState {
 }
 
 const TOAST_DISMISS_MS = 6500;
+const TOAST_EXIT_MS = 220;
 const START_SESSION_TIMEOUT_MS = readTimeout('VITE_START_SESSION_TIMEOUT_MS', 960000);
 const REPLY_SESSION_TIMEOUT_MS = readTimeout('VITE_REPLY_SESSION_TIMEOUT_MS', 540000);
 const REQUEST_RECOVERY_TIMEOUT_MS = readTimeout(
@@ -306,16 +307,32 @@ function ModeCard({
   );
 }
 
-function BannerMessage({ banner }: { banner: BannerState }) {
+function BannerMessage({
+  banner,
+  isLeaving,
+  onClose,
+}: {
+  banner: BannerState;
+  isLeaving: boolean;
+  onClose: () => void;
+}) {
   const role = banner.tone === 'error' ? 'alert' : 'status';
+  const leavingClassName = isLeaving ? ' toast-notification--leaving' : '';
 
   return (
     <div
-      className={`toast-notification toast-notification--${banner.tone}`}
+      className={`toast-notification toast-notification--${banner.tone}${leavingClassName}`}
       role={role}
       aria-atomic="true"
     >
-      {banner.text}
+      <span className="toast-notification__message">{banner.text}</span>
+      <button
+        className="toast-notification__close"
+        type="button"
+        aria-label="Cerrar notificación"
+        onClick={onClose}
+        disabled={isLeaving}
+      />
     </div>
   );
 }
@@ -337,6 +354,8 @@ export function App() {
   const [isDownloadingReportPdf, setIsDownloadingReportPdf] = useState(false);
   const [lastPdfExportSessionId, setLastPdfExportSessionId] = useState<string | null>(null);
   const [banner, setBanner] = useState<BannerState | null>(null);
+  const [visibleBanner, setVisibleBanner] = useState<BannerState | null>(null);
+  const [isBannerLeaving, setIsBannerLeaving] = useState(false);
   const [isSessionMenuOpen, setIsSessionMenuOpen] = useState(false);
   const [viewingPhaseId, setViewingPhaseId] = useState<PhaseId | null>(null);
 
@@ -408,6 +427,28 @@ export function App() {
     return () => window.clearTimeout(timeoutId);
   }, [banner]);
 
+  useEffect(() => {
+    if (banner) {
+      setVisibleBanner(banner);
+      setIsBannerLeaving(false);
+      return;
+    }
+
+    if (!visibleBanner) {
+      setIsBannerLeaving(false);
+      return;
+    }
+
+    setIsBannerLeaving(true);
+
+    const timeoutId = window.setTimeout(() => {
+      setVisibleBanner(null);
+      setIsBannerLeaving(false);
+    }, TOAST_EXIT_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [banner, visibleBanner]);
+
   async function loadSession(
     sessionId: string,
     options?: { successMessage?: string; skipBannerOnStart?: boolean; suppressSuccessBanner?: boolean },
@@ -461,8 +502,32 @@ export function App() {
 
       return audit;
     } catch (error) {
-      setActiveReport(null);
       setReportLoadError(null);
+
+      if (error instanceof ApiError && error.errorCode === 'session_not_found') {
+        const missingSessionId = error.sessionId ?? lookupId;
+        setRecentSessions(removeRecentSession(missingSessionId));
+        setDefaultSessionId((currentSessionId) =>
+          currentSessionId === missingSessionId ? '' : currentSessionId,
+        );
+        setSessionLookupId((currentSessionId) =>
+          currentSessionId === missingSessionId || currentSessionId === sessionId ? '' : currentSessionId,
+        );
+        setActiveAudit((currentAudit) =>
+          currentAudit?.session.id === missingSessionId ? null : currentAudit,
+        );
+        setActiveReport((currentReport) =>
+          currentReport?.proposal_id === missingSessionId ? null : currentReport,
+        );
+        writeSessionToUrl('');
+        setBanner({
+          tone: 'error',
+          text: 'Este navegador recordaba la propuesta, pero esta base local ya no la contiene.',
+        });
+
+        return null;
+      }
+
       setBanner({
         tone: 'error',
         text: mapApiError(error),
@@ -1399,13 +1464,18 @@ export function App() {
 
   if (presentation && activeAudit) {
     const activeViewingPhaseId = viewingPhaseId ?? presentation.phaseProgress.currentPhaseId;
-    const selectablePhaseIds = Object.keys(presentation.conversationHistoryByPhase) as PhaseId[];
+    const selectablePhaseIds = Array.from(
+      new Set([
+        ...Object.keys(presentation.conversationHistoryByPhase),
+        presentation.phaseProgress.currentPhaseId,
+      ]),
+    ) as PhaseId[];
 
     return (
       <div className="app-shell app-shell--workspace">
         <div className="app-shell__ambient" />
 
-        {/* 1. Row 1: Sticky Top Bar across the shell */}
+        {/* 1. Row 1: Top bar across the shell */}
         <WorkspaceTopBar
           presentation={presentation}
           isLoadingSession={isLoadingSession}
@@ -1416,7 +1486,13 @@ export function App() {
           onNewProposalClick={handleStartFreshSession}
         />
 
-        {banner ? <BannerMessage banner={banner} /> : null}
+        {visibleBanner ? (
+          <BannerMessage
+            banner={visibleBanner}
+            isLeaving={isBannerLeaving}
+            onClose={() => setBanner(null)}
+          />
+        ) : null}
 
         {/* Workspace Layout */}
         <main className="workspace-shell" ref={workspaceShellRef}>
@@ -1465,7 +1541,10 @@ export function App() {
           </section>
 
           <aside className="workspace-insights guidance-panel-column">
-            <SessionStatePanel presentation={presentation} />
+            <SessionStatePanel
+              presentation={presentation}
+              selectedPhaseId={activeViewingPhaseId}
+            />
           </aside>
         </main>
 
@@ -1503,7 +1582,13 @@ export function App() {
 
       </header>
 
-      {banner ? <BannerMessage banner={banner} /> : null}
+      {visibleBanner ? (
+        <BannerMessage
+          banner={visibleBanner}
+          isLeaving={isBannerLeaving}
+          onClose={() => setBanner(null)}
+        />
+      ) : null}
 
       <main className="mode-page">
         <nav className="mode-breadcrumbs" aria-label="Información del producto">

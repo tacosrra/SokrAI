@@ -46,6 +46,7 @@ export type GapOrigin =
 
 export type ChatStatus =
   | 'not_started'
+  | 'preparing'
   | 'active'
   | 'waiting_for_user'
   | 'ready_to_generate'
@@ -611,4 +612,5 @@ export interface RecentSession {
   status: SessionStatus;
   updatedAt: string;
   currentQuestion: string;
+  phaseLabel?: string;
 }

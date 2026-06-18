@@ -26,6 +26,7 @@ function createConfig(): AppConfig {
     maxReplyChars: 4000,
     maxTurnsPerSession: 12,
     maxDiagnosisItems: 3,
+    phasePrefetchEnabled: false,
     allowSensitiveHealthData: false,
     internalSharedSecret: 'test-secret',
   };

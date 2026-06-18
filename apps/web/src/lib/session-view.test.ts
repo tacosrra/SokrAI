@@ -207,6 +207,31 @@ function awaitingModuleChat(module: ModuleChat['module'], question: string): Mod
   };
 }
 
+function alphaGap(overrides: Partial<AlphaGap> = {}): AlphaGap {
+  return {
+    gap_id: 'gap-1',
+    proposal_id: 'session-1',
+    module: 'problem',
+    gap_kind: 'missing_information',
+    gap_status: 'open',
+    origin: 'structured_brief_missing_information',
+    field: 'problem_owner',
+    description:
+      'Falta aclarar quien sera la persona o equipo responsable de operar esta propuesta, tomar decisiones y responder por sus resultados.',
+    absence: {
+      is_absent: true,
+      checked_fields: ['problem_owner'],
+      reason: 'No se encontro esta informacion en el resumen inicial disponible.',
+    },
+    source_refs: [],
+    audit_refs: [],
+    warnings: [],
+    created_at: '2026-05-24T14:00:00.000Z',
+    updated_at: '2026-05-24T14:00:00.000Z',
+    ...overrides,
+  };
+}
+
 function resolvedProblemAudit(overrides: Partial<SessionAuditView> = {}): SessionAuditView {
   return {
     ...auditFixture,
@@ -317,6 +342,64 @@ describe('deriveSessionPresentation', () => {
       ['report', 'locked'],
       ['pdf_export', 'locked'],
     ]);
+  });
+
+  it('collapses equivalent persisted structured-brief gaps in the presentation view', () => {
+    const duplicateGaps: AlphaGap[] = [
+      alphaGap({
+        gap_id: 'gap-ambiguous-owner',
+        gap_kind: 'ambiguous_information',
+        origin: 'structured_brief_ambiguity',
+        field: 'ambiguities',
+        description:
+          'Falta aclarar una parte de la propuesta inicial que puede interpretarse de varias formas. Punto detectado: Quién es el responsable operativo final?',
+        absence: {
+          is_absent: false,
+          checked_fields: [],
+          reason: '',
+        },
+      }),
+      alphaGap({
+        gap_id: 'gap-missing-owner',
+        origin: 'structured_brief_missing_information',
+        field: 'missing_information',
+        description:
+          'Falta completar un dato importante que no aparece en la propuesta inicial. Punto detectado: No está claro quién es el responsable operativo final.',
+      }),
+    ];
+    const presentation = deriveSessionPresentation({
+      ...auditFixture,
+      gaps: duplicateGaps,
+    });
+
+    expect(presentation.gaps.map((gap) => gap.gap_id)).toEqual(['gap-ambiguous-owner']);
+    expect(presentation.detectedGaps).toHaveLength(1);
+    expect(presentation.phaseProgress.steps.find((step) => step.id === 'problem')).toMatchObject({
+      openGapsCount: 1,
+    });
+  });
+
+  it('prefers active structured-brief duplicate gaps over historical resolved duplicates', () => {
+    const duplicateGaps: AlphaGap[] = [
+      alphaGap({
+        gap_id: 'gap-owner-resolved',
+        gap_status: 'resolved',
+      }),
+      alphaGap({
+        gap_id: 'gap-owner-open',
+        gap_status: 'open',
+      }),
+    ];
+    const presentation = deriveSessionPresentation({
+      ...auditFixture,
+      gaps: duplicateGaps,
+    });
+
+    expect(presentation.gaps.map((gap) => gap.gap_id)).toEqual(['gap-owner-open']);
+    expect(presentation.phaseProgress.steps.find((step) => step.id === 'problem')).toMatchObject({
+      openGapsCount: 1,
+      resolvedGapsCount: 0,
+    });
   });
 
   it('always exposes all eight proposal phases in order', () => {
@@ -1032,6 +1115,7 @@ describe('deriveSessionPresentation', () => {
 
     expect(presentation.phaseProgress.steps.find((step) => step.id === 'pdf_export')).toMatchObject({
       status: 'complete',
+      primaryAction: 'download_pdf',
     });
     expect(presentation.phaseProgress.isComplete).toBe(true);
   });
@@ -1097,6 +1181,33 @@ describe('deriveSessionPresentation', () => {
       status: 'current',
       primaryAction: 'start_solution',
       explanation: 'El inicio de esta fase se interrumpió. Puedes reintentarlo.',
+    });
+  });
+
+  it('marks a prefetched phase as preparing until the background start finishes', () => {
+    const preparingSolutionChat: ModuleChat = {
+      chat_id: 'chat-solution-preparing',
+      proposal_id: 'session-1',
+      module: 'solution',
+      chat_status: 'preparing',
+      active_turn_id: undefined,
+      warnings: [],
+      started_at: '2026-05-24T14:30:00.000Z',
+      completed_at: undefined,
+      turns: [],
+    };
+
+    const presentation = deriveSessionPresentation(resolvedProblemAudit({
+      generated_sections: [generatedSection('problem')],
+      module_chats: [completedModuleChat('problem'), preparingSolutionChat],
+    }));
+
+    expect(presentation.phaseProgress.currentPhaseId).toBe('solution');
+    expect(presentation.phaseProgress.steps.find((step) => step.id === 'solution')).toMatchObject({
+      status: 'preparing',
+      progress: 50,
+      primaryAction: 'none',
+      explanation: 'SokrAI está preparando esta fase en segundo plano.',
     });
   });
 

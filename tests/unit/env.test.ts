@@ -32,4 +32,16 @@ describe('loadConfig AI provider settings', () => {
       aiModel: 'ollama-default',
     });
   });
+
+  it('enables phase prefetch by default and allows disabling it', () => {
+    delete process.env.PHASE_PREFETCH_ENABLED;
+    expect(loadConfig()).toMatchObject({
+      phasePrefetchEnabled: true,
+    });
+
+    process.env.PHASE_PREFETCH_ENABLED = 'false';
+    expect(loadConfig()).toMatchObject({
+      phasePrefetchEnabled: false,
+    });
+  });
 });

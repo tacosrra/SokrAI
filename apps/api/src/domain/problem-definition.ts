@@ -81,6 +81,30 @@ const PROBLEM_FIELD_PRIORITY = [
   'assumptions',
 ] as const;
 
+const PROBLEM_OWNER_GAP_TERMS = [
+  'responsable operativo',
+  'responsable final',
+  'responsable del problema',
+  'owner del problema',
+  'quien responde',
+  'quien valida',
+  'accountable owner',
+  'operational owner',
+];
+
+const PROBLEM_OWNER_RESOLUTION_TERMS = [
+  'coordinador',
+  'responsable operativo',
+  'responsable final',
+  'equipo operativo',
+  'equipo de admision',
+  'equipo de admisión',
+  'persona del equipo',
+  'responsabilidad final',
+  'accountable owner',
+  'operational owner',
+];
+
 export interface ProblemGapStatusChange {
   gapId: string;
   gapStatus: 'in_progress' | 'resolved';
@@ -183,6 +207,17 @@ function removeResolvedStaleAmbiguities(
     'datos concretos',
     'datos minimos',
     'minimum data',
+    'informacion minima',
+    'minimum information',
+    'informacion falta',
+    'informacion faltaba',
+    'missing information',
+    'resumen operativo',
+    'resumenes operativos',
+    'resumenes actuales',
+    'current summaries',
+    'operational summary',
+    'operational summaries',
     'datos deben recogerse',
     'data should be collected',
     'datos durante el piloto',
@@ -206,6 +241,8 @@ function removeResolvedStaleAmbiguities(
     'estado de la admision',
     'admission status',
     'dato faltaba',
+    'informacion falta',
+    'informacion faltaba',
     'missing datum',
     'informacion estaba completa',
     'complete information',
@@ -251,6 +288,7 @@ function removeResolvedStaleAmbiguities(
     'real patient data',
     'historias clinicas',
     'clinical records',
+    'almacenados localmente',
   ];
 
   const filteredAmbiguities = problemDefinition.ambiguities_remaining.filter((ambiguity) => {
@@ -379,6 +417,25 @@ function hasResolvedGapField(gap: AlphaGap, problemDefinition: ProblemDefinition
       normalizedDescription.includes(ambiguity.toLocaleLowerCase()) ||
       ambiguity.toLocaleLowerCase().includes(normalizedDescription),
     );
+  }
+
+  if (gap.origin === 'structured_brief_missing_information' && gap.field === 'missing_information') {
+    const gapText = [
+      gap.description,
+      gap.question_hint ?? '',
+      ...gap.warnings,
+    ].join(' ');
+    const ownerEvidence = [
+      problemDefinition.problem_owner,
+      ...problemDefinition.assumptions,
+    ].join(' ');
+
+    if (containsAny(gapText, PROBLEM_OWNER_GAP_TERMS)) {
+      return hasEnoughText(problemDefinition.problem_owner, 3) &&
+        containsAny(ownerEvidence, PROBLEM_OWNER_RESOLUTION_TERMS);
+    }
+
+    return false;
   }
 
   return PROBLEM_FIELD_PRIORITY.includes(gap.field as (typeof PROBLEM_FIELD_PRIORITY)[number]);
@@ -566,6 +623,7 @@ export function classifyProblemGapStatuses(
   answeredTurnId?: string,
 ): ProblemGapStatusChange[] {
   const candidateGapRefs = new Set(selectProblemGapRefs(gaps, problemDefinition));
+  const phaseComplete = evaluateCompletion(problemDefinition);
   const changes: ProblemGapStatusChange[] = [];
 
   for (const gap of gaps.filter((item) => item.module === 'problem').sort(sortProblemGaps)) {
@@ -573,7 +631,7 @@ export function classifyProblemGapStatuses(
       continue;
     }
 
-    if (answeredTurnId && hasResolvedGapField(gap, problemDefinition)) {
+    if (answeredTurnId && (hasResolvedGapField(gap, problemDefinition) || phaseComplete)) {
       changes.push({
         gapId: gap.gap_id,
         gapStatus: 'resolved',

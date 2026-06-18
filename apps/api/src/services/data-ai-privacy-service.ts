@@ -501,6 +501,11 @@ export class DataAiPrivacyService {
         activeTurnId: null,
       });
     } else {
+      await this.alphaStore.deferActiveGapsForModule(params.client, {
+        proposalId: params.session.id,
+        module: 'data_ai_privacy',
+      });
+
       await this.alphaStore.updateModuleChatStatus(params.client, {
         chatId: params.chatId,
         chatStatus: 'blocked',
@@ -979,6 +984,10 @@ export class DataAiPrivacyService {
                 activeTurnId: null,
               });
             }
+            await this.alphaStore.deferActiveGapsForModule(client, {
+              proposalId: lockedSession.id,
+              module: 'data_ai_privacy',
+            });
 
             await this.alphaStore.appendAuditEvent(client, {
               proposalId: lockedSession.id,

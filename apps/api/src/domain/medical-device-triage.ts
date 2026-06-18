@@ -551,6 +551,7 @@ export function classifyMedicalDeviceGapStatuses(
   answeredTurnId?: string,
 ): MedicalDeviceTriageGapStatusChange[] {
   const candidateGapRefs = new Set(selectMedicalDeviceGapRefs(gaps, state));
+  const phaseComplete = evaluateMedicalDeviceCompletion(state);
   const changes: MedicalDeviceTriageGapStatusChange[] = [];
 
   for (const gap of gaps.filter((item) => item.module === 'medical_device_triage').sort(sortMedicalDeviceGaps)) {
@@ -558,7 +559,7 @@ export function classifyMedicalDeviceGapStatuses(
       continue;
     }
 
-    if (answeredTurnId && hasResolvedMedicalDeviceGapField(gap, state)) {
+    if (answeredTurnId && (hasResolvedMedicalDeviceGapField(gap, state) || phaseComplete)) {
       changes.push({
         gapId: gap.gap_id,
         gapStatus: 'resolved',

@@ -731,6 +731,11 @@ export class ProblemDefinitionService {
     }
 
     if (params.guardedTurn.agent_status === 'blocked') {
+      await this.alphaStore.deferActiveGapsForModule(params.client, {
+        proposalId: params.session.id,
+        module: 'problem',
+      });
+
       await this.alphaStore.updateModuleChatStatus(params.client, {
         chatId: params.chatId,
         chatStatus: 'blocked',
@@ -896,10 +901,14 @@ export class ProblemDefinitionService {
 
           if (command.trigger === 'reply' && openTurn?.status === 'processing') {
             if (shouldRevertReplyFailureForUserRetry(command.trigger, error)) {
-              await this.sessionStore.revertTurnForUserRetry(client, {
+              const revertedTurn = await this.sessionStore.revertTurnForUserRetry(client, {
                 sessionId: lockedSession.id,
                 turnSeq: openTurn.turn_seq,
               });
+
+              if (!revertedTurn) {
+                return;
+              }
 
               await this.revertAlphaProblemTurnForRetry(client, {
                 session: lockedSession,
@@ -1087,6 +1096,11 @@ export class ProblemDefinitionService {
     );
 
     if (!activeAlphaTurn) {
+      await this.alphaStore.deferActiveGapsForModule(client, {
+        proposalId: params.session.id,
+        module: 'problem',
+      });
+
       await this.alphaStore.updateModuleChatStatus(client, {
         chatId: chat.chat_id,
         chatStatus: 'failed',
@@ -1135,6 +1149,11 @@ export class ProblemDefinitionService {
       chatId: chat.chat_id,
       chatStatus: 'failed',
       activeTurnId: null,
+    });
+
+    await this.alphaStore.deferActiveGapsForModule(client, {
+      proposalId: params.session.id,
+      module: 'problem',
     });
 
     await this.alphaStore.appendAuditEvent(client, {

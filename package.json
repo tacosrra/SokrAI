@@ -12,7 +12,7 @@
     "lint:fix": "pnpm run lint",
     "migrate": "pnpm --filter @sokrai/api migrate",
     "start": "pnpm --filter @sokrai/api start",
-    "test": "pnpm --filter @sokrai/api test",
+    "test": "pnpm --filter @sokrai/api test && pnpm --filter @sokrai/web test",
     "test:web": "pnpm --filter @sokrai/web test",
     "test:contracts": "pnpm --filter @sokrai/api test:contracts",
     "test:unit": "pnpm --filter @sokrai/api test:unit",

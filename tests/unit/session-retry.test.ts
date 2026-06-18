@@ -28,4 +28,13 @@ describe('shouldRevertReplyFailureForUserRetry', () => {
       ),
     ).toBe(false);
   });
+
+  it('does not reopen non-retryable reply failures', () => {
+    expect(
+      shouldRevertReplyFailureForUserRetry(
+        'reply',
+        new AppError(502, 'model_output_invalid', 'invalid output', false),
+      ),
+    ).toBe(false);
+  });
 });

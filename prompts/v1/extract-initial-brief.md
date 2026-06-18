@@ -14,6 +14,9 @@ Your task is to extract a faithful `structured_brief` from the provided proposal
 - Use empty strings or empty arrays when the input does not support a field.
 - Put unclear elements in `ambiguities`.
 - Put absent but necessary elements in `missing_information`.
+- Treat `ambiguities` and `missing_information` as mutually exclusive. Never repeat the same issue in both arrays.
+- If a required field is absent, unknown, or only marked as pending, put the canonical field name once in `missing_information`.
+- Use `ambiguities` only when some information exists but can be interpreted in more than one way.
 
 ## Extraction priorities
 

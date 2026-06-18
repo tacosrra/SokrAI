@@ -45,6 +45,7 @@ export type GapOrigin =
 
 export type ChatStatus =
   | 'not_started'
+  | 'preparing'
   | 'active'
   | 'waiting_for_user'
   | 'ready_to_generate'

@@ -434,6 +434,7 @@ export function classifyResourcesPilotViabilityGapStatuses(
   answeredTurnId?: string,
 ): ResourcesPilotViabilityGapStatusChange[] {
   const candidateGapRefs = new Set(selectResourcesPilotViabilityGapRefs(gaps, state));
+  const phaseComplete = evaluateResourcesPilotViabilityCompletion(state);
   const changes: ResourcesPilotViabilityGapStatusChange[] = [];
 
   for (const gap of gaps.filter((item) => item.module === 'resources_pilot_viability')
@@ -442,7 +443,7 @@ export function classifyResourcesPilotViabilityGapStatuses(
       continue;
     }
 
-    if (answeredTurnId && hasResolvedResourcesPilotViabilityGapField(gap, state)) {
+    if (answeredTurnId && (hasResolvedResourcesPilotViabilityGapField(gap, state) || phaseComplete)) {
       changes.push({
         gapId: gap.gap_id,
         gapStatus: 'resolved',

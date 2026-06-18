@@ -1,4 +1,5 @@
-import type { RecentSession, SessionAuditView } from '../domain/contracts';
+import type { RecentSession, SessionAuditView, SessionStatus } from '../domain/contracts';
+import { deriveSessionPresentation, type SessionPresentation } from './session-view';
 
 const RECENT_SESSIONS_KEY = 'sokrai:v1:recent-sessions';
 const LAST_SESSION_ID_KEY = 'sokrai:v1:last-session-id';
@@ -45,22 +46,16 @@ export function persistRecentSession(audit: SessionAuditView): RecentSession[] {
     return [];
   }
 
-  const openTurn = [...audit.turns]
-    .reverse()
-    .find((turn) => turn.status === 'awaiting_user' || turn.status === 'processing');
-
-  const nextQuestion =
-    openTurn?.question_text ??
-    audit.snapshots[audit.snapshots.length - 1]?.next_question_text ??
-    '';
+  const presentation = deriveSessionPresentation(audit);
 
   const entry: RecentSession = {
     sessionId: audit.session.id,
     projectTitle: audit.session.project_title,
     goal: audit.session.goal,
-    status: audit.session.status,
+    status: deriveRecentSessionStatus(audit, presentation),
     updatedAt: new Date().toISOString(),
-    currentQuestion: nextQuestion,
+    currentQuestion: deriveRecentSessionPrompt(presentation),
+    phaseLabel: presentation.phaseProgress.currentPhaseLabel,
   };
 
   const deduped = [
@@ -72,6 +67,90 @@ export function persistRecentSession(audit: SessionAuditView): RecentSession[] {
   window.localStorage.setItem(LAST_SESSION_ID_KEY, audit.session.id);
 
   return deduped;
+}
+
+export function removeRecentSession(sessionId: string): RecentSession[] {
+  if (!canUseStorage()) {
+    return [];
+  }
+
+  const trimmedSessionId = sessionId.trim();
+  const remaining = readRecentSessions()
+    .filter((item) => item.sessionId !== trimmedSessionId)
+    .slice(0, MAX_RECENT_SESSIONS);
+
+  window.localStorage.setItem(RECENT_SESSIONS_KEY, JSON.stringify(remaining));
+
+  if (readLastSessionId() === trimmedSessionId) {
+    window.localStorage.setItem(LAST_SESSION_ID_KEY, '');
+  }
+
+  return remaining;
+}
+
+function deriveRecentSessionStatus(
+  audit: SessionAuditView,
+  presentation: SessionPresentation,
+): SessionStatus {
+  if (audit.session.status === 'blocked' || audit.session.status === 'failed') {
+    return audit.session.status;
+  }
+
+  if (presentation.phaseProgress.isComplete) {
+    return 'completed';
+  }
+
+  if (
+    presentation.currentQuestion ||
+    presentation.currentSolutionQuestion ||
+    presentation.currentDataAiPrivacyQuestion ||
+    presentation.currentMedicalDeviceTriageQuestion ||
+    presentation.currentResourcesPilotViabilityQuestion
+  ) {
+    return 'waiting_for_user';
+  }
+
+  return 'active';
+}
+
+function deriveRecentSessionPrompt(presentation: SessionPresentation): string {
+  const currentQuestion =
+    presentation.currentResourcesPilotViabilityQuestion ||
+    presentation.currentMedicalDeviceTriageQuestion ||
+    presentation.currentDataAiPrivacyQuestion ||
+    presentation.currentSolutionQuestion ||
+    presentation.currentQuestion;
+
+  if (currentQuestion) {
+    return currentQuestion;
+  }
+
+  const currentPhase = presentation.phaseProgress.steps.find((step) =>
+    step.id === presentation.phaseProgress.currentPhaseId,
+  );
+  const phaseLabel = currentPhase?.label ?? presentation.phaseProgress.currentPhaseLabel;
+
+  if (currentPhase?.status === 'preparing') {
+    return `Preparando fase: ${phaseLabel}.`;
+  }
+
+  switch (currentPhase?.primaryAction) {
+    case 'start_solution':
+    case 'start_data_ai_privacy':
+    case 'start_medical_device_triage':
+    case 'start_resources_pilot_viability':
+      return `Siguiente fase: ${phaseLabel}.`;
+    case 'prepare_report':
+      return 'Siguiente paso: preparar el informe.';
+    case 'download_pdf':
+      return 'Siguiente paso: descargar el PDF.';
+    case 'review_report':
+      return 'Informe listo para revisión.';
+    case 'recover':
+      return `Revisar la fase ${phaseLabel}.`;
+    default:
+      return phaseLabel ? `Continuar desde ${phaseLabel}.` : '';
+  }
 }
 
 function isRecentSession(value: unknown): value is RecentSession {

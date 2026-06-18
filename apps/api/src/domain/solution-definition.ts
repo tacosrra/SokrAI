@@ -73,6 +73,7 @@ const MIN_VALUE_DIFFERENTIAL_LENGTH = 8;
 const MIN_SCOPE_LIMITS_LENGTH = 8;
 const MIN_ASSUMPTIONS_COUNT = 1;
 const MAX_OPEN_AMBIGUITIES_FOR_COMPLETION = 1;
+export const SOLUTION_CLARIFICATION_FIELD = 'solution_clarification';
 
 export interface SolutionGapStatusChange {
   gapId: string;
@@ -150,6 +151,10 @@ function sortSolutionGaps(left: AlphaGap, right: AlphaGap): number {
 function hasResolvedSolutionGapField(gap: AlphaGap, solutionDefinition: SolutionDefinitionState): boolean {
   const missing = computeSolutionMissingInformation(solutionDefinition);
 
+  if (isSolutionClarificationGap(gap)) {
+    return false;
+  }
+
   if (missing.includes(gap.field)) {
     return false;
   }
@@ -163,6 +168,17 @@ function hasResolvedSolutionGapField(gap: AlphaGap, solutionDefinition: Solution
   }
 
   return SOLUTION_FIELD_PRIORITY.includes(gap.field as (typeof SOLUTION_FIELD_PRIORITY)[number]);
+}
+
+export function isSolutionClarificationGap(
+  gap: Pick<AlphaGap, 'module' | 'gap_kind' | 'origin' | 'field'>,
+): boolean {
+  return (
+    gap.module === 'solution' &&
+    gap.gap_kind === 'ambiguous_information' &&
+    gap.origin === 'system_rule' &&
+    gap.field === SOLUTION_CLARIFICATION_FIELD
+  );
 }
 
 export function emptySolutionDefinition(): SolutionDefinitionState {
@@ -343,6 +359,7 @@ export function selectSolutionGapRefs(
       (
         missing.includes(gap.field) ||
         gap.origin === 'structured_brief_ambiguity' ||
+        gap.gap_kind === 'ambiguous_information' ||
         gap.gap_kind === 'needs_user_confirmation'
       ),
     )
@@ -357,6 +374,7 @@ export function classifySolutionGapStatuses(
   answeredTurnId?: string,
 ): SolutionGapStatusChange[] {
   const candidateGapRefs = new Set(selectSolutionGapRefs(gaps, solutionDefinition));
+  const phaseComplete = evaluateSolutionCompletion(solutionDefinition);
   const changes: SolutionGapStatusChange[] = [];
 
   for (const gap of gaps.filter((item) => item.module === 'solution').sort(sortSolutionGaps)) {
@@ -364,7 +382,7 @@ export function classifySolutionGapStatuses(
       continue;
     }
 
-    if (answeredTurnId && hasResolvedSolutionGapField(gap, solutionDefinition)) {
+    if (answeredTurnId && (hasResolvedSolutionGapField(gap, solutionDefinition) || phaseComplete)) {
       changes.push({
         gapId: gap.gap_id,
         gapStatus: 'resolved',

@@ -453,6 +453,26 @@ export class AlphaStore {
     return mapGap(gap);
   }
 
+  async deferActiveGapsForModule(
+    executor: SqlExecutor,
+    params: { proposalId: string; module: AlphaModule },
+  ): Promise<AlphaGap[]> {
+    const result = await runQuery<AlphaGapRecord>(
+      executor,
+      [
+        'UPDATE alpha_gaps',
+        'SET gap_status = $3',
+        'WHERE proposal_id = $1',
+        '  AND module = $2',
+        '  AND gap_status IN (\'open\', \'in_progress\')',
+        'RETURNING *',
+      ].join(' '),
+      [params.proposalId, params.module, 'deferred'],
+    );
+
+    return result.rows.map(mapGap);
+  }
+
   async listGaps(proposalId: string, executor?: SqlExecutor): Promise<AlphaGap[]> {
     const queryable = executor ?? this.database;
     const result = await runQuery<AlphaGapRecord>(

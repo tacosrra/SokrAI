@@ -11,7 +11,9 @@ import {
   assertErrorResponse,
   assertMedicalDeviceTriageReplyResponse,
   assertMedicalDeviceTriageStartResponse,
+  assertProposalReplyRequest,
   assertProposalReplyResponse,
+  assertProposalStartRequest,
   assertProposalStartResponse,
   assertRequestExecutionResponse,
   assertResourcesPilotViabilityReplyResponse,
@@ -34,6 +36,7 @@ import { ProblemDefinitionService } from './services/problem-definition-service'
 import { ProposalReplyService } from './services/proposal-reply-service';
 import { ProposalStartService } from './services/proposal-start-service';
 import { PdfExportService } from './services/pdf-export-service';
+import { PhasePrefetchService } from './services/phase-prefetch-service';
 import { ResourcesPilotViabilityService } from './services/resources-pilot-viability-service';
 import { SolutionDefinitionService } from './services/solution-definition-service';
 import { SolutionReplyService } from './services/solution-reply-service';
@@ -103,10 +106,31 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     alphaStore,
     llmOrchestrator,
   );
+  const phasePrefetchService = new PhasePrefetchService(logger, alphaStore, {
+    solution: solutionDefinitionService,
+    dataAiPrivacy: dataAiPrivacyService,
+    medicalDeviceTriage: medicalDeviceTriageService,
+    resourcesPilotViability: resourcesPilotViabilityService,
+  });
 
   const app = Fastify({
     logger: false,
   });
+
+  async function enqueuePhasePrefetch(
+    sessionId: string,
+    completedModule: 'problem' | 'solution' | 'data_ai_privacy' | 'medical_device_triage' | 'resources_pilot_viability',
+    agentStatus: 'continue' | 'done' | 'blocked',
+  ): Promise<void> {
+    if (!config.phasePrefetchEnabled || agentStatus !== 'done') {
+      return;
+    }
+
+    await phasePrefetchService.enqueueAfterCompletedModule({
+      sessionId,
+      completedModule,
+    });
+  }
 
   app.decorate('services', {
     config,
@@ -127,6 +151,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     dataAiPrivacyService,
     medicalDeviceTriageService,
     resourcesPilotViabilityService,
+    phasePrefetchService,
   });
 
   app.addHook('onClose', async () => {
@@ -264,14 +289,15 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       workflow_execution_id?: string;
       payload: unknown;
     };
+    const payload = assertProposalStartRequest(body.payload);
 
     const result = await proposalStartService.execute({
       context: {
-        requestId: body.request_id ?? getRequestId(request),
+        requestId: body.request_id ?? payload.request_id ?? getRequestId(request),
         workflowVersion: body.workflow_version ?? 'proposal_start_v1',
         workflowExecutionId: body.workflow_execution_id,
       },
-      payload: body.payload as never,
+      payload,
     });
 
     return reply.send(result);
@@ -286,14 +312,15 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       workflow_execution_id?: string;
       payload: unknown;
     };
+    const payload = assertProposalReplyRequest(body.payload);
 
     const result = await proposalReplyService.execute({
       context: {
-        requestId: body.request_id ?? getRequestId(request),
+        requestId: body.request_id ?? payload.request_id ?? getRequestId(request),
         workflowVersion: body.workflow_version ?? 'proposal_reply_v1',
         workflowExecutionId: body.workflow_execution_id,
       },
-      payload: body.payload as never,
+      payload,
     });
 
     return reply.send(result);
@@ -302,13 +329,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.post('/internal/agents/problem-definition/run', async (request, reply) => {
     assertInternalSecret(request);
 
-    const body = request.body as {
-      request_id?: string;
-      workflow_version?: string;
-      workflow_execution_id?: string;
-      session_id: string;
-      trigger: 'start' | 'reply';
-    };
+    const body = assertAgentRunRequestBody(request.body);
 
     const result = await problemDefinitionService.execute({
       context: {
@@ -341,6 +362,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
           warnings: result.warnings,
         });
 
+    await enqueuePhasePrefetch(result.session_id, 'problem', result.agent_status);
+
     return reply.send(response);
   });
 
@@ -364,6 +387,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       sessionId: payload.session_id,
       trigger: 'start',
     });
+
+    await enqueuePhasePrefetch(result.session_id, 'solution', result.agent_status);
 
     return reply.send(assertSolutionStartResponse({
       session_id: result.session_id,
@@ -402,13 +427,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.post('/internal/agents/solution-definition/run', async (request, reply) => {
     assertInternalSecret(request);
 
-    const body = request.body as {
-      request_id?: string;
-      workflow_version?: string;
-      workflow_execution_id?: string;
-      session_id: string;
-      trigger: 'start' | 'reply';
-    };
+    const body = assertAgentRunRequestBody(request.body);
 
     const result = await solutionDefinitionService.execute({
       context: {
@@ -442,6 +461,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
           warnings: result.warnings,
         });
 
+    await enqueuePhasePrefetch(result.session_id, 'solution', result.agent_status);
+
     return reply.send(response);
   });
 
@@ -463,6 +484,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       },
       payload: body.payload as never,
     });
+
+    await enqueuePhasePrefetch(result.session_id, 'data_ai_privacy', result.agent_status);
 
     return reply.send(assertDataAiPrivacyStartResponse({
       session_id: result.session_id,
@@ -512,13 +535,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.post('/internal/agents/data-ai-privacy/run', async (request, reply) => {
     assertInternalSecret(request);
 
-    const body = request.body as {
-      request_id?: string;
-      workflow_version?: string;
-      workflow_execution_id?: string;
-      session_id: string;
-      trigger: 'start' | 'reply';
-    };
+    const body = assertAgentRunRequestBody(request.body);
 
     const result = await dataAiPrivacyService.execute({
       context: {
@@ -554,6 +571,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
           warnings: result.warnings,
         });
 
+    await enqueuePhasePrefetch(result.session_id, 'data_ai_privacy', result.agent_status);
+
     return reply.send(response);
   });
 
@@ -575,6 +594,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       },
       payload: body.payload as never,
     });
+
+    await enqueuePhasePrefetch(result.session_id, 'medical_device_triage', result.agent_status);
 
     return reply.send(assertMedicalDeviceTriageStartResponse({
       session_id: result.session_id,
@@ -626,13 +647,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.post('/internal/agents/medical-device-triage/run', async (request, reply) => {
     assertInternalSecret(request);
 
-    const body = request.body as {
-      request_id?: string;
-      workflow_version?: string;
-      workflow_execution_id?: string;
-      session_id: string;
-      trigger: 'start' | 'reply';
-    };
+    const body = assertAgentRunRequestBody(request.body);
 
     const result = await medicalDeviceTriageService.execute({
       context: {
@@ -670,6 +685,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
           warnings: result.warnings,
         });
 
+    await enqueuePhasePrefetch(result.session_id, 'medical_device_triage', result.agent_status);
+
     return reply.send(response);
   });
 
@@ -691,6 +708,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       },
       payload: body.payload as never,
     });
+
+    await enqueuePhasePrefetch(result.session_id, 'resources_pilot_viability', result.agent_status);
 
     return reply.send(assertResourcesPilotViabilityStartResponse({
       session_id: result.session_id,
@@ -738,13 +757,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   app.post('/internal/agents/resources-pilot-viability/run', async (request, reply) => {
     assertInternalSecret(request);
 
-    const body = request.body as {
-      request_id?: string;
-      workflow_version?: string;
-      workflow_execution_id?: string;
-      session_id: string;
-      trigger: 'start' | 'reply';
-    };
+    const body = assertAgentRunRequestBody(request.body);
 
     const result = await resourcesPilotViabilityService.execute({
       context: {
@@ -777,6 +790,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
           completion_reason: result.completion_reason,
           warnings: result.warnings,
         });
+
+    await enqueuePhasePrefetch(result.session_id, 'resources_pilot_viability', result.agent_status);
 
     return reply.send(response);
   });
@@ -821,6 +836,59 @@ function assertInternalSecret(request: FastifyRequest): void {
   if (headerValue !== secret) {
     throw new AppError(401, 'unauthorized_internal_request', 'Missing or invalid internal shared secret');
   }
+}
+
+type AgentRunTrigger = 'start' | 'reply';
+
+interface AgentRunRequestBody {
+  request_id?: string;
+  workflow_version?: string;
+  workflow_execution_id?: string;
+  session_id: string;
+  trigger: AgentRunTrigger;
+}
+
+function assertAgentRunRequestBody(payload: unknown): AgentRunRequestBody {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new AppError(400, 'invalid_agent_run_request', 'Agent run payload must be an object');
+  }
+
+  const body = payload as Record<string, unknown>;
+  const sessionId = readOptionalNonEmptyString(body, 'session_id');
+  const trigger = body.trigger;
+
+  if (!sessionId) {
+    throw new AppError(400, 'invalid_agent_run_request', 'Agent run payload must include session_id');
+  }
+
+  if (trigger !== 'start' && trigger !== 'reply') {
+    throw new AppError(400, 'invalid_agent_run_request', 'Agent run trigger must be start or reply', false, sessionId);
+  }
+
+  return {
+    request_id: readOptionalNonEmptyString(body, 'request_id'),
+    workflow_version: readOptionalNonEmptyString(body, 'workflow_version'),
+    workflow_execution_id: readOptionalNonEmptyString(body, 'workflow_execution_id'),
+    session_id: sessionId,
+    trigger,
+  };
+}
+
+function readOptionalNonEmptyString(
+  body: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const value = body[key];
+
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    throw new AppError(400, 'invalid_agent_run_request', `Agent run field ${key} must be a non-empty string`);
+  }
+
+  return value.trim();
 }
 
 async function assertBasicAlphaReportResponse(

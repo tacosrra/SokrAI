@@ -78,6 +78,7 @@ const GAP_KINDS: GapKind[] = [
 const GAP_STATUSES: GapStatus[] = ['open', 'in_progress', 'resolved', 'deferred', 'not_applicable'];
 const CHAT_STATUSES: ChatStatus[] = [
   'not_started',
+  'preparing',
   'active',
   'waiting_for_user',
   'ready_to_generate',

@@ -2,6 +2,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { FastifyInstance } from 'fastify';
 
+import type {
+  AiCompletionResult,
+  AiGenerationParams,
+  AiProviderPort,
+} from '../../apps/api/src/services/ai-provider';
 import { QueueLanguageModelClient } from '../helpers/fake-language-model-client';
 import { buildTestApp, readFixture } from '../helpers/test-environment';
 
@@ -97,6 +102,22 @@ describe('proposal flow integration', () => {
     );
     const snapshots = await app.services.database.query<{ count: string }>(
       'SELECT COUNT(*)::text AS count FROM session_snapshots',
+    );
+    const snapshotVersions = await app.services.database.query<{
+      snapshot_seq: number;
+      state_version: string;
+    }>(
+      [
+        'SELECT snapshot_seq, state_version::text AS state_version',
+        'FROM session_snapshots',
+        'WHERE session_id = $1',
+        'ORDER BY snapshot_seq ASC',
+      ].join(' '),
+      [startResult.body.session_id],
+    );
+    const sessionHead = await app.services.database.query<{ state_version: string }>(
+      'SELECT state_version::text AS state_version FROM proposal_sessions WHERE id = $1',
+      [startResult.body.session_id],
     );
     const alphaRows = await app.services.database.query<{
       proposals_count: string;
@@ -220,6 +241,12 @@ describe('proposal flow integration', () => {
       model_params_json: { temperature: 0.2, num_ctx: 8192 },
     });
     expect(snapshots.rows[0]?.count).toBe('3');
+    expect(snapshotVersions.rows).toEqual([
+      { snapshot_seq: 0, state_version: '0' },
+      { snapshot_seq: 1, state_version: '1' },
+      { snapshot_seq: 2, state_version: '2' },
+    ]);
+    expect(sessionHead.rows[0]?.state_version).toBe('2');
     expect(alphaRows.rows[0]).toMatchObject({
       proposals_count: '1',
       documents_count: '1',
@@ -289,6 +316,58 @@ describe('proposal flow integration', () => {
       section_kind: 'problem',
       section_version: 1,
     });
+  });
+
+  it('persists a preparing solution chat before the background prefetch model call finishes', async () => {
+    const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
+    const doneTurn = await readFixture('expected', 'problem-definition.done.json');
+    const solutionContinue = await readFixture('expected', 'solution-definition.continue.json');
+    const startAgentTurn = {
+      agent_status: 'continue',
+      diagnosis: ['Falta identificar con precision quien responde hoy por el problema'],
+      updated_problem_definition: {
+        problem_owner: '',
+        problem_statement: structuredBrief.problem_statement,
+        evidence_of_problem: structuredBrief.evidence_of_problem,
+        scope: structuredBrief.scope,
+        current_alternatives: structuredBrief.current_alternatives,
+        assumptions: structuredBrief.assumptions,
+        ambiguities_remaining: structuredBrief.ambiguities,
+      },
+      next_question: '¿Qué equipo o responsable responde hoy por este problema en urgencias?',
+      completion_reason: '',
+    };
+    const model = new BlockingPrefetchModel([
+      JSON.stringify(structuredBrief),
+      JSON.stringify(startAgentTurn),
+      JSON.stringify(doneTurn),
+    ]);
+
+    ({ app } = await buildTestApp(model, {
+      config: {
+        phasePrefetchEnabled: true,
+      },
+    }));
+
+    const strongProposal = await readFixture('start', 'strong-proposal.json');
+    const strongAnswer = await readFixture('reply', 'strong-answer.json');
+    const startResult = await startFlow(app, 'req-prefetch-start', strongProposal);
+    const replyResult = await replyFlow(app, 'req-prefetch-problem-done', startResult.body.session_id, strongAnswer);
+
+    expect(replyResult.statusCode).toBe(200);
+    expect(replyResult.body.agent_status).toBe('done');
+
+    const preparingChat = await app.services.database.query<{ chat_status: string }>(
+      'SELECT chat_status FROM module_chats WHERE proposal_id = $1 AND module = $2',
+      [replyResult.body.session_id, 'solution'],
+    );
+
+    expect(preparingChat.rows[0]).toMatchObject({
+      chat_status: 'preparing',
+    });
+
+    model.resolvePrefetch(JSON.stringify(solutionContinue));
+    await waitForModuleChatStatus(app, replyResult.body.session_id, 'solution', 'waiting_for_user');
   });
 
   it('keeps the flow in continue for a vague proposal and asks a problem-focused question', async () => {
@@ -649,6 +728,259 @@ describe('proposal flow integration', () => {
     });
   });
 
+  it('persists each solution clarification question as an auditable gap', async () => {
+    const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
+    const doneProblemTurn = await readFixture('expected', 'problem-definition.done.json');
+    const startAgentTurn = {
+      agent_status: 'continue',
+      diagnosis: ['Falta identificar con precision quien responde hoy por el problema'],
+      updated_problem_definition: {
+        problem_owner: '',
+        problem_statement: structuredBrief.problem_statement,
+        evidence_of_problem: structuredBrief.evidence_of_problem,
+        scope: structuredBrief.scope,
+        current_alternatives: structuredBrief.current_alternatives,
+        assumptions: structuredBrief.assumptions,
+        ambiguities_remaining: structuredBrief.ambiguities,
+      },
+      next_question: '¿Qué equipo o responsable responde hoy por este problema en urgencias?',
+      completion_reason: '',
+    };
+    const clarifiedButAskingFirstQuestion = {
+      agent_status: 'done',
+      diagnosis: [
+        'The solution summary is mostly clear but needs one operational clarification.',
+      ],
+      updated_solution_definition: {
+        solution_summary: 'A guided assistant prepares structured administrative request summaries.',
+        target_user: 'Administrative intake staff',
+        how_it_works: 'It reads a fictitious request, asks bounded clarification questions, and prepares a review summary.',
+        workflow_change: 'Staff review the structured summary before deciding whether to resolve or escalate.',
+        current_solutions: 'Current work relies on manual message reading and informal escalation.',
+        value_differential: 'The assistant makes review more consistent without taking clinical decisions.',
+        scope_limits: 'The first version covers fictitious adult administrative messages and excludes diagnosis.',
+        assumptions: ['Staff can review every suggested classification before acting.'],
+        ambiguities_remaining: [],
+      },
+      next_question: 'Who exactly uses the assistant and what operational step changes first?',
+      completion_reason: 'The next step is to provide more details.',
+    };
+    const clarifiedButAskingSecondQuestion = {
+      ...clarifiedButAskingFirstQuestion,
+      diagnosis: [
+        'The solution still needs clarification about collected information and evaluation.',
+      ],
+      next_question: 'What information will the assistant collect and how will the pilot evaluate usefulness?',
+    };
+
+    ({ app } = await buildTestApp(
+      new QueueLanguageModelClient([
+        JSON.stringify(structuredBrief),
+        JSON.stringify(startAgentTurn),
+        JSON.stringify(doneProblemTurn),
+        JSON.stringify(clarifiedButAskingFirstQuestion),
+        JSON.stringify(clarifiedButAskingSecondQuestion),
+      ]),
+    ));
+
+    const strongProposal = await readFixture('start', 'strong-proposal.json');
+    const strongAnswer = await readFixture('reply', 'strong-answer.json');
+    const solutionAnswer = await readFixture('reply', 'solution-workflow-change.json');
+
+    const startResult = await startFlow(app, 'req-start-solution-question-gaps', strongProposal);
+    await replyFlow(app, 'req-problem-done-solution-question-gaps', startResult.body.session_id, strongAnswer);
+    await solutionStartFlow(app, 'req-solution-question-gap-start', startResult.body.session_id);
+    await solutionReplyFlow(
+      app,
+      'req-solution-question-gap-reply',
+      startResult.body.session_id,
+      solutionAnswer,
+    );
+
+    const rows = await app.services.database.query<{
+      id: string;
+      gap_status: string;
+      resolved_by_turn_id: string | null;
+      question_hint: string | null;
+    }>(
+      [
+        'SELECT id, gap_status, resolved_by_turn_id, question_hint',
+        'FROM alpha_gaps',
+        'WHERE proposal_id = $1',
+        '  AND module = \'solution\'',
+        '  AND origin = \'system_rule\'',
+        '  AND gap_kind = \'ambiguous_information\'',
+        'ORDER BY created_at ASC, id ASC',
+      ].join(' '),
+      [startResult.body.session_id],
+    );
+    const turns = await app.services.database.query<{
+      turn_seq: number;
+      question_text: string;
+      turn_status: string;
+      gap_refs_json: string[];
+    }>(
+      [
+        'SELECT turn_seq, question_text, turn_status, gap_refs_json',
+        'FROM chat_turns',
+        'WHERE proposal_id = $1 AND module = \'solution\'',
+        'ORDER BY turn_seq ASC',
+      ].join(' '),
+      [startResult.body.session_id],
+    );
+
+    expect(rows.rows).toHaveLength(2);
+    expect(rows.rows.map((row) => row.gap_status)).toEqual(['resolved', 'in_progress']);
+    expect(rows.rows[0]?.resolved_by_turn_id).toBeTruthy();
+    expect(rows.rows.map((row) => row.question_hint)).toEqual([
+      'Who exactly uses the assistant and what operational step changes first?',
+      'What information will the assistant collect and how will the pilot evaluate usefulness?',
+    ]);
+    expect(turns.rows).toEqual([
+      expect.objectContaining({
+        turn_seq: 1,
+        turn_status: 'resolved',
+        gap_refs_json: expect.arrayContaining([rows.rows[0]?.id]),
+      }),
+      expect.objectContaining({
+        turn_seq: 2,
+        turn_status: 'awaiting_user',
+        gap_refs_json: expect.arrayContaining([rows.rows[1]?.id]),
+      }),
+    ]);
+  });
+
+  it('closes solution with available information when the final allowed turn is answered', async () => {
+    const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
+    const doneProblemTurn = await readFixture('expected', 'problem-definition.done.json');
+    const continueSolutionTurn = await readFixture('expected', 'solution-definition.continue.json');
+    const startAgentTurn = {
+      agent_status: 'continue',
+      diagnosis: ['Falta identificar con precision quien responde hoy por el problema'],
+      updated_problem_definition: {
+        problem_owner: '',
+        problem_statement: structuredBrief.problem_statement,
+        evidence_of_problem: structuredBrief.evidence_of_problem,
+        scope: structuredBrief.scope,
+        current_alternatives: structuredBrief.current_alternatives,
+        assumptions: structuredBrief.assumptions,
+        ambiguities_remaining: structuredBrief.ambiguities,
+      },
+      next_question: '¿Qué equipo o responsable responde hoy por este problema en urgencias?',
+      completion_reason: '',
+    };
+    const continueAfterFinalAnswer = {
+      agent_status: 'continue',
+      diagnosis: [
+        'The solution could ask one more detail, but the bounded interview has reached its limit.',
+      ],
+      updated_solution_definition: {
+        solution_summary: 'A guided intake assistant prepares structured operational summaries before human review.',
+        target_user: 'Admission staff',
+        how_it_works: 'Staff enter synthetic intake facts and the assistant turns them into a structured summary.',
+        workflow_change: 'Admission staff review a generated summary before deciding whether to resolve or escalate.',
+        current_solutions: 'Current work relies on manual notes and internal calls.',
+        value_differential: 'The assistant makes the summary more consistent without making clinical decisions.',
+        scope_limits: 'The pilot uses only synthetic adult administrative cases and excludes diagnosis or prioritization.',
+        assumptions: [
+          'Admission staff can review every generated summary before acting.',
+        ],
+        ambiguities_remaining: [
+          'One additional evaluation assumption could still be validated later.',
+        ],
+      },
+      next_question: 'What final evaluation assumption still needs validation?',
+      completion_reason: '',
+    };
+
+    ({ app } = await buildTestApp(
+      new QueueLanguageModelClient([
+        JSON.stringify(structuredBrief),
+        JSON.stringify(startAgentTurn),
+        JSON.stringify(doneProblemTurn),
+        JSON.stringify(continueSolutionTurn),
+        JSON.stringify(continueSolutionTurn),
+        JSON.stringify(continueAfterFinalAnswer),
+      ]),
+      {
+        config: {
+          maxTurnsPerSession: 2,
+        },
+      },
+    ));
+
+    const strongProposal = await readFixture('start', 'strong-proposal.json');
+    const strongAnswer = await readFixture('reply', 'strong-answer.json');
+    const solutionAnswer = await readFixture('reply', 'solution-workflow-change.json');
+    const startResult = await startFlow(app, 'req-solution-final-turn-start', strongProposal);
+    const sessionId = startResult.body.session_id;
+    const problemReply = await replyFlow(app, 'req-solution-final-turn-problem-reply', sessionId, strongAnswer);
+    const solutionStart = await solutionStartFlow(app, 'req-solution-final-turn-open', sessionId);
+    const firstSolutionReply = await solutionReplyFlow(
+      app,
+      'req-solution-final-turn-first-reply',
+      sessionId,
+      solutionAnswer,
+    );
+
+    expect(startResult.statusCode).toBe(200);
+    expect(startResult.body.agent_status).toBe('continue');
+    expect(problemReply.statusCode).toBe(200);
+    expect(problemReply.body.agent_status).toBe('done');
+    expect(solutionStart.statusCode).toBe(200);
+    expect(solutionStart.body.agent_status).toBe('continue');
+    expect(firstSolutionReply.statusCode).toBe(200);
+    expect(firstSolutionReply.body.agent_status).toBe('continue');
+
+    const solutionReply = await solutionReplyFlow(
+      app,
+      'req-solution-final-turn-reply',
+      sessionId,
+      solutionAnswer,
+    );
+    const state = await app.services.database.query<{
+      chat_status: string;
+      active_turn_id: string | null;
+      turn_status: string;
+      agent_status: string | null;
+      answer_text: string | null;
+      solution_sections_count: string;
+      failed_runs_count: string;
+      opened_turns_count: string;
+    }>(
+      [
+        'SELECT',
+        '  (SELECT chat_status FROM module_chats WHERE proposal_id = $1 AND module = \'solution\') AS chat_status,',
+        '  (SELECT active_turn_id FROM module_chats WHERE proposal_id = $1 AND module = \'solution\') AS active_turn_id,',
+        '  (SELECT turn_status FROM chat_turns WHERE proposal_id = $1 AND module = \'solution\' AND turn_seq = 2) AS turn_status,',
+        '  (SELECT agent_status FROM chat_turns WHERE proposal_id = $1 AND module = \'solution\' AND turn_seq = 2) AS agent_status,',
+        '  (SELECT answer_text FROM chat_turns WHERE proposal_id = $1 AND module = \'solution\' AND turn_seq = 2) AS answer_text,',
+        '  (SELECT COUNT(*)::text FROM generated_sections WHERE proposal_id = $1 AND section_kind = \'solution\' AND section_status = \'generated\') AS solution_sections_count,',
+        '  (SELECT COUNT(*)::text FROM agent_runs WHERE session_id = $1 AND request_id = \'req-solution-final-turn-reply\' AND status <> \'completed\') AS failed_runs_count,',
+        '  (SELECT COUNT(*)::text FROM chat_turns WHERE proposal_id = $1 AND module = \'solution\') AS opened_turns_count',
+      ].join(' '),
+      [sessionId],
+    );
+
+    expect(solutionReply.statusCode).toBe(200);
+    expect(solutionReply.body).toMatchObject({
+      stage: 'solution_definition',
+      agent_status: 'done',
+      next_question: '',
+    });
+    expect(solutionReply.body.warnings).toContain('Maximum solution turn count reached; solution closed with available information');
+    expect(state.rows[0]).toMatchObject({
+      chat_status: 'completed',
+      active_turn_id: null,
+      turn_status: 'resolved',
+      agent_status: 'done',
+      answer_text: solutionAnswer.answer,
+      solution_sections_count: '1',
+      failed_runs_count: '0',
+      opened_turns_count: '2',
+    });
+  });
+
   it('replays solution reply request ids without duplicating answer side effects', async () => {
     const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
     const doneProblemTurn = await readFixture('expected', 'problem-definition.done.json');
@@ -999,6 +1331,223 @@ describe('proposal flow integration', () => {
     });
   });
 
+  it('resolves alpha reply request status to the proposal session id when proposal id differs', async () => {
+    const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
+    const sessionId = '11111111-1111-4111-8111-111111111111';
+    const proposalId = '22222222-2222-4222-8222-222222222222';
+    const chatId = '33333333-3333-4333-8333-333333333333';
+
+    ({ app } = await buildTestApp(new QueueLanguageModelClient([])));
+
+    await app.services.database.query(
+      [
+        'INSERT INTO proposal_sessions (',
+        '  id, project_title, goal, normalized_text, status, current_turn_seq, state_version,',
+        '  latest_structured_brief_json, latest_problem_definition_json',
+        ') VALUES ($1, $2, $3, $4, $5, 1, 1, $6, $7)',
+      ].join(' '),
+      [
+        sessionId,
+        structuredBrief.project_title,
+        structuredBrief.goal,
+        'Texto normalizado de prueba',
+        'completed',
+        JSON.stringify(structuredBrief),
+        JSON.stringify({
+          problem_owner: 'Responsable operativo',
+          problem_statement: structuredBrief.problem_statement,
+          evidence_of_problem: structuredBrief.evidence_of_problem,
+          scope: structuredBrief.scope,
+          current_alternatives: structuredBrief.current_alternatives,
+          assumptions: [],
+          ambiguities_remaining: [],
+        }),
+      ],
+    );
+    await app.services.database.query(
+      [
+        'INSERT INTO proposals (',
+        '  id, session_id, proposal_status, project_title, goal, structured_brief_json, schema_version',
+        ') VALUES ($1, $2, $3, $4, $5, $6, $7)',
+      ].join(' '),
+      [
+        proposalId,
+        sessionId,
+        'active',
+        structuredBrief.project_title,
+        structuredBrief.goal,
+        JSON.stringify(structuredBrief),
+        'alpha-model.v1',
+      ],
+    );
+    await app.services.database.query(
+      [
+        'INSERT INTO module_chats (id, proposal_id, module, chat_status)',
+        'VALUES ($1, $2, $3, $4)',
+      ].join(' '),
+      [chatId, proposalId, 'solution', 'completed'],
+    );
+    await app.services.database.query(
+      [
+        'INSERT INTO chat_turns (',
+        '  chat_id, proposal_id, module, turn_seq, question_text, answer_text, answer_request_id, turn_status, agent_status',
+        ') VALUES ($1, $2, $3, 1, $4, $5, $6, $7, $8)',
+      ].join(' '),
+      [
+        chatId,
+        proposalId,
+        'solution',
+        '¿Qué haría la solución?',
+        'Prepararía un resumen revisable.',
+        'req-alpha-distinct-reply',
+        'resolved',
+        'done',
+      ],
+    );
+
+    const status = await app.inject({
+      method: 'GET',
+      url: '/api/v1/requests/req-alpha-distinct-reply',
+    });
+
+    expect(status.statusCode).toBe(200);
+    expect(status.json()).toMatchObject({
+      request_id: 'req-alpha-distinct-reply',
+      request_kind: 'solution_reply',
+      status: 'completed',
+      session_id: sessionId,
+    });
+    expect(status.json().session_id).not.toBe(proposalId);
+  });
+
+  it('honors payload request ids on internal start and reply routes', async () => {
+    const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
+    const startAgentTurn = {
+      agent_status: 'continue',
+      diagnosis: ['Falta identificar con precision quien responde hoy por el problema'],
+      updated_problem_definition: {
+        problem_owner: '',
+        problem_statement: structuredBrief.problem_statement,
+        evidence_of_problem: structuredBrief.evidence_of_problem,
+        scope: structuredBrief.scope,
+        current_alternatives: structuredBrief.current_alternatives,
+        assumptions: structuredBrief.assumptions,
+        ambiguities_remaining: structuredBrief.ambiguities,
+      },
+      next_question: '¿Qué equipo o responsable responde hoy por este problema en urgencias?',
+      completion_reason: '',
+    };
+
+    ({ app } = await buildTestApp(
+      new QueueLanguageModelClient([
+        JSON.stringify(structuredBrief),
+        JSON.stringify(structuredBrief),
+        JSON.stringify(startAgentTurn),
+      ]),
+    ));
+
+    const strongProposal = await readFixture('start', 'strong-proposal.json');
+    const strongAnswer = await readFixture('reply', 'strong-answer.json');
+    const payloadStartRequest = {
+      ...strongProposal,
+      request_id: 'req-payload-only-start',
+    };
+
+    const firstStart = await app.inject({
+      method: 'POST',
+      url: '/internal/sessions/start-context',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        workflow_version: 'proposal_start_v1',
+        payload: payloadStartRequest,
+      },
+    });
+    const secondStart = await app.inject({
+      method: 'POST',
+      url: '/internal/sessions/start-context',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        workflow_version: 'proposal_start_v1',
+        payload: payloadStartRequest,
+      },
+    });
+    const sessionId = firstStart.json().session_id;
+
+    await app.inject({
+      method: 'POST',
+      url: '/internal/agents/problem-definition/run',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        request_id: 'req-payload-only-start',
+        workflow_version: 'agent_problem_definition_v1',
+        session_id: sessionId,
+        trigger: 'start',
+      },
+    });
+
+    const firstReply = await app.inject({
+      method: 'POST',
+      url: '/internal/sessions/append-reply',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        workflow_version: 'proposal_reply_v1',
+        payload: {
+          request_id: 'req-payload-only-reply',
+          session_id: sessionId,
+          answer: strongAnswer.answer,
+        },
+      },
+    });
+    const secondReply = await app.inject({
+      method: 'POST',
+      url: '/internal/sessions/append-reply',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        workflow_version: 'proposal_reply_v1',
+        payload: {
+          request_id: 'req-payload-only-reply',
+          session_id: sessionId,
+          answer: strongAnswer.answer,
+        },
+      },
+    });
+    const sessions = await app.services.database.query<{ count: string }>(
+      'SELECT COUNT(*)::text AS count FROM proposal_sessions WHERE start_request_id = $1',
+      ['req-payload-only-start'],
+    );
+    const turn = await app.services.database.query<{ answer_request_id: string | null }>(
+      'SELECT answer_request_id FROM conversation_turns WHERE session_id = $1 ORDER BY turn_seq DESC LIMIT 1',
+      [sessionId],
+    );
+    const startStatus = await app.inject({
+      method: 'GET',
+      url: '/api/v1/requests/req-payload-only-start',
+    });
+
+    expect(firstStart.statusCode).toBe(200);
+    expect(secondStart.statusCode).toBe(200);
+    expect(secondStart.json().session_id).toBe(sessionId);
+    expect(firstReply.statusCode).toBe(200);
+    expect(secondReply.statusCode).toBe(200);
+    expect(sessions.rows[0]).toEqual({ count: '1' });
+    expect(turn.rows[0]).toEqual({ answer_request_id: 'req-payload-only-reply' });
+    expect(startStatus.json()).toMatchObject({
+      request_id: 'req-payload-only-start',
+      request_kind: 'proposal_start',
+      session_id: sessionId,
+    });
+  });
+
   it('can actively recover a start request that created the session but never opened the first turn', async () => {
     const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
     const startAgentTurn = {
@@ -1136,6 +1685,78 @@ async function startFlow(app: FastifyInstance, requestId: string, payload: unkno
     statusCode: agentResponse.statusCode,
     body: agentResponse.json(),
   };
+}
+
+class BlockingPrefetchModel implements AiProviderPort {
+  readonly providerName = 'ollama';
+  readonly calls: AiGenerationParams[] = [];
+  private readonly immediateResponses: string[];
+  private prefetchResolve: ((content: string) => void) | null = null;
+  private resolvedPrefetchContent: string | null = null;
+
+  constructor(immediateResponses: string[]) {
+    this.immediateResponses = [...immediateResponses];
+  }
+
+  async generate(params: AiGenerationParams): Promise<AiCompletionResult> {
+    this.calls.push(params);
+
+    const immediate = this.immediateResponses.shift();
+
+    if (immediate) {
+      return this.result(immediate);
+    }
+
+    const content = this.resolvedPrefetchContent ?? await new Promise<string>((resolve) => {
+      this.prefetchResolve = resolve;
+    });
+
+    return this.result(content);
+  }
+
+  resolvePrefetch(content: string): void {
+    if (this.prefetchResolve) {
+      this.prefetchResolve(content);
+      return;
+    }
+
+    this.resolvedPrefetchContent = content;
+  }
+
+  private result(content: string): AiCompletionResult {
+    return {
+      content,
+      providerName: this.providerName,
+      modelName: 'fake-model',
+      modelParams: {},
+      latencyMs: 1,
+      metrics: {},
+    };
+  }
+}
+
+async function waitForModuleChatStatus(
+  app: FastifyInstance,
+  sessionId: string,
+  module: string,
+  expectedStatus: string,
+): Promise<void> {
+  const deadline = Date.now() + 2000;
+
+  while (Date.now() < deadline) {
+    const result = await app.services.database.query<{ chat_status: string }>(
+      'SELECT chat_status FROM module_chats WHERE proposal_id = $1 AND module = $2',
+      [sessionId, module],
+    );
+
+    if (result.rows[0]?.chat_status === expectedStatus) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+
+  throw new Error(`Timed out waiting for ${module} chat to become ${expectedStatus}`);
 }
 
 async function replyFlow(app: FastifyInstance, requestId: string, sessionId: string, replyFixture: { answer: string }) {

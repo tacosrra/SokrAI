@@ -2,7 +2,7 @@
   "report_id": "report-1",
   "proposal_id": "proposal-1",
   "report_status": "ready",
-  "schema_version": "alpha-model.v1",
+  "schema_version": "basic-alpha-report.v1",
   "structured_brief": {
     "project_title": "AI intake readiness assistant",
     "goal": "Reduce manual reconciliation before clinical AI project review.",

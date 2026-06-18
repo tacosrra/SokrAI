@@ -17,6 +17,8 @@ function phaseStatusLabel(status: string): string {
       return 'Completada';
     case 'current':
       return 'Actual';
+    case 'preparing':
+      return 'Preparando';
     case 'ready':
       return 'Lista';
     case 'locked':
@@ -63,6 +65,7 @@ export function PhaseRail({
                 'phase-rail__item',
                 isCurrent ? 'phase-rail__item--current' : '',
                 isSelected ? 'phase-rail__item--selected' : '',
+                step.status === 'preparing' ? 'phase-rail__item--preparing' : '',
                 step.status === 'locked' ? 'phase-rail__item--locked' : '',
               ]
                 .filter(Boolean)

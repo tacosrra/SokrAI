@@ -18,8 +18,10 @@ import {
   computeSolutionMissingInformation,
   emptySolutionDefinition,
   enforceSolutionTurnGuardrails,
+  isSolutionClarificationGap,
   renderSolutionSection,
   selectSolutionGapRefs,
+  SOLUTION_CLARIFICATION_FIELD,
 } from '../domain/solution-definition';
 import type { AlphaStore } from '../repositories/alpha-store';
 import type { AgentRunRecord, SessionRecord, SessionStore } from '../repositories/session-store';
@@ -77,16 +79,6 @@ export class SolutionDefinitionService {
       );
     }
 
-    if (chat.turns.length >= this.config.maxTurnsPerSession && command.trigger === 'reply') {
-      throw new AppError(
-        409,
-        'solution_maximum_turns_reached',
-        'The maximum number of solution turns has already been reached',
-        false,
-        command.sessionId,
-      );
-    }
-
     const recentTurns = chat.turns
       .filter((turn) => turn.turn_status === 'resolved')
       .slice(-5)
@@ -119,10 +111,10 @@ export class SolutionDefinitionService {
         command.trigger === 'reply' &&
         chat.turns.length >= this.config.maxTurnsPerSession
       ) {
-        guarded.turn.agent_status = 'blocked';
+        guarded.turn.agent_status = 'done';
         guarded.turn.next_question = '';
-        guarded.turn.completion_reason = 'maximum solution turns reached';
-        guarded.warnings.push('Maximum solution turn count reached; chat blocked');
+        guarded.turn.completion_reason = 'maximum solution turns reached; solution closed with available information';
+        guarded.warnings.push('Maximum solution turn count reached; solution closed with available information');
       }
 
       return this.sessionStore
@@ -344,6 +336,11 @@ export class SolutionDefinitionService {
         activeTurnId: null,
       });
     } else {
+      await this.alphaStore.deferActiveGapsForModule(params.client, {
+        proposalId: params.session.id,
+        module: 'solution',
+      });
+
       await this.alphaStore.updateModuleChatStatus(params.client, {
         chatId: params.chatId,
         chatStatus: 'blocked',
@@ -450,6 +447,15 @@ export class SolutionDefinitionService {
       ? classifySolutionGapStatuses(params.gaps, params.updatedSolutionDefinition, params.activeTurn.turn_id)
       : [];
     const resolvedGapRefs: string[] = [];
+    const resolvedGapRefSet = new Set<string>();
+    const addResolvedGapRef = (gapId: string) => {
+      if (resolvedGapRefSet.has(gapId)) {
+        return;
+      }
+
+      resolvedGapRefSet.add(gapId);
+      resolvedGapRefs.push(gapId);
+    };
 
     for (const change of gapStatusChanges) {
       await this.alphaStore.updateGapStatus(params.client, {
@@ -459,17 +465,36 @@ export class SolutionDefinitionService {
       });
 
       if (change.gapStatus === 'resolved') {
-        resolvedGapRefs.push(change.gapId);
+        addResolvedGapRef(change.gapId);
       }
     }
 
-    const resolvedGapRefSet = new Set([...params.activeTurn.gap_refs, ...resolvedGapRefs]);
+    if (!params.latestAnswerWasVague) {
+      const activeTurnGapRefs = new Set(params.activeTurn.gap_refs);
+
+      for (const gap of params.gaps) {
+        if (
+          activeTurnGapRefs.has(gap.gap_id) &&
+          isSolutionClarificationGap(gap) &&
+          gap.gap_status !== 'resolved'
+        ) {
+          await this.alphaStore.updateGapStatus(params.client, {
+            gapId: gap.gap_id,
+            gapStatus: 'resolved',
+            resolvedByTurnId: params.activeTurn.turn_id,
+          });
+          addResolvedGapRef(gap.gap_id);
+        }
+      }
+    }
+
+    const resolvedTurnGapRefs = new Set([...params.activeTurn.gap_refs, ...resolvedGapRefs]);
     const resolvedTurn = await this.alphaStore.resolveChatTurn(params.client, {
       turnId: params.activeTurn.turn_id,
       agentStatus: params.guardedTurn.agent_status,
       diagnosis: params.guardedTurn.diagnosis,
       sourceRefs: [answerSource],
-      gapRefs: Array.from(resolvedGapRefSet),
+      gapRefs: Array.from(resolvedTurnGapRefs),
       auditRefs: [{ kind: 'agent_run', id: params.runId }],
       warnings: params.warnings,
     });
@@ -484,7 +509,7 @@ export class SolutionDefinitionService {
       requestId: params.requestId,
       payloadJson: {
         source_id: answerSource.source_id,
-        gap_refs: Array.from(resolvedGapRefSet),
+        gap_refs: Array.from(resolvedTurnGapRefs),
       },
     });
   }
@@ -501,7 +526,14 @@ export class SolutionDefinitionService {
     turnSeq: number;
     gaps: AlphaGap[];
   }): Promise<ChatTurn> {
-    const gapRefs = selectSolutionGapRefs(params.gaps, params.updatedSolutionDefinition);
+    const clarificationGap = await this.ensureSolutionClarificationGap(params);
+    const gapRefs = Array.from(new Set([
+      clarificationGap.gap_id,
+      ...selectSolutionGapRefs(
+        [...params.gaps, clarificationGap],
+        params.updatedSolutionDefinition,
+      ),
+    ]));
     const alphaTurn = await this.alphaStore.createChatTurn(params.client, {
       chatId: params.chatId,
       proposalId: params.session.id,
@@ -519,7 +551,7 @@ export class SolutionDefinitionService {
 
     const inProgressRefs = new Set(gapRefs);
 
-    for (const gap of params.gaps) {
+    for (const gap of [...params.gaps, clarificationGap]) {
       if (inProgressRefs.has(gap.gap_id) && gap.gap_status === 'open') {
         await this.alphaStore.updateGapStatus(params.client, {
           gapId: gap.gap_id,
@@ -544,6 +576,69 @@ export class SolutionDefinitionService {
     });
 
     return alphaTurn;
+  }
+
+  private async ensureSolutionClarificationGap(params: {
+    client: PoolClient;
+    session: SessionRecord;
+    guardedTurn: SolutionDefinitionTurn;
+    requestId: string;
+  }): Promise<AlphaGap> {
+    const question = params.guardedTurn.next_question.trim();
+    const existingGaps = await this.alphaStore.listGaps(params.session.id, params.client);
+    const existing = existingGaps.find((gap) =>
+      isSolutionClarificationGap(gap) &&
+      this.normalizeSolutionQuestion(gap.question_hint ?? gap.description) === this.normalizeSolutionQuestion(question),
+    );
+
+    if (existing) {
+      return existing;
+    }
+
+    const gap = await this.alphaStore.createGap(params.client, {
+      proposalId: params.session.id,
+      module: 'solution',
+      gapKind: 'ambiguous_information',
+      gapStatus: 'open',
+      origin: 'system_rule',
+      field: SOLUTION_CLARIFICATION_FIELD,
+      description: `Aclaracion pendiente de la solucion: ${question}`,
+      absence: {
+        is_absent: false,
+        checked_fields: [SOLUTION_CLARIFICATION_FIELD],
+        reason: 'El agente de solucion abrio esta pregunta de aclaracion antes de que la fase pudiera avanzar.',
+      },
+      questionHint: question,
+      sourceRefs: [],
+      auditRefs: [],
+      warnings: [],
+    });
+
+    await this.alphaStore.appendAuditEvent(params.client, {
+      proposalId: params.session.id,
+      sessionId: params.session.id,
+      eventType: 'solution_gap_detected',
+      actorType: 'system',
+      requestId: params.requestId,
+      payloadJson: {
+        gap_id: gap.gap_id,
+        module: 'solution',
+        origin: gap.origin,
+        field: gap.field,
+        gap_kind: gap.gap_kind,
+      },
+    });
+
+    return gap;
+  }
+
+  private normalizeSolutionQuestion(value: string): string {
+    return value
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLocaleLowerCase()
+      .replace(/\s+/g, ' ')
+      .trim();
   }
 
   private async generateSolutionSection(params: {
@@ -815,6 +910,10 @@ export class SolutionDefinitionService {
                   activeTurnId: null,
                 });
               }
+              await this.alphaStore.deferActiveGapsForModule(client, {
+                proposalId: lockedSession.id,
+                module: 'solution',
+              });
 
               await this.alphaStore.appendAuditEvent(client, {
                 proposalId: lockedSession.id,

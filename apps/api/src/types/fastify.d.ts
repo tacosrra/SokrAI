@@ -9,6 +9,7 @@ import type { GapAnalysisService } from '../services/gap-analysis-service';
 import type { LlmOrchestrator } from '../services/llm-orchestrator';
 import type { MedicalDeviceTriageService } from '../services/medical-device-triage-service';
 import type { PdfExportService } from '../services/pdf-export-service';
+import type { PhasePrefetchService } from '../services/phase-prefetch-service';
 import type { ProblemDefinitionService } from '../services/problem-definition-service';
 import type { ProposalReplyService } from '../services/proposal-reply-service';
 import type { ProposalStartService } from '../services/proposal-start-service';
@@ -38,6 +39,7 @@ declare module 'fastify' {
       dataAiPrivacyService: DataAiPrivacyService;
       medicalDeviceTriageService: MedicalDeviceTriageService;
       resourcesPilotViabilityService: ResourcesPilotViabilityService;
+      phasePrefetchService: PhasePrefetchService;
     };
   }
 }

@@ -258,6 +258,18 @@ describe('contract schemas', () => {
     })).toBeTruthy();
   });
 
+  it('accepts a preparing module chat while a phase prefetch is running', async () => {
+    const chat = await readFixture('alpha-model', 'module-chat.valid.json');
+
+    expect(assertModuleChat({
+      ...chat,
+      module: 'solution',
+      chat_status: 'preparing',
+      turns: [],
+      active_turn_id: undefined,
+    })).toBeTruthy();
+  });
+
   it('accepts medical-device triage turn, request, and response contracts', async () => {
     const applicable = await readFixture('expected', 'medical-device-triage.applicable.json');
     const notApplicable = await readFixture('expected', 'medical-device-triage.not-applicable.json');

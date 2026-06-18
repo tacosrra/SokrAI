@@ -23,3 +23,24 @@ describe('top navigation positioning', () => {
     expect(workspaceTopbar).not.toMatch(/position:\s*(sticky|fixed)\b/);
   });
 });
+
+describe('toast notification motion', () => {
+  it('slides notifications in from above and out upward', () => {
+    const toast = getRule('.toast-notification');
+    const leavingToast = getRule('.toast-notification--leaving');
+
+    expect(toast).toMatch(/animation:\s*toast-slide-in\b/);
+    expect(leavingToast).toMatch(/animation:\s*toast-slide-out\b/);
+    expect(styles).toMatch(/@keyframes toast-slide-in[\s\S]*translate\(-50%, -32px\)/);
+    expect(styles).toMatch(/@keyframes toast-slide-out[\s\S]*translate\(-50%, -28px\)/);
+  });
+});
+
+describe('gap checklist layout', () => {
+  it('keeps gap cards sized to content instead of stretching to fill the panel', () => {
+    const checklist = getRule('.gap-checklist');
+
+    expect(checklist).toMatch(/align-content:\s*start/);
+    expect(checklist).toMatch(/align-items:\s*start/);
+  });
+});

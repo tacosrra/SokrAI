@@ -559,6 +559,11 @@ export class ResourcesPilotViabilityService {
         activeTurnId: null,
       });
     } else {
+      await this.alphaStore.deferActiveGapsForModule(params.client, {
+        proposalId: params.session.id,
+        module: 'resources_pilot_viability',
+      });
+
       await this.alphaStore.updateModuleChatStatus(params.client, {
         chatId: params.chatId,
         chatStatus: 'blocked',
@@ -1052,6 +1057,10 @@ export class ResourcesPilotViabilityService {
                 activeTurnId: null,
               });
             }
+            await this.alphaStore.deferActiveGapsForModule(client, {
+              proposalId: lockedSession.id,
+              module: 'resources_pilot_viability',
+            });
 
             await this.alphaStore.appendAuditEvent(client, {
               proposalId: lockedSession.id,

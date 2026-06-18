@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS module_chats (
         CHECK (
             chat_status IN (
                 'not_started',
+                'preparing',
                 'active',
                 'waiting_for_user',
                 'ready_to_generate',

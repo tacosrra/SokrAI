@@ -22,6 +22,7 @@ export interface AppConfig {
   maxReplyChars: number;
   maxTurnsPerSession: number;
   maxDiagnosisItems: number;
+  phasePrefetchEnabled: boolean;
   allowSensitiveHealthData: boolean;
   internalSharedSecret: string;
 }
@@ -86,6 +87,7 @@ export function loadConfig(): AppConfig {
     maxReplyChars: getNumber('MAX_REPLY_CHARS', 4000),
     maxTurnsPerSession: getNumber('MAX_TURNS_PER_SESSION', 12),
     maxDiagnosisItems: getNumber('MAX_DIAGNOSIS_ITEMS', 3),
+    phasePrefetchEnabled: getBoolean('PHASE_PREFETCH_ENABLED', true),
     allowSensitiveHealthData: getBoolean('ALLOW_SENSITIVE_HEALTH_DATA', false),
     internalSharedSecret: getString('INTERNAL_SHARED_SECRET', 'local-shared-secret'),
   };

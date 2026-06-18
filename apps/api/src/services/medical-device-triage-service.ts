@@ -683,6 +683,11 @@ export class MedicalDeviceTriageService {
         activeTurnId: null,
       });
     } else {
+      await this.alphaStore.deferActiveGapsForModule(params.client, {
+        proposalId: params.session.id,
+        module: 'medical_device_triage',
+      });
+
       await this.alphaStore.updateModuleChatStatus(params.client, {
         chatId: params.chatId,
         chatStatus: 'blocked',
@@ -1179,6 +1184,10 @@ export class MedicalDeviceTriageService {
                 activeTurnId: null,
               });
             }
+            await this.alphaStore.deferActiveGapsForModule(client, {
+              proposalId: lockedSession.id,
+              module: 'medical_device_triage',
+            });
 
             await this.alphaStore.appendAuditEvent(client, {
               proposalId: lockedSession.id,

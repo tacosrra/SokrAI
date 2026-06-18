@@ -126,12 +126,11 @@ Patron:
 
 Durante `proposal_start_v1`, la API genera gaps iniciales de forma determinista desde el `structured_brief` validado y las fuentes internas persistidas. No se ejecuta un modelo adicional para esta fase.
 
+Durante la fase de solucion, cada pregunta de aclaracion abierta por el agente se persiste tambien como un `AlphaGap` de modulo `solution`, `origin: system_rule` y `gap_kind: ambiguous_information`. Esto mantiene el checklist lateral, el replay/resume y el informe alineados con las preguntas reales de la conversacion.
+
 Cada `AlphaGap` persistido incluye:
 
-- `module`, limitado a `problem` o `solution`
-- PR9 amplia `module` con `data_ai_privacy` para gaps sensibles tras la seccion de solucion
-- PR10 amplia `module` con `medical_device_triage` para gaps, preguntas e incertidumbre no definitivos tras datos/IA/privacidad
-- PR11 amplia `module` con `resources_pilot_viability` para recursos, entorno piloto, dependencias, indicadores, restricciones y riesgos operativos tras la seccion de solucion
+- `module`, limitado a `problem`, `solution`, `data_ai_privacy`, `medical_device_triage` o `resources_pilot_viability`
 - `gap_kind` y `gap_status`
 - `origin`, para distinguir campo estructurado, `missing_information`, ambiguedad, fuente interna o regla del sistema
 - `absence`, con campos revisados y razon cuando falta informacion
@@ -532,6 +531,14 @@ una fila `generated_sections` con `section_kind = "solution"`. La seccion de
 solucion tambien se renderiza de forma determinista desde respuestas persistidas
 y fuentes internas.
 
+Cuando una fase devuelve `agent_status = "done"`, la API prepara en background
+la siguiente fase con un `module_chats.chat_status = "preparing"`. Si esa fase
+tambien se puede cerrar sin respuesta del usuario, el prefetch continua de forma
+encadenada con limite. Si necesita aclaracion, queda persistida como
+`waiting_for_user` y la UI muestra la fase preparada sin una carga inicial larga.
+Este comportamiento esta controlado por `PHASE_PREFETCH_ENABLED`, activado por
+defecto en entornos locales y beta.
+
 Tras cerrar la solucion, el Clinic Pilot PR9 puede abrir `module = "data_ai_privacy"`
 con el perfil fijo `hospital_clinic_v1`. Este modulo genera una seccion
 `section_kind = "data_ai_privacy"` y audita guardrails, gaps, turnos y fuentes
@@ -577,19 +584,19 @@ pnpm build
 pnpm test:contracts
 pnpm test:unit
 pnpm test:web
-TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pnpm test:integration
+TEST_DATABASE_URL=postgresql://sokrai_test:localpass@localhost:5433/sokrai_test pnpm test:integration
 pnpm test:unit -- --run tests/unit/pdf-export-service.test.ts
 pnpm test:integration -- --run tests/integration/basic-report-pdf-export.test.ts
 pnpm --filter @sokrai/web test -- src/lib/api.test.ts
-TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pnpm test:smoke
-TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pnpm verify
+TEST_DATABASE_URL=postgresql://sokrai_test:localpass@localhost:5433/sokrai_test pnpm test:smoke
+TEST_DATABASE_URL=postgresql://sokrai_test:localpass@localhost:5433/sokrai_test pnpm verify
 ```
 
 Los argumentos de archivo en los comandos API son pistas de revision para
 localizar el caso cubierto; los scripts actuales ejecutan los directorios de
 suite configurados.
 
-`tests/helpers/test-environment.ts` usa `localhost:5433` por defecto para alinearse con Docker Compose. Puedes seguir sobreescribiendo `TEST_DATABASE_URL` si tu Postgres de pruebas vive en otro puerto.
+`tests/helpers/test-environment.ts` usa `postgresql://sokrai_test:localpass@localhost:5433/sokrai_test` por defecto. No apuntes `TEST_DATABASE_URL` a `sokrai_app`: los tests de integracion resetean sus tablas para aislar cada ejecucion.
 
 ## Smoke local contra stack vivo
 

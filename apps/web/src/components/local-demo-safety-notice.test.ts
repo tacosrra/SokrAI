@@ -337,6 +337,34 @@ describe('SessionWorkspace', () => {
     expect(html).not.toContain('Preparar informe');
   });
 
+  it('renders a skeleton preparation state when a prefetched phase is still running', () => {
+    const auditPreparingSolution: SessionAuditView = {
+      ...workspaceAudit,
+      module_chats: [
+        workspaceAudit.module_chats[0]!,
+        {
+          chat_id: 'chat-solution-preparing',
+          proposal_id: 'session-1',
+          module: 'solution',
+          chat_status: 'preparing',
+          turns: [],
+          started_at: createdAt,
+          warnings: [],
+        },
+      ],
+      generated_sections: [report.problem_section],
+      runs: [],
+    };
+    const html = renderWorkspaceHtml(auditPreparingSolution);
+
+    expect(html).toContain('Fase actual: Solución');
+    expect(html).toContain('Preparando solución');
+    expect(html).toContain('SokrAI está comprobando si la información disponible basta para cerrar esta fase o si necesita hacerte una pregunta.');
+    expect(html).toContain('phase-preparation-skeleton');
+    expect(html).not.toContain('Empezar solución');
+    expect(html).not.toContain('SokrAI no tiene una pregunta pendiente en este momento.');
+  });
+
   it('renders all eight phases in the canonical navigator', () => {
     const presentation = deriveSessionPresentation(workspaceAudit);
     const html = renderToStaticMarkup(
@@ -425,6 +453,52 @@ describe('SessionWorkspace', () => {
     });
     expect(html).not.toContain('Preparar piloto y recursos');
     expect(html).not.toContain('Preparar informe');
+  });
+
+  it('shows processing state instead of completed copy for an in-flight module answer', () => {
+    const processingSolutionChat: ModuleChat = {
+      chat_id: 'chat-solution-processing',
+      proposal_id: 'session-1',
+      module: 'solution',
+      chat_status: 'waiting_for_user',
+      active_turn_id: 'turn-solution-processing',
+      turns: [
+        {
+          turn_id: 'turn-solution-processing',
+          chat_id: 'chat-solution-processing',
+          proposal_id: 'session-1',
+          module: 'solution',
+          turn_seq: 2,
+          question_text: 'Que supuesto importante sobre la solucion sigue sin validar?',
+          answer_text: 'El supuesto pendiente es que el equipo revisara siempre el resumen antes de actuar.',
+          turn_status: 'processing',
+          agent_status: 'continue',
+          diagnosis: [],
+          source_refs: [],
+          gap_refs: [],
+          audit_refs: [],
+          warnings: [],
+          created_at: createdAt,
+        },
+      ],
+      started_at: createdAt,
+      warnings: [],
+    };
+    const auditWithProcessingSolution: SessionAuditView = {
+      ...workspaceAudit,
+      module_chats: [
+        workspaceAudit.module_chats[0]!,
+        processingSolutionChat,
+      ],
+      generated_sections: [report.problem_section],
+      runs: [],
+    };
+    const html = renderWorkspaceHtml(auditWithProcessingSolution);
+
+    expect(html).toContain('Fase actual: Solución');
+    expect(html).toContain('SokrAI está procesando tu respuesta de esta fase.');
+    expect(html).not.toContain('Esta fase ya está completada. Continúa con la siguiente fase cuando esté disponible.');
+    expect(html).not.toContain('Revisar datos y privacidad');
   });
 
   it('starts only the current data/IA/privacy phase when its primary action is clicked', async () => {
@@ -740,19 +814,19 @@ describe('SessionWorkspace', () => {
 });
 
 describe('SessionStatePanel', () => {
-  it('renders a gap checklist with answered and pending items instead of duplicating phase status', () => {
+  it('renders guided clarification state without a moving checklist fraction', () => {
     const answeredGap: AlphaGap = {
       gap_id: 'gap-answered',
       proposal_id: 'session-1',
-      module: 'problem',
+      module: 'solution',
       gap_kind: 'missing_information',
       gap_status: 'resolved',
       origin: 'structured_brief_field',
-      field: 'problem_owner',
-      description: 'Falta confirmar quién responde por el problema.',
+      field: 'workflow_change',
+      description: 'Falta confirmar qué paso cambia primero en el flujo.',
       absence: {
         is_absent: false,
-        checked_fields: ['problem_owner'],
+        checked_fields: ['workflow_change'],
         reason: 'El usuario lo aclaró durante la entrevista.',
       },
       source_refs: [],
@@ -762,15 +836,36 @@ describe('SessionStatePanel', () => {
       created_at: createdAt,
       updated_at: createdAt,
     };
+    const activeGap: AlphaGap = {
+      gap_id: 'gap-active',
+      proposal_id: 'session-1',
+      module: 'solution',
+      gap_kind: 'ambiguous_information',
+      gap_status: 'in_progress',
+      origin: 'system_rule',
+      field: 'solution_clarification',
+      description: 'Aclaracion pendiente de la solucion: ¿Qué información recogerá exactamente el asistente local?',
+      absence: {
+        is_absent: false,
+        checked_fields: ['solution_clarification'],
+        reason: 'El agente abrió esta pregunta para aclarar la fase.',
+      },
+      question_hint: '¿Qué información recogerá exactamente el asistente local?',
+      source_refs: [],
+      audit_refs: [],
+      warnings: [],
+      created_at: createdAt,
+      updated_at: createdAt,
+    };
     const pendingGap: AlphaGap = {
       gap_id: 'gap-pending',
       proposal_id: 'session-1',
-      module: 'data_ai_privacy',
+      module: 'solution',
       gap_kind: 'missing_information',
       gap_status: 'open',
       origin: 'structured_brief_field',
-      field: 'privacy_controls',
-      description: 'Falta explicar qué controles de privacidad se usarán.',
+      field: 'scope_limits',
+      description: 'Falta explicar qué límites tendrá la solución.',
       absence: {
         is_absent: true,
         checked_fields: [],
@@ -782,31 +877,105 @@ describe('SessionStatePanel', () => {
       created_at: createdAt,
       updated_at: createdAt,
     };
+    const auditWithActiveSolutionQuestion: SessionAuditView = {
+      ...workspaceAudit,
+      gaps: [answeredGap, activeGap, pendingGap],
+      module_chats: [
+        workspaceAudit.module_chats[0]!,
+        {
+          chat_id: 'chat-solution-active',
+          proposal_id: 'session-1',
+          module: 'solution',
+          chat_status: 'waiting_for_user',
+          active_turn_id: 'turn-solution-active',
+          started_at: createdAt,
+          warnings: [],
+          turns: [
+            {
+              turn_id: 'turn-solution-active',
+              chat_id: 'chat-solution-active',
+              proposal_id: 'session-1',
+              module: 'solution',
+              turn_seq: 2,
+              question_text: '¿Qué información recogerá exactamente el asistente local?',
+              turn_status: 'awaiting_user',
+              agent_status: 'continue',
+              diagnosis: [],
+              source_refs: [],
+              gap_refs: ['gap-active'],
+              audit_refs: [],
+              warnings: [],
+              created_at: createdAt,
+            },
+          ],
+        },
+      ],
+      generated_sections: [report.problem_section],
+    };
     const html = renderToStaticMarkup(
       h(SessionStatePanel, {
-        presentation: deriveSessionPresentation({
-          ...workspaceAudit,
-          gaps: [answeredGap, pendingGap],
-        }),
+        presentation: deriveSessionPresentation(auditWithActiveSolutionQuestion),
       }),
     );
 
-    expect(html).toContain('Aclaraciones de la propuesta');
-    expect(html).toContain('1/2');
-    expect(html).toContain('1 pendientes de responder.');
-    expect(html).toContain('Puntos por aclarar');
-    expect(html).toContain('Falta confirmar quién responde por el problema.');
-    expect(html).toContain('Falta explicar qué controles de privacidad se usarán.');
+    expect(html).toContain('Solución en curso');
+    expect(html).toContain('Aclaración activa');
+    expect(html).toContain('Ahora');
+    expect(html.match(/¿Qué información recogerá exactamente el asistente local\?/g)).toHaveLength(1);
+    expect(html).toContain('Aclaraciones guardadas');
+    expect(html).toContain('1 respondida');
+    expect(html).toContain('1 en espera');
+    expect(html).toContain('Falta explicar qué límites tendrá la solución.');
+    expect(html).not.toContain('1/3');
+    expect(html).not.toContain('2 pendientes de responder.');
+    expect(html).not.toContain('Puntos por aclarar');
     expect(html).toContain('Respondido');
     expect(html).toContain('Pendiente');
     expect(html).toContain('gap-checklist__item--answered');
     expect(html).toContain('gap-checklist__item--pending');
-    expect(html).toContain('>✓</span>');
+    expect(html).toContain('gap-checklist__item--active');
     expect(html).toContain('Siguiente paso');
-    expect(html).toContain('Preparar informe');
+    expect(html).toContain('Responder a la pregunta actual');
     expect(html).not.toContain('Estado de fases');
     expect(html).not.toContain('session-1');
     expect(html).not.toContain('JSON');
+  });
+
+  it('treats deferred gaps as closed in the checklist', () => {
+    const deferredGap: AlphaGap = {
+      gap_id: 'gap-deferred',
+      proposal_id: 'session-1',
+      module: 'problem',
+      gap_kind: 'missing_information',
+      gap_status: 'deferred',
+      origin: 'structured_brief_field',
+      field: 'evidence_of_problem',
+      description: 'Falta evidencia, pero la fase quedó bloqueada para revisión posterior.',
+      absence: {
+        is_absent: true,
+        checked_fields: ['evidence_of_problem'],
+        reason: 'No se pudo resolver antes de bloquear la fase.',
+      },
+      source_refs: [],
+      audit_refs: [],
+      warnings: [],
+      created_at: createdAt,
+      updated_at: createdAt,
+    };
+    const html = renderToStaticMarkup(
+      h(SessionStatePanel, {
+        presentation: deriveSessionPresentation({
+          ...workspaceAudit,
+          gaps: [deferredGap],
+        }),
+      }),
+    );
+
+    expect(html).toContain('Sin pendientes');
+    expect(html).toContain('1 respondida');
+    expect(html).toContain('Más adelante');
+    expect(html).toContain('gap-checklist__item--answered');
+    expect(html).not.toContain('gap-checklist__item--pending');
   });
 
   it('shows only gaps from the current proposal phase', () => {
@@ -881,9 +1050,71 @@ describe('SessionStatePanel', () => {
     );
 
     expect(html).toContain('Aclaraciones de problema');
-    expect(html).toContain('0/1');
+    expect(html).toContain('Aclaración activa');
     expect(html).toContain('Falta concretar qué evidencia muestra el problema.');
     expect(html).not.toContain('Falta describir cómo funcionaría la solución.');
+  });
+
+  it('shows gaps from a selected historical phase instead of the current phase', () => {
+    const problemGap: AlphaGap = {
+      gap_id: 'gap-problem-history',
+      proposal_id: 'session-1',
+      module: 'problem',
+      gap_kind: 'missing_information',
+      gap_status: 'resolved',
+      origin: 'structured_brief_field',
+      field: 'evidence_of_problem',
+      description: 'Falta concretar qué evidencia muestra el problema histórico.',
+      absence: {
+        is_absent: false,
+        checked_fields: [],
+        reason: 'El usuario lo aclaró durante la entrevista.',
+      },
+      source_refs: [],
+      resolved_by_turn_id: 'turn-1',
+      audit_refs: [],
+      warnings: [],
+      created_at: createdAt,
+      updated_at: createdAt,
+    };
+    const solutionGap: AlphaGap = {
+      gap_id: 'gap-solution-current',
+      proposal_id: 'session-1',
+      module: 'solution',
+      gap_kind: 'missing_information',
+      gap_status: 'open',
+      origin: 'structured_brief_field',
+      field: 'solution_summary',
+      description: 'Falta describir cómo funcionaría la solución actual.',
+      absence: {
+        is_absent: true,
+        checked_fields: [],
+        reason: 'No aparece en la propuesta inicial.',
+      },
+      source_refs: [],
+      audit_refs: [],
+      warnings: [],
+      created_at: createdAt,
+      updated_at: createdAt,
+    };
+    const auditReadyForSolution: SessionAuditView = {
+      ...workspaceAudit,
+      gaps: [problemGap, solutionGap],
+      module_chats: [workspaceAudit.module_chats[0]!],
+      generated_sections: [report.problem_section],
+      runs: [],
+    };
+    const html = renderToStaticMarkup(
+      h(SessionStatePanel, {
+        presentation: deriveSessionPresentation(auditReadyForSolution),
+        selectedPhaseId: 'problem',
+      }),
+    );
+
+    expect(html).toContain('Aclaraciones de problema');
+    expect(html).toContain('Falta concretar qué evidencia muestra el problema histórico.');
+    expect(html).not.toContain('Falta describir cómo funcionaría la solución actual.');
+    expect(html).toContain('Historial de fase');
   });
 
   it('rewrites legacy English gap descriptions into clear user-facing Spanish cards', () => {

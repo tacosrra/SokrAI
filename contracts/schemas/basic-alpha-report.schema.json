@@ -23,7 +23,7 @@
     },
     "schema_version": {
       "type": "string",
-      "minLength": 1
+      "const": "basic-alpha-report.v1"
     },
     "structured_brief": {
       "$ref": "https://sokrai.local/contracts/schemas/structured-brief.schema.json"

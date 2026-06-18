@@ -229,6 +229,42 @@ describe('problem definition domain rules', () => {
     );
   });
 
+  it('removes stale summary-information ambiguity after a concrete operational-summary answer', () => {
+    const staleSummaryInformation = '¿Qué tipo de información falta en los resúmenes actuales?';
+    const turn: ProblemDefinitionTurn = {
+      agent_status: 'continue',
+      diagnosis: ['El modelo vuelve a preguntar por información mínima de resúmenes ya respondida.'],
+      updated_problem_definition: {
+        ...completeProblemDefinition,
+        problem_statement:
+          'La admision se retrasa porque la informacion administrativa inicial llega incompleta y exige revision manual.',
+        evidence_of_problem:
+          'El piloto medira esperas superiores a 30 minutos, quejas simuladas, llamadas internas y correcciones humanas.',
+        scope:
+          'Piloto local de admision en urgencias con datos sinteticos y sin conexion a sistemas hospitalarios.',
+        current_alternatives:
+          'El equipo prepara manualmente resumenes, hace llamadas internas y escala casos cuando falta informacion.',
+        ambiguities_remaining: [staleSummaryInformation],
+      },
+      next_question:
+        '¿Cuál es la información mínima que debe recogerse en cada resumen operativo para evaluar si el asistente ayuda a ordenar mejor el proceso de admisión y facilita la revisión humana?',
+      completion_reason: '',
+    };
+    const latestAnswer = [
+      'Cada resumen deberia incluir un identificador sintetico del caso, hora simulada de llegada, hora de recepcion de informacion inicial, hora de preparacion del resumen y hora de revision humana.',
+      'Tambien indicaria si la informacion inicial esta completa o incompleta y, si falta algo, que tipo de informacion falta.',
+      'El resumen recogeria si supera 30 minutos de espera, cambio de turno, llamada interna, queja simulada por demora, escalado al responsable operativo y motivo de escalado.',
+      'Para evaluar utilidad se guardaria si el resumen fue aceptado sin cambios, corregido o rechazado por el equipo humano, con motivo general de correccion o rechazo.',
+      'Toda la informacion se documentaria con datos sinteticos, almacenados localmente, sin nombres, telefonos, documentos, historias clinicas ni datos reales de pacientes.',
+    ].join(' ');
+
+    const guarded = enforceTurnGuardrails(baseBrief, turn, latestAnswer);
+
+    expect(guarded.updatedProblemDefinition.ambiguities_remaining).toEqual([]);
+    expect(guarded.turn.agent_status).toBe('done');
+    expect(guarded.turn.next_question).toBe('');
+  });
+
   it('blocks premature initial completion when intake still has important problem gaps', () => {
     const demoBrief: StructuredBrief = {
       ...baseBrief,
@@ -391,7 +427,7 @@ describe('problem definition domain rules', () => {
         problem_statement: 'El triaje inicial se retrasa en horas punta',
         evidence_of_problem: 'Se registran esperas medias de 27 minutos',
         scope: 'Urgencias de adultos',
-        current_alternatives: 'Protocolo manual',
+        current_alternatives: '',
         assumptions: ['El cuello de botella esta en admision'],
         ambiguities_remaining: ['No esta claro quien responde hoy por el problema'],
       },
@@ -434,6 +470,71 @@ describe('problem definition domain rules', () => {
     expect(changes).toEqual([
       {
         gapId: 'gap-ambiguity',
+        gapStatus: 'resolved',
+        resolvedByTurnId: 'turn-1',
+      },
+    ]);
+  });
+
+  it('resolves generic structured-brief missing-information gaps when the owner answer is persisted', () => {
+    const missingInformationGap: AlphaGap = {
+      ...baseGap,
+      gap_id: 'gap-owner-generic',
+      gap_kind: 'missing_information',
+      origin: 'structured_brief_missing_information',
+      field: 'missing_information',
+      description:
+        'The structured brief flags missing information: Quién es el responsable operativo final del asistente local?',
+      gap_status: 'open',
+    };
+
+    const changes = classifyProblemGapStatuses(
+      [missingInformationGap],
+      {
+        ...completeProblemDefinition,
+        problem_owner: 'El coordinador operativo del equipo de admision en urgencias.',
+        assumptions: [
+          'La responsabilidad final del uso del asistente recae en una persona del equipo operativo, no en el sistema.',
+        ],
+        ambiguities_remaining: [],
+      },
+      'turn-1',
+    );
+
+    expect(changes).toEqual([
+      {
+        gapId: 'gap-owner-generic',
+        gapStatus: 'resolved',
+        resolvedByTurnId: 'turn-1',
+      },
+    ]);
+  });
+
+  it('resolves remaining active problem gaps when the phase is complete', () => {
+    const genericMissingGap: AlphaGap = {
+      ...baseGap,
+      gap_id: 'gap-minimum-data',
+      gap_kind: 'missing_information',
+      gap_status: 'in_progress',
+      origin: 'structured_brief_missing_information',
+      field: 'missing_information',
+      description: 'Datos mínimos que deben recogerse durante el piloto.',
+    };
+
+    const changes = classifyProblemGapStatuses(
+      [genericMissingGap],
+      {
+        ...completeProblemDefinition,
+        evidence_of_problem: 'Se mediran esperas, llamadas internas, correcciones humanas y quejas simuladas.',
+        scope: 'Piloto local en admision de urgencias con datos sinteticos.',
+        current_alternatives: 'El equipo revisa resumenes manuales y escala incidencias caso a caso.',
+      },
+      'turn-1',
+    );
+
+    expect(changes).toEqual([
+      {
+        gapId: 'gap-minimum-data',
         gapStatus: 'resolved',
         resolvedByTurnId: 'turn-1',
       },

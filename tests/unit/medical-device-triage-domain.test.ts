@@ -231,6 +231,30 @@ describe('medical-device triage domain rules', () => {
     ]);
   });
 
+  it('resolves remaining active medical-device gaps when completion criteria are met', () => {
+    const reviewGap: AlphaGap = {
+      ...baseGap,
+      gap_id: 'gap-review-boundary',
+      gap_kind: 'needs_user_confirmation',
+      gap_status: 'open',
+      field: 'review_boundary',
+      description: 'Confirm the review boundary before closing the phase.',
+      absence: {
+        is_absent: false,
+        checked_fields: ['review_boundary'],
+        reason: 'The phase can close with this review-bound uncertainty documented.',
+      },
+    };
+
+    expect(classifyMedicalDeviceGapStatuses([reviewGap], completeState, 'turn-1')).toEqual([
+      {
+        gapId: 'gap-review-boundary',
+        gapStatus: 'resolved',
+        resolvedByTurnId: 'turn-1',
+      },
+    ]);
+  });
+
   it('renders a review-bound section without raw model or decision fields', () => {
     const source: ProposalSource = {
       source_id: 'source-1',

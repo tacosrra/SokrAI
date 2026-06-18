@@ -489,6 +489,21 @@ describe('problem-definition invalid JSON handling', () => {
       method: 'POST',
       url: '/api/v1/requests/req-max-turn-reply/recover',
     });
+    const blockedAppendReplyResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/sessions/append-reply',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        request_id: 'req-max-turn-reply-after-block',
+        workflow_version: 'proposal_reply_v1',
+        payload: {
+          session_id: sessionId,
+          answer: strongAnswer.answer,
+        },
+      },
+    });
 
     expect(turn.rows[0]).toMatchObject({
       status: 'failed',
@@ -523,6 +538,11 @@ describe('problem-definition invalid JSON handling', () => {
     });
     expect(recoveryStatus.statusCode).toBe(200);
     expect(recoveryStatus.json().status).toBe('failed');
+    expect(blockedAppendReplyResponse.statusCode).toBe(409);
+    expect(blockedAppendReplyResponse.json()).toMatchObject({
+      error_code: 'session_blocked',
+      session_id: sessionId,
+    });
   });
 
   it('reopens reply failures after ollama timeout so the user can answer again', async () => {
@@ -613,6 +633,10 @@ describe('problem-definition invalid JSON handling', () => {
 
     expect(failedAgentResponse.statusCode).toBe(504);
 
+    const failedRequestStatus = await app.inject({
+      method: 'GET',
+      url: '/api/v1/requests/req-retry-reply',
+    });
     const session = await app.services.database.query<{ status: string }>(
       'SELECT status FROM proposal_sessions WHERE id = $1',
       [sessionId],
@@ -626,6 +650,15 @@ describe('problem-definition invalid JSON handling', () => {
     expect(turn.rows[0]).toMatchObject({
       status: 'awaiting_user',
       answer_text: strongAnswer.answer,
+    });
+    expect(failedRequestStatus.statusCode).toBe(200);
+    expect(failedRequestStatus.json()).toMatchObject({
+      request_id: 'req-retry-reply',
+      request_kind: 'proposal_reply',
+      status: 'failed',
+      error_code: 'ollama_timeout',
+      retryable: true,
+      session_id: sessionId,
     });
 
     const retryAppendReplyResponse = await app.inject({
@@ -645,6 +678,160 @@ describe('problem-definition invalid JSON handling', () => {
     });
 
     expect(retryAppendReplyResponse.statusCode).toBe(200);
+  });
+
+  it('rejects a second proposal reply while the current answer is processing', async () => {
+    const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
+    const strongProposal = await readFixture('start', 'strong-proposal.json');
+    const strongAnswer = await readFixture('reply', 'strong-answer.json');
+    const startTurn = {
+      agent_status: 'continue',
+      diagnosis: ['Falta identificar con precision quien responde hoy por el problema'],
+      updated_problem_definition: {
+        problem_owner: '',
+        problem_statement: structuredBrief.problem_statement,
+        evidence_of_problem: structuredBrief.evidence_of_problem,
+        scope: structuredBrief.scope,
+        current_alternatives: structuredBrief.current_alternatives,
+        assumptions: structuredBrief.assumptions,
+        ambiguities_remaining: structuredBrief.ambiguities,
+      },
+      next_question: '¿Qué equipo o responsable responde hoy por este problema en urgencias?',
+      completion_reason: '',
+    };
+
+    ({ app } = await buildTestApp(
+      new QueueLanguageModelClient([
+        JSON.stringify(structuredBrief),
+        JSON.stringify(startTurn),
+      ]),
+    ));
+
+    const startContextResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/sessions/start-context',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        request_id: 'req-processing-start',
+        workflow_version: 'proposal_start_v1',
+        payload: strongProposal,
+      },
+    });
+    const sessionId = startContextResponse.json().session_id;
+
+    await app.inject({
+      method: 'POST',
+      url: '/internal/agents/problem-definition/run',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        request_id: 'req-processing-start',
+        workflow_version: 'agent_problem_definition_v1',
+        session_id: sessionId,
+        trigger: 'start',
+      },
+    });
+
+    const firstAppendReply = await app.inject({
+      method: 'POST',
+      url: '/internal/sessions/append-reply',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        request_id: 'req-processing-reply-1',
+        workflow_version: 'proposal_reply_v1',
+        payload: {
+          session_id: sessionId,
+          answer: strongAnswer.answer,
+        },
+      },
+    });
+    const secondAppendReply = await app.inject({
+      method: 'POST',
+      url: '/internal/sessions/append-reply',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        request_id: 'req-processing-reply-2',
+        workflow_version: 'proposal_reply_v1',
+        payload: {
+          session_id: sessionId,
+          answer: 'A different answer that should not overwrite the processing turn.',
+        },
+      },
+    });
+    const turn = await app.services.database.query<{
+      answer_text: string | null;
+      answer_request_id: string | null;
+      status: string;
+    }>(
+      'SELECT answer_text, answer_request_id, status FROM conversation_turns WHERE session_id = $1 ORDER BY turn_seq DESC LIMIT 1',
+      [sessionId],
+    );
+
+    expect(firstAppendReply.statusCode).toBe(200);
+    expect(secondAppendReply.statusCode).toBe(409);
+    expect(secondAppendReply.json()).toMatchObject({
+      error_code: 'reply_already_processing',
+      session_id: sessionId,
+    });
+    expect(turn.rows[0]).toMatchObject({
+      answer_text: strongAnswer.answer,
+      answer_request_id: 'req-processing-reply-1',
+      status: 'processing',
+    });
+  });
+
+  it('rejects invalid internal agent triggers before model execution', async () => {
+    const structuredBrief = await readFixture('expected', 'structured-brief.strong.json');
+    const strongProposal = await readFixture('start', 'strong-proposal.json');
+
+    ({ app } = await buildTestApp(
+      new QueueLanguageModelClient([
+        JSON.stringify(structuredBrief),
+      ]),
+    ));
+
+    const startContextResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/sessions/start-context',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        request_id: 'req-invalid-trigger-start',
+        workflow_version: 'proposal_start_v1',
+        payload: strongProposal,
+      },
+    });
+    const sessionId = startContextResponse.json().session_id;
+
+    const invalidTriggerResponse = await app.inject({
+      method: 'POST',
+      url: '/internal/agents/problem-definition/run',
+      headers: {
+        'x-internal-shared-secret': 'test-secret',
+      },
+      payload: {
+        request_id: 'req-invalid-trigger-agent',
+        workflow_version: 'agent_problem_definition_v1',
+        session_id: sessionId,
+        trigger: 'bogus',
+      },
+    });
+    const runs = await app.services.database.query<{ count: string }>(
+      'SELECT COUNT(*)::text AS count FROM agent_runs WHERE request_id = $1',
+      ['req-invalid-trigger-agent'],
+    );
+
+    expect(invalidTriggerResponse.statusCode).toBe(400);
+    expect(invalidTriggerResponse.json().error_code).toBe('invalid_agent_run_request');
+    expect(runs.rows[0]).toEqual({ count: '0' });
   });
 });
 

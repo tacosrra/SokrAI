@@ -220,6 +220,36 @@ describe('solution definition domain rules', () => {
     ]);
   });
 
+  it('resolves remaining active solution gaps when completion criteria are met', () => {
+    const ambiguity = 'Final ownership of the first deployment still needs validation.';
+    const ambiguityGap: AlphaGap = {
+      ...baseGap,
+      gap_id: 'gap-solution-ambiguity',
+      gap_kind: 'ambiguous_information',
+      gap_status: 'in_progress',
+      origin: 'structured_brief_ambiguity',
+      field: 'solution_ambiguity',
+      description: ambiguity,
+    };
+
+    const changes = classifySolutionGapStatuses(
+      [ambiguityGap],
+      {
+        ...doneState,
+        ambiguities_remaining: [ambiguity],
+      },
+      'turn-1',
+    );
+
+    expect(changes).toEqual([
+      {
+        gapId: 'gap-solution-ambiguity',
+        gapStatus: 'resolved',
+        resolvedByTurnId: 'turn-1',
+      },
+    ]);
+  });
+
   it('renders only persisted solution fields and internal source refs', () => {
     const source: ProposalSource = {
       source_id: 'source-1',

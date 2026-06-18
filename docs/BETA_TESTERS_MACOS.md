@@ -25,7 +25,7 @@ Eso:
 - levanta todo el stack
 - prepara el modelo y la base de datos
 - importa los workflows
-- abre `http://localhost:3000` automáticamente
+- abre `http://localhost:3300` automáticamente
 
 ### Si no tienes Docker Desktop instalado
 
@@ -130,8 +130,8 @@ Cuando el comando termine bien, la aplicación debería abrirse sola en el naveg
 
 Si no se abre sola, usa:
 
-- App principal: `http://localhost:3000`
-- n8n: `http://localhost:5678`
+- App principal: `http://localhost:3300`
+- n8n: `http://localhost:5679`
 
 Si necesitas entrar en `n8n`, las credenciales por defecto suelen ser:
 
@@ -195,7 +195,7 @@ Si te pedimos logs, ejecuta:
 SOKRAI_ENV_FILE=.env.beta docker compose --env-file .env.beta -p sokrai-beta -f docker-compose.yml -f docker-compose.beta.yml logs -f
 ```
 
-El bootstrap beta crea contenedores con nombres fijos `postgres`, `ollama`, `api`, `n8n` y `web`, sin el sufijo `-beta` en el nombre del contenedor.
+El bootstrap beta usa el proyecto Compose `sokrai-beta` y puertos propios para no chocar con otro stack local.
 
 Si `ollama pull` falla con `no such host`, reintenta el bootstrap. Si el modelo ya estaba descargado antes, puedes saltarte ese paso con `SOKRAI_BETA_SKIP_OLLAMA_PULL=1 ./scripts/bootstrap-beta.sh`.
 

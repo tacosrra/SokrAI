@@ -420,6 +420,7 @@ export function classifyDataAiPrivacyGapStatuses(
   answeredTurnId?: string,
 ): DataAiPrivacyGapStatusChange[] {
   const candidateGapRefs = new Set(selectDataAiPrivacyGapRefs(gaps, state));
+  const phaseComplete = evaluateDataAiPrivacyCompletion(state);
   const changes: DataAiPrivacyGapStatusChange[] = [];
 
   for (const gap of gaps.filter((item) => item.module === 'data_ai_privacy').sort(sortDataAiPrivacyGaps)) {
@@ -427,7 +428,7 @@ export function classifyDataAiPrivacyGapStatuses(
       continue;
     }
 
-    if (answeredTurnId && hasResolvedDataAiPrivacyGapField(gap, state)) {
+    if (answeredTurnId && (hasResolvedDataAiPrivacyGapField(gap, state) || phaseComplete)) {
       changes.push({
         gapId: gap.gap_id,
         gapStatus: 'resolved',

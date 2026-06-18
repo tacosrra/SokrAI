@@ -194,7 +194,7 @@ APP_BASE_URL=http://localhost:3001
 
 # Host-side commands use the Compose-published Postgres port.
 DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app
-TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app
+TEST_DATABASE_URL=postgresql://sokrai_test:localpass@localhost:5433/sokrai_test
 DATABASE_POOL_MAX=10
 DATABASE_STATEMENT_TIMEOUT_MS=5000
 
@@ -216,6 +216,7 @@ MAX_PROPOSAL_CHARS=30000
 MAX_REPLY_CHARS=4000
 MAX_TURNS_PER_SESSION=12
 MAX_DIAGNOSIS_ITEMS=3
+PHASE_PREFETCH_ENABLED=true
 ALLOW_SENSITIVE_HEALTH_DATA=false
 
 N8N_BASIC_AUTH_USER=admin
@@ -1044,7 +1045,7 @@ pnpm test:smoke
 pnpm test:web
 ```
 
-La configuracion de test usa `postgresql://sokrai_app:localpass@localhost:5433/sokrai_app` por defecto para alinearse con Docker Compose. Si usas otro Postgres, sobreescribe `TEST_DATABASE_URL`.
+La configuracion de test usa `postgresql://sokrai_test:localpass@localhost:5433/sokrai_test` por defecto para no tocar la base local de demo `sokrai_app`. Si usas otro Postgres, sobreescribe `TEST_DATABASE_URL`, pero mantenlo en una base de datos aislada de test porque la suite resetea tablas.
 
 ### 16.3 Ejecutar todo de una vez
 
@@ -1467,7 +1468,7 @@ Y que el puerto este expuesto en:
 Y ejecuta la suite con:
 
 ```bash
-TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pnpm verify
+TEST_DATABASE_URL=postgresql://sokrai_test:localpass@localhost:5433/sokrai_test pnpm verify
 ```
 
 ### 20.6 El frontend dice que no puede contactar con servicios locales al crear o responder una sesion

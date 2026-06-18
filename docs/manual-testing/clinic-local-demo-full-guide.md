@@ -74,7 +74,7 @@ APP_BASE_URL=http://localhost:3001
 FRONTEND_PORT=3000
 
 DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app
-TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app
+TEST_DATABASE_URL=postgresql://sokrai_test:localpass@localhost:5433/sokrai_test
 
 AI_PROVIDER=ollama
 OLLAMA_BASE_URL=http://ollama:11434
@@ -268,7 +268,7 @@ pnpm test:web
 Run integration checks when PostgreSQL is available:
 
 ```bash
-TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app pnpm test:integration
+TEST_DATABASE_URL=postgresql://sokrai_test:localpass@localhost:5433/sokrai_test pnpm test:integration
 ```
 
 Run broader checks when services are available:
@@ -432,8 +432,43 @@ Expected result:
 - workspace reloads persisted session state
 - turns, generated sections, report availability, and warnings remain visible
 - no duplicate side effects are created by reloading
+- recent proposals show the next unfinished phase, not `Completada`, unless all
+  applicable phases are complete
 
-### 12. Audit view and redacted run outputs
+### 12. Phase history navigation
+
+After completing the problem phase and before completing the full proposal,
+click the completed problem phase in the left phase rail. Then click the current
+solution phase.
+
+Expected result:
+
+- the center workspace changes to the selected phase history
+- the right guidance panel changes to that selected phase's gaps/checklist
+- the historical view shows a history-oriented next-step message
+- clicking the current phase returns to the current chat/action, even if that
+  phase has not created chat history yet
+
+### 13. Stale browser recent sessions
+
+Create a proposal, copy its `session_id`, then run a destructive local reset:
+
+```bash
+docker compose down -v
+docker compose up -d postgres ollama api n8n web
+docker compose exec api pnpm migrate
+```
+
+Open the browser and click the old recent proposal.
+
+Expected result:
+
+- the app shows that the browser remembered a proposal that this local database
+  no longer contains
+- the stale recent item is removed from browser storage
+- the user can start or open another proposal without seeing the old item again
+
+### 14. Audit view and redacted run outputs
 
 Call the public audit endpoint:
 
@@ -559,7 +594,7 @@ WSL-specific issues:
 - Manual browser flow completed for proposal, document intake, brief, gaps,
   problem, solution, data/AI/privacy, medical-device triage,
   resources/pilot/viability, Basic Alpha Report, PDF export, resume/reload,
-  audit, and warnings.
+  phase history navigation, stale recent sessions, audit, and warnings.
 - PDF downloaded successfully.
 - Safety warnings are visible.
 - No real patient data was used.

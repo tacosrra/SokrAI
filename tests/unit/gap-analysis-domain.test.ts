@@ -108,6 +108,26 @@ describe('gap analysis domain rules', () => {
     expect(gaps.filter((gap) => gap.field === 'evidence_of_problem')).toHaveLength(1);
   });
 
+  it('dedupes equivalent missing and ambiguous owner gaps into one canonical field gap', () => {
+    const gaps = detectInitialGapCandidates({
+      structuredBrief: {
+        ...baseBrief,
+        evidence_of_problem: 'Registro interno de esperas',
+        problem_owner: 'Pendiente de confirmar',
+        missing_information: ['No está claro quién es el responsable operativo final.'],
+        ambiguities: ['Quién es el responsable operativo final?'],
+      },
+    });
+
+    expect(gaps.filter((gap) => gap.field === 'problem_owner')).toHaveLength(1);
+    expect(gaps).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: 'missing_information' }),
+        expect.objectContaining({ field: 'ambiguities' }),
+      ]),
+    );
+  });
+
   it('filters forbidden Alpha scope items instead of persisting them as gaps', () => {
     const analysis = analyzeInitialGapCandidates({
       structuredBrief: {

@@ -25,7 +25,6 @@ BETA_WORKFLOW_FILES=(
   agent_resources_pilot_viability_v1.json
 )
 DOCKER_INSTALL_URL="https://docs.docker.com/get-started/introduction/get-docker-desktop/"
-WEB_UI_URL="http://localhost:3000"
 
 COMPOSE_ARGS=(
   --env-file "$BETA_ENV_FILE"
@@ -74,8 +73,11 @@ open_url() {
 }
 
 open_web_ui() {
+  local url
+
+  url="$(web_ui_url)"
   log_step "Opening SokrAI in the browser"
-  open_url "$WEB_UI_URL" || printf '[%s] Open this URL manually: %s\n' "$COMPOSE_PROJECT_NAME" "$WEB_UI_URL"
+  open_url "$url" || printf '[%s] Open this URL manually: %s\n' "$COMPOSE_PROJECT_NAME" "$url"
 }
 
 detect_docker_desktop_installation() {
@@ -152,11 +154,74 @@ read_env_value() {
   awk -F= -v key="$key" '$1 == key { print substr($0, index($0, "=") + 1); exit }' "$file"
 }
 
+read_env_value_or_default() {
+  local file="$1"
+  local key="$2"
+  local default_value="$3"
+  local value
+
+  value="$(read_env_value "$file" "$key")"
+
+  if [[ -n "$value" ]]; then
+    printf '%s' "$value"
+    return
+  fi
+
+  printf '%s' "$default_value"
+}
+
+set_beta_default_value() {
+  local key="$1"
+  local value="$2"
+  local replace_value="${3:-}"
+  local current_value
+
+  current_value="$(read_env_value "$BETA_ENV_FILE" "$key")"
+
+  if [[ -z "$current_value" || ( -n "$replace_value" && "$current_value" == "$replace_value" ) ]]; then
+    set_env_value "$BETA_ENV_FILE" "$key" "$value"
+  fi
+}
+
+api_host_port() {
+  read_env_value_or_default "$BETA_ENV_FILE" "API_HOST_PORT" "3301"
+}
+
+n8n_host_port() {
+  read_env_value_or_default "$BETA_ENV_FILE" "N8N_HOST_PORT" "5679"
+}
+
+web_host_port() {
+  read_env_value_or_default "$BETA_ENV_FILE" "WEB_HOST_PORT" "3300"
+}
+
+api_base_url() {
+  printf 'http://localhost:%s' "$(api_host_port)"
+}
+
+n8n_base_url() {
+  printf 'http://localhost:%s' "$(n8n_host_port)"
+}
+
+web_ui_url() {
+  printf 'http://localhost:%s' "$(web_host_port)"
+}
+
 ensure_beta_env_file() {
   if [[ ! -f "$BETA_ENV_FILE" ]]; then
     log_step "Creating $(basename "$BETA_ENV_FILE") from .env.example"
     cp "$REPO_ROOT/.env.example" "$BETA_ENV_FILE"
   fi
+
+  set_beta_default_value "POSTGRES_HOST_PORT" "55433" "5433"
+  set_beta_default_value "API_HOST_PORT" "3301" "3001"
+  set_beta_default_value "WEB_HOST_PORT" "3300" "3000"
+  set_beta_default_value "N8N_HOST_PORT" "5679" "5678"
+  set_beta_default_value "OLLAMA_HOST_PORT" "11435" "11434"
+  set_beta_default_value "APP_BASE_URL" "http://localhost:3301" "http://localhost:3001"
+  set_beta_default_value "API_PROXY_TARGET" "http://localhost:3301" "http://localhost:3001"
+  set_beta_default_value "WEBHOOK_PROXY_TARGET" "http://localhost:5679" "http://localhost:5678"
+  set_beta_default_value "OLLAMA_BASE_URL" "http://localhost:11435" "http://ollama:11434"
 
   if [[ "$(read_env_value "$BETA_ENV_FILE" "INTERNAL_SHARED_SECRET")" == "replace-with-a-random-32-char-secret" ]]; then
     set_env_value "$BETA_ENV_FILE" "INTERNAL_SHARED_SECRET" "$(generate_secret)"
@@ -213,7 +278,7 @@ ollama_ready() {
 }
 
 api_ready() {
-  curl -fsS http://localhost:3001/healthz >/dev/null 2>&1
+  curl -fsS "$(api_base_url)/healthz" >/dev/null 2>&1
 }
 
 n8n_ready() {
@@ -222,11 +287,11 @@ n8n_ready() {
   user="$(read_env_value "$BETA_ENV_FILE" "N8N_BASIC_AUTH_USER")"
   password="$(read_env_value "$BETA_ENV_FILE" "N8N_BASIC_AUTH_PASSWORD")"
 
-  curl -fsS -u "${user}:${password}" http://localhost:5678 >/dev/null 2>&1
+  curl -fsS -u "${user}:${password}" "$(n8n_base_url)" >/dev/null 2>&1
 }
 
 web_ready() {
-  curl -fsS http://localhost:3000 >/dev/null 2>&1
+  curl -fsS "$(web_ui_url)" >/dev/null 2>&1
 }
 
 read_workflow_id() {
@@ -278,13 +343,13 @@ repair_duplicate_n8n_workflows() {
 
   log_step "Removing ${#duplicate_ids[@]} duplicate n8n workflow(s)"
 
+  local id_list
+  printf -v id_list "'%s'," "${duplicate_ids[@]}"
+  id_list="${id_list%,}"
+
   {
-    printf 'DELETE FROM webhook_entity WHERE "workflowId" IN ('
-    printf "'%s'," "${duplicate_ids[@]}"
-    printf '\b);\n'
-    printf 'DELETE FROM workflow_entity WHERE id IN ('
-    printf "'%s'," "${duplicate_ids[@]}"
-    printf '\b);\n'
+    printf 'DELETE FROM webhook_entity WHERE "workflowId" IN (%s);\n' "$id_list"
+    printf 'DELETE FROM workflow_entity WHERE id IN (%s);\n' "$id_list"
   } | docker_compose exec -T postgres psql -U sokrai_n8n -d sokrai_n8n -v ON_ERROR_STOP=1 >/dev/null
 
   return 0
@@ -292,37 +357,53 @@ repair_duplicate_n8n_workflows() {
 
 pull_ollama_model() {
   local model
+  local ollama_model
+  local ai_model
+  local models=()
   local retry_count
   local attempt
 
-  model="$(read_env_value "$BETA_ENV_FILE" "OLLAMA_MODEL")"
-  [[ -n "$model" ]] || fail "OLLAMA_MODEL is empty in $(basename "$BETA_ENV_FILE")"
+  ollama_model="$(read_env_value "$BETA_ENV_FILE" "OLLAMA_MODEL")"
+  ai_model="$(read_env_value "$BETA_ENV_FILE" "AI_MODEL")"
+  [[ -n "$ollama_model" ]] || fail "OLLAMA_MODEL is empty in $(basename "$BETA_ENV_FILE")"
+
+  if [[ -n "$ai_model" ]]; then
+    models+=("$ai_model")
+
+    if [[ "$ai_model" != "$ollama_model" ]]; then
+      models+=("$ollama_model")
+    fi
+  else
+    models+=("$ollama_model")
+  fi
 
   if [[ "${SOKRAI_BETA_SKIP_OLLAMA_PULL:-0}" == "1" ]]; then
     log_step "Skipping Ollama model pull because SOKRAI_BETA_SKIP_OLLAMA_PULL=1"
     return 0
   fi
 
-  if docker_compose exec -T ollama ollama show "$model" >/dev/null 2>&1; then
-    log_step "Ollama model already present: $model"
-    return 0
-  fi
-
   retry_count="${SOKRAI_BETA_OLLAMA_PULL_RETRIES:-3}"
 
-  for (( attempt=1; attempt<=retry_count; attempt++ )); do
-    log_step "Pulling Ollama model: $model (attempt ${attempt}/${retry_count})"
-
-    if docker_compose exec -T ollama ollama pull "$model"; then
-      return 0
+  for model in "${models[@]}"; do
+    if docker_compose exec -T ollama ollama show "$model" >/dev/null 2>&1; then
+      log_step "Ollama model already present: $model"
+      continue
     fi
 
-    if (( attempt < retry_count )); then
+    for (( attempt=1; attempt<=retry_count; attempt++ )); do
+      log_step "Pulling Ollama model: $model (attempt ${attempt}/${retry_count})"
+
+      if docker_compose exec -T ollama ollama pull "$model"; then
+        break
+      fi
+
+      if (( attempt >= retry_count )); then
+        fail "Could not pull Ollama model '$model'. The Ollama container could not resolve or reach the model registry. Check Docker DNS/outbound network, retry later, or rerun with SOKRAI_BETA_SKIP_OLLAMA_PULL=1 if the model is already cached."
+      fi
+
       sleep 5
-    fi
+    done
   done
-
-  fail "Could not pull Ollama model '$model'. The Ollama container could not resolve or reach the model registry. Check Docker DNS/outbound network, retry later, or rerun with SOKRAI_BETA_SKIP_OLLAMA_PULL=1 if the model is already cached."
 }
 
 run_database_migrations() {
@@ -330,15 +411,59 @@ run_database_migrations() {
   docker_compose run --rm api pnpm --filter @sokrai/api migrate
 }
 
+workflow_file_hash() {
+  local file="$1"
+
+  if has_command sha256sum; then
+    sha256sum "$file"
+    return
+  fi
+
+  shasum -a 256 "$file"
+}
+
+workflow_bundle_hash() {
+  local workflow_file
+
+  {
+    for workflow_file in "${BETA_WORKFLOW_FILES[@]}"; do
+      workflow_file_hash "$REPO_ROOT/infra/n8n/workflows/$workflow_file"
+    done
+  } | if has_command sha256sum; then sha256sum; else shasum -a 256; fi | awk '{ print $1 }'
+}
+
+workflow_marker_matches() {
+  local expected_hash="$1"
+
+  docker_compose exec -T -u node n8n sh -c \
+    'test -f "$1" && test "$(cat "$1")" = "$2"' \
+    sh "$WORKFLOW_MARKER_FILE" "$expected_hash" >/dev/null 2>&1
+}
+
+workflow_marker_exists() {
+  docker_compose exec -T -u node n8n test -f "$WORKFLOW_MARKER_FILE" >/dev/null 2>&1
+}
+
+write_workflow_marker() {
+  local hash="$1"
+
+  docker_compose exec -T -u node n8n sh -c \
+    'printf "%s\n" "$2" > "$1"' \
+    sh "$WORKFLOW_MARKER_FILE" "$hash"
+}
+
 bootstrap_workflows() {
   local workflow_file
   local repaired_duplicates=0
+  local current_workflows_hash
 
   if repair_duplicate_n8n_workflows; then
     repaired_duplicates=1
   fi
 
-  if docker_compose exec -T -u node n8n test -f "$WORKFLOW_MARKER_FILE" >/dev/null 2>&1; then
+  current_workflows_hash="$(workflow_bundle_hash)"
+
+  if workflow_marker_matches "$current_workflows_hash"; then
     if [[ "$repaired_duplicates" -eq 1 ]]; then
       log_step "Restarting n8n after removing duplicate workflows"
       docker_compose restart n8n >/dev/null
@@ -348,6 +473,10 @@ bootstrap_workflows() {
     fi
 
     return
+  fi
+
+  if workflow_marker_exists; then
+    log_step "Workflow files changed; reimporting n8n workflows"
   fi
 
   log_step "Importing n8n workflows"
@@ -362,7 +491,7 @@ bootstrap_workflows() {
     publish_workflow "$REPO_ROOT/infra/n8n/workflows/$workflow_file"
   done
 
-  docker_compose exec -T -u node n8n touch "$WORKFLOW_MARKER_FILE"
+  write_workflow_marker "$current_workflows_hash"
 
   log_step "Restarting n8n so active workflow state is applied"
   docker_compose restart n8n >/dev/null
@@ -374,9 +503,9 @@ print_beta_endpoints() {
 
 SokrAI beta is ready.
 
-- Web UI: http://localhost:3000
-- API health: http://localhost:3001/healthz
-- n8n: http://localhost:5678
+- Web UI: $(web_ui_url)
+- API health: $(api_base_url)/healthz
+- n8n: $(n8n_base_url)
 - n8n user: $(read_env_value "$BETA_ENV_FILE" "N8N_BASIC_AUTH_USER")
 - n8n password: $(read_env_value "$BETA_ENV_FILE" "N8N_BASIC_AUTH_PASSWORD")
 

@@ -55,6 +55,21 @@ Reason:
   network failure
 - the API already owns the contracts, guardrails and persistence for this lane
 
+## Background phase prefetch
+
+After an internal agent/start route returns `agent_status = "done"`, the API
+enqueues a bounded background prefetch for the next proposal phase. n8n does not
+own this orchestration. The API creates the next `module_chats` row with
+`chat_status = "preparing"`, runs the next phase start in-process, and keeps
+chaining while a phase can complete without user input. The chain stops when a
+phase opens a clarification question, blocks, fails, finds an existing
+incomplete chat, or reaches the configured step limit.
+`PHASE_PREFETCH_ENABLED` controls the behavior and defaults to `true`.
+
+The frontend maps `chat_status = "preparing"` to a phase skeleton instead of a
+global loading screen. This lets the user see that the phase is being prepared
+while keeping phase starts explicit and auditable.
+
 If you imported an older version of the workflows, reimport the files under
 `infra/n8n/workflows` or update the direct API call nodes in place.
 

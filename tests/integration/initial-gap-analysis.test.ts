@@ -120,6 +120,45 @@ describe('initial Alpha gap analysis', () => {
     );
   });
 
+  it('persists one canonical owner gap when the brief repeats it as missing and ambiguous', async () => {
+    const duplicateOwnerBrief: StructuredBrief = {
+      project_title: 'Triage IA en Urgencias',
+      goal: 'Definir mejor el problema',
+      target_user: 'Equipo de admision',
+      problem_owner: 'Pendiente de confirmar',
+      problem_statement: 'El triaje inicial se retrasa en horas punta',
+      evidence_of_problem: 'Registro interno de esperas de 20 a 35 minutos',
+      current_alternatives: 'Protocolo manual y hojas de cribado',
+      scope: 'Urgencias de adultos',
+      constraints_known: [],
+      assumptions: ['El cuello de botella esta en admision'],
+      ambiguities: ['Quién es el responsable operativo final?'],
+      missing_information: ['No está claro quién es el responsable operativo final.'],
+    };
+
+    ({ app } = await buildTestApp(
+      new QueueLanguageModelClient([JSON.stringify(duplicateOwnerBrief)]),
+    ));
+
+    const response = await startContext(app, 'req-initial-gaps-duplicate-owner', {
+      project_title: 'Triage IA en Urgencias',
+      goal: 'Definir mejor el problema',
+      proposal_text: 'El triaje inicial se retrasa en horas punta para admision.',
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as { session_id: string };
+    const gaps = await app.services.alphaStore.listGaps(body.session_id);
+
+    expect(gaps.filter((gap) => gap.field === 'problem_owner')).toHaveLength(1);
+    expect(gaps).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ field: 'missing_information' }),
+        expect.objectContaining({ field: 'ambiguities' }),
+      ]),
+    );
+  });
+
   it('rehydrates existing gaps on idempotent start retry without duplicating rows', async () => {
     ({ app } = await buildTestApp(
       new QueueLanguageModelClient([JSON.stringify(structuredBriefWithGaps)]),

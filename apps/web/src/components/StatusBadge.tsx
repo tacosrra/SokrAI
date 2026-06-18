@@ -58,6 +58,7 @@ export function phaseTone(status: PhaseStatus): StatusBadgeProps['tone'] {
     case 'error':
       return 'danger';
     case 'current':
+    case 'preparing':
     case 'recovering':
       return 'accent';
     case 'ready':

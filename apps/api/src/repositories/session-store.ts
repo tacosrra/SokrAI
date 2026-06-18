@@ -13,6 +13,7 @@ import type {
   SourceSpan,
   StructuredBrief,
 } from '../contracts/types';
+import { isTerminalReplyFailureCode } from '../domain/session-retry';
 import { AppError } from '../utils/errors';
 import {
   mapChatTurn,
@@ -168,10 +169,12 @@ interface AgentRunStatusLookup {
   status: AgentRunRecord['status'];
   error_code: string | null;
   error_message: string | null;
+  input_payload_json: Record<string, unknown>;
 }
 
 interface AlphaChatTurnStatusLookup {
   proposal_id: string;
+  session_id: string;
   turn_status: 'awaiting_user' | 'processing' | 'resolved' | 'failed' | 'skipped';
 }
 
@@ -188,7 +191,7 @@ export class SessionStore {
       [requestId],
     );
 
-    return result.rows[0] ?? null;
+    return result.rows[0] ? mapSessionRecord(result.rows[0]) : null;
   }
 
   async findLatestSnapshot(sessionId: string): Promise<SnapshotRecord | null> {
@@ -204,7 +207,7 @@ export class SessionStore {
       [sessionId],
     );
 
-    return result.rows[0] ?? null;
+    return result.rows[0] ? mapSnapshotRecord(result.rows[0]) : null;
   }
 
   async findTurnByAnswerRequestId(requestId: string): Promise<ConversationTurnRecord | null> {
@@ -244,7 +247,7 @@ export class SessionStore {
       throw new AppError(404, 'session_not_found', 'The requested session does not exist', false, sessionId);
     }
 
-    return session;
+    return mapSessionRecord(session);
   }
 
   async getSessionForUpdate(sessionId: string, client: PoolClient): Promise<SessionRecord> {
@@ -259,7 +262,7 @@ export class SessionStore {
       throw new AppError(404, 'session_not_found', 'The requested session does not exist', false, sessionId);
     }
 
-    return session;
+    return mapSessionRecord(session);
   }
 
   async getOpenTurn(sessionId: string, executor?: SqlExecutor): Promise<ConversationTurnRecord | null> {
@@ -341,7 +344,7 @@ export class SessionStore {
       ],
     );
 
-    return result.rows[0];
+    return mapSessionRecord(result.rows[0]);
   }
 
   async listProposalDocuments(sessionId: string): Promise<ProposalDocument[]> {
@@ -507,7 +510,7 @@ export class SessionStore {
       ],
     );
 
-    return result.rows[0];
+    return mapSnapshotRecord(result.rows[0]);
   }
 
   async createOpenTurn(
@@ -550,17 +553,39 @@ export class SessionStore {
       );
     }
 
+    if (openTurn.status === 'processing') {
+      throw new AppError(
+        409,
+        'reply_already_processing',
+        'The current turn is already processing a user answer',
+        true,
+        params.sessionId,
+      );
+    }
+
     const result = await client.query<ConversationTurnRecord>(
       [
         'UPDATE conversation_turns',
         'SET answer_text = $2, answer_request_id = $3, answer_received_at = NOW(), status = \'processing\'',
-        'WHERE id = $1',
+        'WHERE id = $1 AND status = \'awaiting_user\'',
         'RETURNING *',
       ].join(' '),
       [openTurn.id, params.answer, params.requestId],
     );
 
-    return result.rows[0];
+    const updatedTurn = result.rows[0];
+
+    if (!updatedTurn) {
+      throw new AppError(
+        409,
+        'reply_already_processing',
+        'The current turn is already processing a user answer',
+        true,
+        params.sessionId,
+      );
+    }
+
+    return updatedTurn;
   }
 
   async resolveTurn(
@@ -677,6 +702,23 @@ export class SessionStore {
     const turn = failedTurn.rows[0];
 
     if (!turn) {
+      return null;
+    }
+
+    const latestFailedRun = await client.query<{ error_code: string | null }>(
+      [
+        'SELECT error_code',
+        'FROM agent_runs',
+        'WHERE session_id = $1 AND turn_seq = $2 AND run_purpose = $3',
+        '  AND status IN (\'controlled_error\', \'model_failed\', \'validation_failed\', \'repair_failed\')',
+        'ORDER BY finished_at DESC NULLS LAST, started_at DESC, id DESC',
+        'LIMIT 1',
+      ].join(' '),
+      [sessionId, turn.turn_seq, 'problem_definition'],
+    );
+    const latestErrorCode = latestFailedRun.rows[0]?.error_code;
+
+    if (latestErrorCode && isTerminalReplyFailureCode(latestErrorCode)) {
       return null;
     }
 
@@ -896,7 +938,7 @@ export class SessionStore {
       generated_sections: generatedSections.rows.map(mapGeneratedSection),
       turns: turns.rows,
       runs: runs.rows.map(redactPublicAgentRun),
-      snapshots: snapshots.rows,
+      snapshots: snapshots.rows.map(mapSnapshotRecord),
       events: buildAuditTimelineEvents(sessionEvents.rows, alphaEvents.rows),
     };
   }
@@ -982,6 +1024,12 @@ export class SessionStore {
       };
     }
 
+    const orphanedProblemDefinitionRun = await this.findLatestAgentRunStatus(requestId, 'problem_definition');
+
+    if (orphanedProblemDefinitionRun?.input_payload_json.trigger === 'reply') {
+      return toRequestExecutionFromRun(requestId, 'proposal_reply', orphanedProblemDefinitionRun);
+    }
+
     const solutionReplyTurn = await this.findAlphaTurnByAnswerRequestId(requestId, 'solution');
 
     if (solutionReplyTurn) {
@@ -996,7 +1044,7 @@ export class SessionStore {
           request_id: requestId,
           request_kind: 'solution_reply',
           status: 'completed',
-          session_id: solutionReplyTurn.proposal_id,
+          session_id: solutionReplyTurn.session_id,
         };
       }
 
@@ -1005,7 +1053,7 @@ export class SessionStore {
           request_id: requestId,
           request_kind: 'solution_reply',
           status: 'failed',
-          session_id: solutionReplyTurn.proposal_id,
+          session_id: solutionReplyTurn.session_id,
           error_code: 'solution_reply_processing_failed',
           safe_message: 'The solution reply was persisted but the turn failed before completing',
           retryable: true,
@@ -1016,7 +1064,7 @@ export class SessionStore {
         request_id: requestId,
         request_kind: 'solution_reply',
         status: 'pending',
-        session_id: solutionReplyTurn.proposal_id,
+        session_id: solutionReplyTurn.session_id,
       };
     }
 
@@ -1034,7 +1082,7 @@ export class SessionStore {
           request_id: requestId,
           request_kind: 'data_ai_privacy_reply',
           status: 'completed',
-          session_id: dataAiPrivacyReplyTurn.proposal_id,
+          session_id: dataAiPrivacyReplyTurn.session_id,
         };
       }
 
@@ -1043,7 +1091,7 @@ export class SessionStore {
           request_id: requestId,
           request_kind: 'data_ai_privacy_reply',
           status: 'failed',
-          session_id: dataAiPrivacyReplyTurn.proposal_id,
+          session_id: dataAiPrivacyReplyTurn.session_id,
           error_code: 'data_ai_privacy_reply_processing_failed',
           safe_message: 'The data AI privacy reply was persisted but the turn failed before completing',
           retryable: true,
@@ -1054,7 +1102,7 @@ export class SessionStore {
         request_id: requestId,
         request_kind: 'data_ai_privacy_reply',
         status: 'pending',
-        session_id: dataAiPrivacyReplyTurn.proposal_id,
+        session_id: dataAiPrivacyReplyTurn.session_id,
       };
     }
 
@@ -1081,7 +1129,7 @@ export class SessionStore {
           request_id: requestId,
           request_kind: 'medical_device_triage_reply',
           status: 'completed',
-          session_id: medicalDeviceTriageReplyTurn.proposal_id,
+          session_id: medicalDeviceTriageReplyTurn.session_id,
         };
       }
 
@@ -1090,7 +1138,7 @@ export class SessionStore {
           request_id: requestId,
           request_kind: 'medical_device_triage_reply',
           status: 'failed',
-          session_id: medicalDeviceTriageReplyTurn.proposal_id,
+          session_id: medicalDeviceTriageReplyTurn.session_id,
           error_code: 'medical_device_triage_reply_processing_failed',
           safe_message: 'The medical-device triage reply was persisted but the turn failed before completing',
           retryable: true,
@@ -1101,7 +1149,7 @@ export class SessionStore {
         request_id: requestId,
         request_kind: 'medical_device_triage_reply',
         status: 'pending',
-        session_id: medicalDeviceTriageReplyTurn.proposal_id,
+        session_id: medicalDeviceTriageReplyTurn.session_id,
       };
     }
 
@@ -1132,7 +1180,7 @@ export class SessionStore {
           request_id: requestId,
           request_kind: 'resources_pilot_viability_reply',
           status: 'completed',
-          session_id: resourcesPilotViabilityReplyTurn.proposal_id,
+          session_id: resourcesPilotViabilityReplyTurn.session_id,
         };
       }
 
@@ -1141,7 +1189,7 @@ export class SessionStore {
           request_id: requestId,
           request_kind: 'resources_pilot_viability_reply',
           status: 'failed',
-          session_id: resourcesPilotViabilityReplyTurn.proposal_id,
+          session_id: resourcesPilotViabilityReplyTurn.session_id,
           error_code: 'resources_pilot_viability_reply_processing_failed',
           safe_message: 'The resources pilot viability reply was persisted but the turn failed before completing',
           retryable: true,
@@ -1152,7 +1200,7 @@ export class SessionStore {
         request_id: requestId,
         request_kind: 'resources_pilot_viability_reply',
         status: 'pending',
-        session_id: resourcesPilotViabilityReplyTurn.proposal_id,
+        session_id: resourcesPilotViabilityReplyTurn.session_id,
       };
     }
 
@@ -1195,7 +1243,7 @@ export class SessionStore {
   ): Promise<AgentRunStatusLookup | null> {
     const result = await this.database.query<AgentRunStatusLookup>(
       [
-        'SELECT session_id, status, error_code, error_message',
+        'SELECT session_id, status, error_code, error_message, input_payload_json',
         'FROM agent_runs',
         'WHERE request_id = $1 AND run_purpose = $2',
         'ORDER BY started_at DESC',
@@ -1213,9 +1261,10 @@ export class SessionStore {
   ): Promise<AlphaChatTurnStatusLookup | null> {
     const result = await this.database.query<AlphaChatTurnStatusLookup>(
       [
-        'SELECT proposal_id, turn_status',
+        'SELECT chat_turns.proposal_id, COALESCE(proposals.session_id, chat_turns.proposal_id) AS session_id, chat_turns.turn_status',
         'FROM chat_turns',
-        'WHERE answer_request_id = $1 AND module = $2',
+        'LEFT JOIN proposals ON proposals.id = chat_turns.proposal_id',
+        'WHERE chat_turns.answer_request_id = $1 AND chat_turns.module = $2',
         'LIMIT 1',
       ].join(' '),
       [requestId, module],
@@ -1271,6 +1320,40 @@ async function runQuery<T extends QueryResultRow>(
 
 function toJson(value: unknown): string {
   return JSON.stringify(value);
+}
+
+function mapSessionRecord(record: SessionRecord): SessionRecord {
+  return {
+    ...record,
+    current_turn_seq: parseDatabaseInteger(record.current_turn_seq, 'proposal_sessions.current_turn_seq'),
+    state_version: parseDatabaseInteger(record.state_version, 'proposal_sessions.state_version'),
+  };
+}
+
+function mapSnapshotRecord(record: SnapshotRecord): SnapshotRecord {
+  return {
+    ...record,
+    snapshot_seq: parseDatabaseInteger(record.snapshot_seq, 'session_snapshots.snapshot_seq'),
+    state_version: parseDatabaseInteger(record.state_version, 'session_snapshots.state_version'),
+    source_turn_seq:
+      record.source_turn_seq == null
+        ? null
+        : parseDatabaseInteger(record.source_turn_seq, 'session_snapshots.source_turn_seq'),
+  };
+}
+
+function parseDatabaseInteger(value: unknown, fieldName: string): number {
+  if (value === null || value === undefined || value === '') {
+    throw new AppError(500, 'invalid_database_integer', `Database returned an invalid integer for ${fieldName}`, false);
+  }
+
+  const parsed = typeof value === 'bigint' ? Number(value) : typeof value === 'number' ? value : Number(value);
+
+  if (!Number.isSafeInteger(parsed)) {
+    throw new AppError(500, 'invalid_database_integer', `Database returned an invalid integer for ${fieldName}`, false);
+  }
+
+  return parsed;
 }
 
 function buildAuditTimelineEvents(

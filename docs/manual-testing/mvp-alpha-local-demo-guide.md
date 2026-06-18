@@ -175,7 +175,7 @@ APP_BASE_URL=http://localhost:3001
 FRONTEND_PORT=3000
 
 DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app
-TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app
+TEST_DATABASE_URL=postgresql://sokrai_test:localpass@localhost:5433/sokrai_test
 DATABASE_POOL_MAX=10
 DATABASE_STATEMENT_TIMEOUT_MS=5000
 
@@ -240,7 +240,7 @@ Keep host-side `.env` values like this:
 
 ```dotenv
 DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app
-TEST_DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app
+TEST_DATABASE_URL=postgresql://sokrai_test:localpass@localhost:5433/sokrai_test
 ```
 
 `docker-compose.yml` overrides the API container with:

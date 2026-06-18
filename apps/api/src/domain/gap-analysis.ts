@@ -49,6 +49,12 @@ interface FieldRule {
 }
 
 const MAX_INITIAL_GAPS = 12;
+const GENERIC_GAP_FIELDS = new Set(['missing_information', 'ambiguities']);
+const STRUCTURED_BRIEF_GAP_ORIGINS = new Set<GapOrigin>([
+  'structured_brief_field',
+  'structured_brief_missing_information',
+  'structured_brief_ambiguity',
+]);
 
 const PROBLEM_FIELD_RULES: FieldRule[] = [
   {
@@ -106,6 +112,63 @@ const ARRAY_FIELD_RULES: FieldRule[] = [
   },
 ];
 
+const FIELD_TEXT_ALIASES: Partial<Record<keyof StructuredBrief, string[]>> = {
+  problem_owner: [
+    'persona responsable',
+    'equipo responsable',
+    'responsable operativo',
+    'responsable final',
+    'responsable del problema',
+    'owner del problema',
+    'quien responde',
+    'quien valida',
+    'quien es el responsable',
+    'who is responsible',
+    'accountable owner',
+  ],
+  problem_statement: [
+    'problema concreto',
+    'problema actual',
+    'definicion del problema',
+    'descripcion del problema',
+    'problem definition',
+    'concrete problem',
+  ],
+  evidence_of_problem: [
+    'evidencia del problema',
+    'evidencia observable',
+    'evidencia disponible',
+    'datos del problema',
+    'problem evidence',
+  ],
+  scope: [
+    'alcance',
+    'limites del problema',
+    'contexto exacto',
+    'fuera de alcance',
+    'problem scope',
+  ],
+  current_alternatives: [
+    'alternativas actuales',
+    'soluciones actuales',
+    'como se gestiona hoy',
+    'workaround',
+    'current workaround',
+  ],
+  assumptions: [
+    'supuestos',
+    'supuestos pendientes',
+    'assumptions',
+  ],
+  target_user: [
+    'usuario destinatario',
+    'usuario objetivo',
+    'quien usara',
+    'target stakeholder',
+    'direct user',
+  ],
+};
+
 // Alpha v1 only suppresses candidates for explicitly out-of-scope modules.
 // Ordinary clinical or hospital problem context must still produce Alpha gaps.
 const FORBIDDEN_SCOPE_PATTERNS = [
@@ -135,7 +198,7 @@ const FORBIDDEN_SCOPE_PATTERNS = [
  * gaps. Only confirmation gaps may carry source_refs, because absence-backed
  * gaps must not invent evidence. Candidates for Alpha v1 out-of-scope modules
  * are filtered before dedupe, then remaining candidates are deduped by
- * module/field/kind and truncated to the configured max candidate limit.
+ * module/field concept and truncated to the configured max candidate limit.
  */
 export function detectInitialGapCandidates(input: DetectInitialGapCandidatesInput): InitialGapCandidate[] {
   return analyzeInitialGapCandidates(input).candidates;
@@ -178,7 +241,7 @@ export function dedupeGapCandidates(candidates: InitialGapCandidate[]): InitialG
   const deduped: InitialGapCandidate[] = [];
 
   for (const candidate of candidates) {
-    const key = `${candidate.module}:${candidate.field}:${candidate.gap_kind}`;
+    const key = gapCandidateDedupeKey(candidate);
 
     if (seen.has(key)) {
       continue;
@@ -189,6 +252,14 @@ export function dedupeGapCandidates(candidates: InitialGapCandidate[]): InitialG
   }
 
   return deduped;
+}
+
+function gapCandidateDedupeKey(candidate: InitialGapCandidate): string {
+  if (STRUCTURED_BRIEF_GAP_ORIGINS.has(candidate.origin) && !GENERIC_GAP_FIELDS.has(candidate.field)) {
+    return `${candidate.module}:${candidate.field}:structured_brief`;
+  }
+
+  return `${candidate.module}:${candidate.field}:${candidate.gap_kind}:${candidate.origin}`;
 }
 
 export function filterForbiddenScope(candidates: InitialGapCandidate[]): {
@@ -356,7 +427,9 @@ function findRuleForText(text: string): FieldRule | undefined {
 
   return [...PROBLEM_FIELD_RULES, ...SOLUTION_FIELD_RULES, ...ARRAY_FIELD_RULES].find((rule) => {
     const field = String(rule.field);
-    return normalizedText.includes(normalizeToken(field)) || normalizedText.includes(normalizeToken(fieldLabel(field)));
+    const aliases = [field, fieldLabel(field), ...(FIELD_TEXT_ALIASES[rule.field] ?? [])];
+
+    return aliases.some((alias) => normalizedText.includes(normalizeToken(alias)));
   });
 }
 
@@ -377,5 +450,11 @@ function isBlank(value: unknown): boolean {
 }
 
 function normalizeToken(value: string): string {
-  return value.toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }

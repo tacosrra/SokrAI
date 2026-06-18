@@ -208,6 +208,27 @@ export function SessionWorkspace({
   const currentPhase = presentation.phaseProgress.steps.find((step) =>
     step.id === presentation.phaseProgress.currentPhaseId,
   ) ?? presentation.phaseProgress.steps[0];
+  const currentPhaseModuleChat = (() => {
+    switch (currentPhase.id) {
+      case 'solution':
+        return presentation.solutionModuleChat;
+      case 'data_ai_privacy':
+        return presentation.dataAiPrivacyModuleChat;
+      case 'medical_device_triage':
+        return presentation.medicalDeviceTriageModuleChat;
+      case 'resources_pilot_viability':
+        return presentation.resourcesPilotViabilityModuleChat;
+      default:
+        return null;
+    }
+  })();
+  const currentPhaseIsProcessing = currentPhaseModuleChat?.turns.some((turn) =>
+    turn.turn_id === currentPhaseModuleChat.active_turn_id &&
+    turn.turn_status === 'processing',
+  ) ?? false;
+  const currentPhaseIsPreparing =
+    !isViewingHistoricalPhase &&
+    currentPhaseModuleChat?.chat_status === 'preparing';
   const pdfPhase = presentation.phaseProgress.steps.find((step) => step.id === 'pdf_export');
   const canDownloadPdf = pdfPhase?.primaryAction === 'download_pdf';
   const primaryPhaseAction: PrimaryPhaseAction | null = (() => {
@@ -282,10 +303,12 @@ export function SessionWorkspace({
   const currentPhaseReportLoadError =
     currentPhase.id === 'report' ? reportLoadError : null;
   const actionPanelText =
-    presentation.currentQuestion ||
-    currentPhaseReportLoadError ||
-    currentPhase.lockedReason ||
-    currentPhase.explanation;
+    currentPhaseIsPreparing
+      ? 'SokrAI está comprobando si la información disponible basta para cerrar esta fase o si necesita hacerte una pregunta.'
+      : presentation.currentQuestion ||
+        currentPhaseReportLoadError ||
+        currentPhase.lockedReason ||
+        currentPhase.explanation;
   const reportPanelCanDownloadPdf = canDownloadPdf;
 
   const completedTurns = historyTurns
@@ -315,7 +338,8 @@ export function SessionWorkspace({
     completedTurns.length > 0 ||
     Boolean(optimisticReply) ||
     showCurrentQuestionInHistory ||
-    (isViewingHistoricalPhase && Boolean(openHistoryTurn));
+    (isViewingHistoricalPhase && Boolean(openHistoryTurn)) ||
+    currentPhaseIsPreparing;
 
   function renderAssistantAvatar() {
     return (
@@ -421,6 +445,41 @@ export function SessionWorkspace({
     );
   }
 
+  function renderPhasePreparationSkeleton() {
+    if (!currentPhaseIsPreparing) {
+      return null;
+    }
+
+    return (
+      <article className="phase-preparation-skeleton" aria-live="polite" aria-busy="true">
+        <div className="phase-preparation-skeleton__header">
+          <span className="phase-preparation-skeleton__eyebrow">Preparando</span>
+          <h3>Preparando {currentPhase.label.toLowerCase()}</h3>
+        </div>
+        <p>
+          SokrAI está comprobando si la información disponible basta para cerrar esta fase o si necesita hacerte una pregunta.
+        </p>
+        <div className="phase-preparation-skeleton__question" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+      </article>
+    );
+  }
+
+  function renderComposerPreparationSkeleton() {
+    return (
+      <div className="composer-preparation-skeleton" aria-live="polite" aria-busy="true">
+        <p>Preparando el siguiente paso de esta fase.</p>
+        <div className="composer-preparation-skeleton__lines" aria-hidden="true">
+          <span />
+          <span />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <section className="conversation-shell">
       <section className="phase-action-panel" aria-label={isViewingHistoricalPhase ? 'Fase en revisión' : 'Fase actual'}>
@@ -468,6 +527,7 @@ export function SessionWorkspace({
               {renderPendingExchange()}
               {renderCurrentQuestionMessage()}
               {renderHistoricalOpenQuestion()}
+              {renderPhasePreparationSkeleton()}
             </div>
           )}
         </div>
@@ -535,9 +595,13 @@ export function SessionWorkspace({
                 actual en el panel izquierdo para seguir respondiendo.
               </p>
             </div>
+          ) : currentPhaseIsPreparing ? (
+            renderComposerPreparationSkeleton()
           ) : (
             <div className="empty-state">
-              {presentation.status === 'completed' && presentation.phaseProgress.isComplete ? (
+              {currentPhaseIsProcessing ? (
+                <p>SokrAI está procesando tu respuesta de esta fase.</p>
+              ) : presentation.status === 'completed' && presentation.phaseProgress.isComplete ? (
                 <p>La propuesta está completada y lista para revisión.</p>
               ) : presentation.status === 'completed' ? (
                 <p>Esta fase ya está completada. Continúa con la siguiente fase cuando esté disponible.</p>

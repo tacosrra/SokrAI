@@ -11,15 +11,14 @@ import type { AiProviderPort } from '../../apps/api/src/services/ai-provider.ts'
 
 let migrationsApplied = false;
 
+export const DEFAULT_TEST_DATABASE_URL = 'postgresql://sokrai_test:localpass@localhost:5433/sokrai_test';
+
 export function createTestConfig(): AppConfig {
   return {
     appEnv: 'test',
     appPort: 3001,
     logLevel: 'error',
-    databaseUrl:
-      process.env.TEST_DATABASE_URL ??
-      process.env.DATABASE_URL ??
-      'postgresql://sokrai_app:localpass@localhost:5433/sokrai_app',
+    databaseUrl: process.env.TEST_DATABASE_URL ?? DEFAULT_TEST_DATABASE_URL,
     databasePoolMax: 5,
     databaseStatementTimeoutMs: 15000,
     aiProvider: 'ollama',
@@ -35,9 +34,38 @@ export function createTestConfig(): AppConfig {
     maxReplyChars: 4000,
     maxTurnsPerSession: 12,
     maxDiagnosisItems: 3,
+    phasePrefetchEnabled: false,
     allowSensitiveHealthData: false,
     internalSharedSecret: 'test-secret',
   };
+}
+
+export function assertSafeTestDatabaseUrl(databaseUrl: string): void {
+  if (process.env.SOKRAI_ALLOW_DESTRUCTIVE_TEST_DATABASE_RESET === '1') {
+    return;
+  }
+
+  let parsed: URL;
+
+  try {
+    parsed = new URL(databaseUrl);
+  } catch {
+    throw new Error(`Invalid TEST_DATABASE_URL: ${databaseUrl}`);
+  }
+
+  const databaseName = decodeURIComponent(parsed.pathname.replace(/^\/+/, '')).toLowerCase();
+  const userName = decodeURIComponent(parsed.username).toLowerCase();
+  const isClearlyTestDatabase = /\btest\b|_test|test_/.test(databaseName);
+
+  if (!databaseName || !isClearlyTestDatabase) {
+    throw new Error(
+      [
+        'Refusing to reset non-test database.',
+        `TEST_DATABASE_URL must point to an isolated test database, got database "${databaseName || '(empty)'}" as user "${userName || '(empty)'}".`,
+        'Use postgresql://sokrai_test:localpass@localhost:5433/sokrai_test or set SOKRAI_ALLOW_DESTRUCTIVE_TEST_DATABASE_RESET=1 only for disposable databases.',
+      ].join(' '),
+    );
+  }
 }
 
 export async function applyMigrations(database: Database): Promise<void> {
@@ -56,7 +84,9 @@ export async function applyMigrations(database: Database): Promise<void> {
   migrationsApplied = true;
 }
 
-export async function truncateAll(database: Database): Promise<void> {
+export async function truncateAll(database: Database, databaseUrl: string): Promise<void> {
+  assertSafeTestDatabaseUrl(databaseUrl);
+
   await database.query(
     [
       'TRUNCATE TABLE',
@@ -94,11 +124,12 @@ export async function buildTestApp(
     ...createTestConfig(),
     ...(options?.config ?? {}),
   };
+  assertSafeTestDatabaseUrl(config.databaseUrl);
   const database = options?.database ?? new Database(config);
   await applyMigrations(database);
 
   if (options?.resetDatabase !== false) {
-    await truncateAll(database);
+    await truncateAll(database, config.databaseUrl);
   }
 
   const app = await buildApp({

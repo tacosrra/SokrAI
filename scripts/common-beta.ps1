@@ -23,7 +23,6 @@ $script:BetaWorkflowFiles = @(
   'agent_resources_pilot_viability_v1.json'
 )
 $script:DockerInstallUrl = 'https://docs.docker.com/desktop/setup/install/windows-install/'
-$script:WebUiUrl = 'http://localhost:3000'
 $script:ComposeBaseArgs = @(
   '--env-file', $script:BetaEnvFile,
   '-p', $script:ComposeProjectName,
@@ -76,10 +75,11 @@ function Open-Url {
 }
 
 function Open-WebUi {
+  $url = Get-WebUiUrl
   Write-Step 'Opening SokrAI in the browser'
 
-  if (-not (Open-Url -Url $script:WebUiUrl)) {
-    Write-Host "[$script:ComposeProjectName] Open this URL manually: $script:WebUiUrl"
+  if (-not (Open-Url -Url $url)) {
+    Write-Host "[$script:ComposeProjectName] Open this URL manually: $url"
   }
 }
 
@@ -189,11 +189,80 @@ function Set-EnvValue {
   Write-Utf8NoBomFile -Path $Path -Lines $lines.ToArray()
 }
 
+function Read-EnvValueOrDefault {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string] $Path,
+    [Parameter(Mandatory = $true)]
+    [string] $Key,
+    [Parameter(Mandatory = $true)]
+    [string] $DefaultValue
+  )
+
+  $value = Read-EnvValue -Path $Path -Key $Key
+
+  if (-not [string]::IsNullOrWhiteSpace($value)) {
+    return $value
+  }
+
+  return $DefaultValue
+}
+
+function Set-BetaDefaultValue {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string] $Key,
+    [Parameter(Mandatory = $true)]
+    [string] $Value,
+    [string] $ReplaceValue = ''
+  )
+
+  $currentValue = Read-EnvValue -Path $script:BetaEnvFile -Key $Key
+
+  if ([string]::IsNullOrWhiteSpace($currentValue) -or (-not [string]::IsNullOrWhiteSpace($ReplaceValue) -and $currentValue -eq $ReplaceValue)) {
+    Set-EnvValue -Path $script:BetaEnvFile -Key $Key -Value $Value
+  }
+}
+
+function Get-ApiHostPort {
+  return Read-EnvValueOrDefault -Path $script:BetaEnvFile -Key 'API_HOST_PORT' -DefaultValue '3301'
+}
+
+function Get-N8nHostPort {
+  return Read-EnvValueOrDefault -Path $script:BetaEnvFile -Key 'N8N_HOST_PORT' -DefaultValue '5679'
+}
+
+function Get-WebHostPort {
+  return Read-EnvValueOrDefault -Path $script:BetaEnvFile -Key 'WEB_HOST_PORT' -DefaultValue '3300'
+}
+
+function Get-ApiBaseUrl {
+  return "http://localhost:$(Get-ApiHostPort)"
+}
+
+function Get-N8nBaseUrl {
+  return "http://localhost:$(Get-N8nHostPort)"
+}
+
+function Get-WebUiUrl {
+  return "http://localhost:$(Get-WebHostPort)"
+}
+
 function Ensure-BetaEnvFile {
   if (-not (Test-Path -LiteralPath $script:BetaEnvFile)) {
     Write-Step "Creating $([System.IO.Path]::GetFileName($script:BetaEnvFile)) from .env.example"
     Copy-Item -LiteralPath (Join-Path $script:RepoRoot '.env.example') -Destination $script:BetaEnvFile
   }
+
+  Set-BetaDefaultValue -Key 'POSTGRES_HOST_PORT' -Value '55433' -ReplaceValue '5433'
+  Set-BetaDefaultValue -Key 'API_HOST_PORT' -Value '3301' -ReplaceValue '3001'
+  Set-BetaDefaultValue -Key 'WEB_HOST_PORT' -Value '3300' -ReplaceValue '3000'
+  Set-BetaDefaultValue -Key 'N8N_HOST_PORT' -Value '5679' -ReplaceValue '5678'
+  Set-BetaDefaultValue -Key 'OLLAMA_HOST_PORT' -Value '11435' -ReplaceValue '11434'
+  Set-BetaDefaultValue -Key 'APP_BASE_URL' -Value 'http://localhost:3301' -ReplaceValue 'http://localhost:3001'
+  Set-BetaDefaultValue -Key 'API_PROXY_TARGET' -Value 'http://localhost:3301' -ReplaceValue 'http://localhost:3001'
+  Set-BetaDefaultValue -Key 'WEBHOOK_PROXY_TARGET' -Value 'http://localhost:5679' -ReplaceValue 'http://localhost:5678'
+  Set-BetaDefaultValue -Key 'OLLAMA_BASE_URL' -Value 'http://localhost:11435' -ReplaceValue 'http://ollama:11434'
 
   if ((Read-EnvValue -Path $script:BetaEnvFile -Key 'INTERNAL_SHARED_SECRET') -eq 'replace-with-a-random-32-char-secret') {
     Set-EnvValue -Path $script:BetaEnvFile -Key 'INTERNAL_SHARED_SECRET' -Value (New-BetaSecret)
@@ -348,15 +417,15 @@ function Test-OllamaReady {
 }
 
 function Test-ApiReady {
-  return (Test-HttpEndpoint -Uri 'http://localhost:3001/healthz')
+  return (Test-HttpEndpoint -Uri "$(Get-ApiBaseUrl)/healthz")
 }
 
 function Test-N8nReady {
-  return (Test-HttpEndpoint -Uri 'http://localhost:5678' -Headers (Get-N8nAuthHeaders))
+  return (Test-HttpEndpoint -Uri (Get-N8nBaseUrl) -Headers (Get-N8nAuthHeaders))
 }
 
 function Test-WebReady {
-  return (Test-HttpEndpoint -Uri 'http://localhost:3000')
+  return (Test-HttpEndpoint -Uri (Get-WebUiUrl))
 }
 
 function Get-WorkflowId {
@@ -446,11 +515,23 @@ DELETE FROM workflow_entity WHERE id IN ($idList);
 }
 
 function Invoke-OllamaModelPull {
-  $model = Read-EnvValue -Path $script:BetaEnvFile -Key 'OLLAMA_MODEL'
+  $ollamaModel = Read-EnvValue -Path $script:BetaEnvFile -Key 'OLLAMA_MODEL'
+  $aiModel = Read-EnvValue -Path $script:BetaEnvFile -Key 'AI_MODEL'
+  $models = New-Object System.Collections.Generic.List[string]
   $retryCount = if ($env:SOKRAI_BETA_OLLAMA_PULL_RETRIES) { [int]$env:SOKRAI_BETA_OLLAMA_PULL_RETRIES } else { 3 }
 
-  if ([string]::IsNullOrWhiteSpace($model)) {
+  if ([string]::IsNullOrWhiteSpace($ollamaModel)) {
     Fail "OLLAMA_MODEL is empty in $([System.IO.Path]::GetFileName($script:BetaEnvFile))"
+  }
+
+  if (-not [string]::IsNullOrWhiteSpace($aiModel)) {
+    $models.Add($aiModel) | Out-Null
+
+    if ($aiModel -ne $ollamaModel) {
+      $models.Add($ollamaModel) | Out-Null
+    }
+  } else {
+    $models.Add($ollamaModel) | Out-Null
   }
 
   if ($env:SOKRAI_BETA_SKIP_OLLAMA_PULL -eq '1') {
@@ -458,23 +539,25 @@ function Invoke-OllamaModelPull {
     return
   }
 
-  if (Test-DockerCompose -ComposeArgs @('exec', '-T', 'ollama', 'ollama', 'show', $model)) {
-    Write-Step "Ollama model already present: $model"
-    return
-  }
+  foreach ($model in $models) {
+    if (Test-DockerCompose -ComposeArgs @('exec', '-T', 'ollama', 'ollama', 'show', $model)) {
+      Write-Step "Ollama model already present: $model"
+      continue
+    }
 
-  for ($attempt = 1; $attempt -le $retryCount; $attempt++) {
-    Write-Step "Pulling Ollama model: $model (attempt $attempt/$retryCount)"
+    for ($attempt = 1; $attempt -le $retryCount; $attempt++) {
+      Write-Step "Pulling Ollama model: $model (attempt $attempt/$retryCount)"
 
-    try {
-      Invoke-DockerCompose exec -T ollama ollama pull $model
-      return
-    } catch {
-      if ($attempt -ge $retryCount) {
-        Fail "Could not pull Ollama model '$model'. The Ollama container could not resolve or reach the model registry. Check Docker DNS/outbound network, retry later, or rerun with SOKRAI_BETA_SKIP_OLLAMA_PULL=1 if the model is already cached."
+      try {
+        Invoke-DockerCompose exec -T ollama ollama pull $model
+        break
+      } catch {
+        if ($attempt -ge $retryCount) {
+          Fail "Could not pull Ollama model '$model'. The Ollama container could not resolve or reach the model registry. Check Docker DNS/outbound network, retry later, or rerun with SOKRAI_BETA_SKIP_OLLAMA_PULL=1 if the model is already cached."
+        }
+
+        Start-Sleep -Seconds 5
       }
-
-      Start-Sleep -Seconds 5
     }
   }
 }
@@ -484,7 +567,40 @@ function Invoke-DatabaseMigrations {
   Invoke-DockerCompose run --rm api pnpm --filter @sokrai/api migrate
 }
 
+function Get-WorkflowBundleHash {
+  $lines = foreach ($workflowFile in $script:BetaWorkflowFiles) {
+    $workflowPath = Join-Path $script:RepoRoot "infra/n8n/workflows/$workflowFile"
+    $fileHash = (Get-FileHash -LiteralPath $workflowPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    "$fileHash  $workflowFile"
+  }
+
+  $content = [string]::Join("`n", $lines)
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+
+  try {
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($content)
+    $hash = $sha.ComputeHash($bytes)
+    return ([System.BitConverter]::ToString($hash)).Replace('-', '').ToLowerInvariant()
+  } finally {
+    $sha.Dispose()
+  }
+}
+
 function Test-WorkflowMarker {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string] $ExpectedHash
+  )
+
+  return (Test-DockerCompose -ComposeArgs @(
+      'exec', '-T', '-u', 'node', 'n8n',
+      'node', '-e', 'const fs=require("fs"); process.exit(fs.existsSync(process.argv[1]) && fs.readFileSync(process.argv[1], "utf8").trim() === process.argv[2] ? 0 : 1);',
+      $script:WorkflowMarkerFile,
+      $ExpectedHash
+    ))
+}
+
+function Test-WorkflowMarkerExists {
   return (Test-DockerCompose -ComposeArgs @(
       'exec', '-T', '-u', 'node', 'n8n',
       'node', '-e', 'const fs=require("fs"); process.exit(fs.existsSync(process.argv[1]) ? 0 : 1);',
@@ -493,13 +609,19 @@ function Test-WorkflowMarker {
 }
 
 function New-WorkflowMarker {
-  Invoke-DockerCompose exec -T -u node n8n node -e 'const fs=require("fs"); fs.closeSync(fs.openSync(process.argv[1], "a"));' $script:WorkflowMarkerFile
+  param(
+    [Parameter(Mandatory = $true)]
+    [string] $Hash
+  )
+
+  Invoke-DockerCompose exec -T -u node n8n node -e 'const fs=require("fs"); fs.writeFileSync(process.argv[1], `${process.argv[2]}\n`);' $script:WorkflowMarkerFile $Hash
 }
 
 function Invoke-WorkflowBootstrap {
   $repairedDuplicates = Repair-DuplicateN8nWorkflows
+  $currentWorkflowsHash = Get-WorkflowBundleHash
 
-  if (Test-WorkflowMarker) {
+  if (Test-WorkflowMarker -ExpectedHash $currentWorkflowsHash) {
     if ($repairedDuplicates) {
       Write-Step 'Restarting n8n after removing duplicate workflows'
       Invoke-DockerCompose restart n8n
@@ -509,6 +631,10 @@ function Invoke-WorkflowBootstrap {
     }
 
     return
+  }
+
+  if (Test-WorkflowMarkerExists) {
+    Write-Step 'Workflow files changed; reimporting n8n workflows'
   }
 
   Write-Step 'Importing n8n workflows'
@@ -522,7 +648,7 @@ function Invoke-WorkflowBootstrap {
   foreach ($workflowFile in $script:BetaWorkflowFiles) {
     Publish-Workflow -WorkflowFile (Join-Path $script:RepoRoot "infra/n8n/workflows/$workflowFile")
   }
-  New-WorkflowMarker
+  New-WorkflowMarker -Hash $currentWorkflowsHash
 
   Write-Step 'Restarting n8n so active workflow state is applied'
   Invoke-DockerCompose restart n8n
@@ -534,9 +660,9 @@ function Show-BetaEndpoints {
 
 SokrAI beta is ready.
 
-- Web UI: http://localhost:3000
-- API health: http://localhost:3001/healthz
-- n8n: http://localhost:5678
+- Web UI: $(Get-WebUiUrl)
+- API health: $(Get-ApiBaseUrl)/healthz
+- n8n: $(Get-N8nBaseUrl)
 - n8n user: $(Read-EnvValue -Path $script:BetaEnvFile -Key 'N8N_BASIC_AUTH_USER')
 - n8n password: $(Read-EnvValue -Path $script:BetaEnvFile -Key 'N8N_BASIC_AUTH_PASSWORD')
 

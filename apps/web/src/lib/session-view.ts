@@ -33,6 +33,7 @@ export type PhaseId =
 export type PhaseStatus =
   | 'complete'
   | 'current'
+  | 'preparing'
   | 'ready'
   | 'locked'
   | 'not_applicable'
@@ -219,6 +220,26 @@ const PHASE_GAP_MODULE: Partial<Record<PhaseId, AlphaModule>> = {
   medical_device_triage: 'medical_device_triage',
   resources_pilot_viability: 'resources_pilot_viability',
 };
+
+const PRESENTATION_GENERIC_GAP_FIELDS = new Set(['missing_information', 'ambiguities']);
+const PRESENTATION_STRUCTURED_BRIEF_GAP_ORIGINS = new Set<AlphaGap['origin']>([
+  'structured_brief_field',
+  'structured_brief_missing_information',
+  'structured_brief_ambiguity',
+]);
+const PRESENTATION_PROBLEM_OWNER_ALIASES = [
+  'persona responsable',
+  'equipo responsable',
+  'responsable operativo',
+  'responsable final',
+  'responsable del problema',
+  'owner del problema',
+  'quien responde',
+  'quien valida',
+  'quien es el responsable',
+  'who is responsible',
+  'accountable owner',
+];
 
 export const CONVERSATIONAL_PHASE_IDS = Object.keys(PHASE_GAP_MODULE) as PhaseId[];
 
@@ -662,12 +683,88 @@ function countModuleGaps(gaps: AlphaGap[], module: AlphaModule) {
   };
 }
 
+function dedupePresentationGaps(gaps: AlphaGap[]): AlphaGap[] {
+  const dedupedByKey = new Map<string, AlphaGap>();
+
+  for (const gap of gaps) {
+    const key = presentationGapDedupeKey(gap);
+    const existingGap = dedupedByKey.get(key);
+
+    if (existingGap && presentationGapStatusWeight(existingGap) >= presentationGapStatusWeight(gap)) {
+      continue;
+    }
+
+    dedupedByKey.set(key, gap);
+  }
+
+  return Array.from(dedupedByKey.values());
+}
+
+function presentationGapStatusWeight(gap: AlphaGap): number {
+  switch (gap.gap_status) {
+    case 'open':
+    case 'in_progress':
+      return 3;
+    case 'deferred':
+      return 2;
+    case 'resolved':
+    case 'not_applicable':
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function presentationGapDedupeKey(gap: AlphaGap): string {
+  if (!PRESENTATION_STRUCTURED_BRIEF_GAP_ORIGINS.has(gap.origin)) {
+    return gap.gap_id;
+  }
+
+  const canonicalField = presentationCanonicalGapField(gap);
+
+  if (!PRESENTATION_GENERIC_GAP_FIELDS.has(canonicalField)) {
+    return `${gap.module}:${canonicalField}:structured_brief`;
+  }
+
+  return `${gap.module}:${canonicalField}:${gap.gap_kind}:${gap.origin}:${normalizeGapText(gap.description)}`;
+}
+
+function presentationCanonicalGapField(gap: AlphaGap): string {
+  if (!PRESENTATION_GENERIC_GAP_FIELDS.has(gap.field)) {
+    return gap.field;
+  }
+
+  const normalizedText = normalizeGapText([
+    gap.field,
+    gap.description,
+    gap.question_hint ?? '',
+    ...gap.warnings,
+  ].join(' '));
+
+  if (PRESENTATION_PROBLEM_OWNER_ALIASES.some((alias) => normalizedText.includes(normalizeGapText(alias)))) {
+    return 'problem_owner';
+  }
+
+  return gap.field;
+}
+
+function normalizeGapText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function phaseProgressValue(status: PhaseStatus, fallback = 0): number {
   switch (status) {
     case 'complete':
     case 'not_applicable':
       return 100;
     case 'current':
+    case 'preparing':
     case 'recovering':
       return Math.max(fallback, 50);
     case 'ready':
@@ -830,6 +927,14 @@ function deriveModulePhaseStep(params: {
     return createPhaseStep(params.id, 'complete', gapCounts);
   }
 
+  if (params.chat?.chat_status === 'preparing') {
+    return createPhaseStep(params.id, 'preparing', {
+      ...gapCounts,
+      progress: params.problemProgressPercent,
+      explanation: 'SokrAI está preparando esta fase en segundo plano.',
+    });
+  }
+
   if (params.chat?.chat_status === 'active' || params.chat?.chat_status === 'waiting_for_user') {
     return createPhaseStep(params.id, 'current', {
       ...gapCounts,
@@ -983,7 +1088,9 @@ function derivePhaseProgress(input: {
           : 'ready';
   const pdfExport = createPhaseStep('pdf_export', pdfStatus, {
     lockedReason: pdfStatus === 'locked' ? 'Prepara el informe antes de exportar el PDF.' : null,
-    primaryAction: pdfStatus === 'ready' || pdfStatus === 'current' ? 'download_pdf' : 'none',
+    primaryAction: pdfStatus === 'ready' || pdfStatus === 'current' || pdfStatus === 'complete'
+      ? 'download_pdf'
+      : 'none',
   });
 
   let steps = PHASE_ORDER.map((phaseId) => {
@@ -1011,14 +1118,20 @@ function derivePhaseProgress(input: {
       : input.currentSolutionQuestion ? 'solution'
       : input.currentProblemQuestion ? 'problem'
       : null;
+  const preparingPhaseId = steps.find((step) => step.status === 'preparing')?.id ?? null;
   const nextReadyPhaseId = steps.find((step) => step.status === 'ready')?.id ?? null;
   const currentPhaseId =
     input.isRecovering && input.lastKnownPhaseId
       ? input.lastKnownPhaseId
       : activeQuestionPhaseId ??
+        preparingPhaseId ??
         nextReadyPhaseId ??
         (report.status === 'complete' && pdfExport.status !== 'complete' ? 'pdf_export' : null) ??
-        steps.find((step) => step.status === 'current' || step.status === 'error')?.id ??
+        steps.find((step) =>
+          step.status === 'current' ||
+          step.status === 'preparing' ||
+          step.status === 'error',
+        )?.id ??
         'pdf_export';
 
   steps = steps.map((step) => {
@@ -1098,7 +1211,11 @@ export function deriveSessionPresentation(
     latestSnapshot?.current_problem_definition_json ??
     audit.session.latest_problem_definition_json;
   const checklist = deriveChecklist(structuredBrief, problemDefinition);
-  const gaps = audit.gaps;
+  const gaps = dedupePresentationGaps(audit.gaps);
+  const presentationAudit = {
+    ...audit,
+    gaps,
+  };
   const problemModuleChat = findModuleChat(audit.module_chats, 'problem');
   const solutionModuleChat = findModuleChat(audit.module_chats, 'solution');
   const dataAiPrivacyModuleChat = findModuleChat(audit.module_chats, 'data_ai_privacy');
@@ -1120,7 +1237,7 @@ export function deriveSessionPresentation(
   const currentResourcesPilotViabilityQuestion = activeResourcesPilotViabilityTurn?.question_text ?? '';
   const problemProgress = deriveProblemProgress(checklist, sessionStatus);
   const phaseProgress = derivePhaseProgress({
-    audit,
+    audit: presentationAudit,
     problemProgress,
     report: options.report ?? null,
     isDownloadingReportPdf: options.isDownloadingReportPdf ?? false,

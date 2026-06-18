@@ -227,7 +227,7 @@ describe('alpha persistence integration', () => {
     const report = await store.createBasicReport(app.services.database, {
       proposalId: session.id,
       reportStatus: 'ready',
-      schemaVersion: 'alpha-model.v1',
+      schemaVersion: 'basic-alpha-report.v1',
       structuredBrief,
       currentGaps: [resolvedGap],
       problemSectionId: problemSection.section_id,
