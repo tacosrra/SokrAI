@@ -156,7 +156,7 @@ Motivo:
 
 - los workflows n8n ya estan exportados apuntando a `http://api:3001/...`
 - eso presupone que `n8n` y `api` viven en la misma red de Docker Compose
-- `ollama` no necesita exponerse al host; la API lo consume por red interna y asi evitamos conflictos tipicos con el puerto `11434`
+- la API consume `ollama` por red interna en `http://ollama:11434`; el puerto host publicado por Compose es `11435` para no chocar con un Ollama local del sistema en `11434`
 - `n8n` persiste su estado en un volumen Docker gestionado por Compose para evitar errores de permisos sobre `/home/node/.n8n` en WSL
 - `n8n` necesita `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` en esta v1 porque los workflows usan `{{$env.INTERNAL_SHARED_SECRET}}` en nodos `HTTP Request`
 - el frontend usa proxy de Vite hacia `n8n` y la API para evitar problemas de CORS durante la demo local
@@ -191,6 +191,13 @@ APP_ENV=local
 LOG_LEVEL=info
 APP_PORT=3001
 APP_BASE_URL=http://localhost:3001
+FRONTEND_PORT=3000
+
+POSTGRES_HOST_PORT=5433
+API_HOST_PORT=3001
+WEB_HOST_PORT=3000
+N8N_HOST_PORT=5678
+OLLAMA_HOST_PORT=11435
 
 # Host-side commands use the Compose-published Postgres port.
 DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app
@@ -1260,12 +1267,12 @@ el problema es un conflicto de puertos en tu maquina, no del flujo de negocio.
 
 En esta v1 actual:
 
-- `Ollama` ya no se expone al host por defecto
+- `Ollama` se publica en `11435` en el host y mantiene `11434` dentro de la red Docker
 - `api` usa `3001`
 - `n8n` usa `5678`
 - `postgres` usa `5433` en el host y `5432` dentro de la red Docker
 
-Si el conflicto es de `11434`, actualiza el repo y vuelve a lanzar:
+Si el conflicto es de `11434`, comprueba que `.env` tenga `OLLAMA_HOST_PORT=11435` y vuelve a lanzar:
 
 ```bash
 docker compose up -d postgres ollama api n8n

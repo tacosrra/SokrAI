@@ -73,6 +73,12 @@ APP_PORT=3001
 APP_BASE_URL=http://localhost:3001
 FRONTEND_PORT=3000
 
+POSTGRES_HOST_PORT=5433
+API_HOST_PORT=3001
+WEB_HOST_PORT=3000
+N8N_HOST_PORT=5678
+OLLAMA_HOST_PORT=11435
+
 DATABASE_URL=postgresql://sokrai_app:localpass@localhost:5433/sokrai_app
 TEST_DATABASE_URL=postgresql://sokrai_test:localpass@localhost:5433/sokrai_test
 
@@ -104,6 +110,8 @@ values to browser code.
 
 Host commands use `localhost:5433`. Docker containers use `postgres:5432`.
 `docker-compose.yml` overrides the API container `DATABASE_URL` accordingly.
+Host commands can reach the Compose Ollama service at `localhost:11435` if
+needed. Docker containers still use `http://ollama:11434`.
 
 Only `AI_PROVIDER=ollama` is supported in this MVP. `AI_MODEL` is optional; when
 unset, the API uses `OLLAMA_MODEL`.
