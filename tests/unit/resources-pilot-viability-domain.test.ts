@@ -131,6 +131,29 @@ describe('resources pilot viability domain rules', () => {
     ], stateWithoutUncertainties)).toEqual([]);
   });
 
+  it('closes the phase when completion criteria are met even if the model asks another question', () => {
+    const turn: ResourcesPilotViabilityTurn = {
+      agent_status: 'continue',
+      diagnosis: ['Operational inputs are sufficiently clear, but the model asked for another detail.'],
+      updated_resources_pilot_viability: completeState,
+      next_question: 'Can you add one more operational detail?',
+      completion_reason: '',
+    };
+
+    const guarded = enforceResourcesPilotViabilityTurnGuardrails(turn);
+
+    expect(guarded.turn.agent_status).toBe('done');
+    expect(guarded.turn.next_question).toBe('');
+    expect(guarded.turn.completion_reason).toBe('resources pilot viability inputs sufficiently clarified');
+    expect(guarded.intervention).toMatchObject({
+      applied: true,
+      reasons: ['completion_criteria_met'],
+      fallbackQuestionApplied: false,
+      forcedAgentStatus: 'done',
+      scope: 'resources_pilot_viability_operational_inputs',
+    });
+  });
+
   it('selects at most three PR11 gaps and resolves only PR11 fields', () => {
     const gaps: AlphaGap[] = [
       baseGap,

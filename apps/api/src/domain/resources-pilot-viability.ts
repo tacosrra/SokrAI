@@ -72,6 +72,7 @@ export type ResourcesPilotViabilityGuardrailInterventionReason =
   | 'forbidden_output_replaced'
   | 'vague_answer_reasked'
   | 'premature_completion_blocked'
+  | 'completion_criteria_met'
   | 'missing_question_fallback'
   | 'repeated_question_rephrased';
 
@@ -619,6 +620,18 @@ export function enforceResourcesPilotViabilityTurnGuardrails(
       recentQuestions,
     );
     fallbackQuestionApplied = true;
+  }
+
+  const requiresClarifyingIntervention =
+    interventionReasons.includes('forbidden_output_replaced') ||
+    interventionReasons.includes('vague_answer_reasked');
+
+  if (normalizedTurn.agent_status !== 'done' && isComplete && !requiresClarifyingIntervention) {
+    interventionReasons.push('completion_criteria_met');
+    normalizedTurn.agent_status = 'done';
+    normalizedTurn.next_question = '';
+    normalizedTurn.completion_reason =
+      normalizedTurn.completion_reason || 'resources pilot viability inputs sufficiently clarified';
   }
 
   if (normalizedTurn.agent_status !== 'done' && !normalizedTurn.next_question) {

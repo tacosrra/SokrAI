@@ -7,6 +7,7 @@
 Para preparar el entorno, ejecutar y aceptar manualmente la demo local Clinic implementada, consulta la [guía completa de demo local Clinic](docs/manual-testing/clinic-local-demo-full-guide.md).
 
 ## Sobre el proyecto
+- [docs/manual-testing/clinic-local-demo-full-guide.md](docs/manual-testing/clinic-local-demo-full-guide.md) para preparar, ejecutar y aceptar manualmente toda la demo local Clinic implementada.
 
 SokrAI es un middleware de maduración de propuestas orientado a preparar proyectos antes de su revisión en comité. La plataforma recibe una propuesta inicial —en texto libre, documento adjunto o PDF— y la transforma en un `structured_brief` estructurado y validado. A partir de ahí conduce una conversación socrática, turno a turno, para clarificar el problema, detectar lagunas de información y avanzar hacia una definición de solución más sólida.
 
